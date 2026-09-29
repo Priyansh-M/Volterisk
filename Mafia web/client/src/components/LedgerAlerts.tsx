@@ -7,7 +7,13 @@ import type { GameNotice } from '../lib/types.ts'
 type Unlock = { id: string; name: string; description: string; reward: number }
 type HeistNotice = { id: string; by: string; success: boolean; amountStolen: number | null }
 
-export function LedgerAlerts({ onChange }: { onChange: (unread?: number) => void }) {
+export function LedgerAlerts({
+  onChange,
+  onUnclaimed,
+}: {
+  onChange: (unread?: number) => void
+  onUnclaimed?: (count: number) => void
+}) {
   const navigate = useNavigate()
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -19,11 +25,12 @@ export function LedgerAlerts({ onChange }: { onChange: (unread?: number) => void
     async function poll() {
       try {
         const [alerts, notes] = await Promise.all([
-          api<{ unlocked: Unlock[] }>('/api/achievements/unannounced'),
+          api<{ unlocked: Unlock[]; unclaimed?: number }>('/api/achievements/unannounced'),
           api<{ notifications: GameNotice[] }>('/api/notifications'),
         ])
         if (cancelled) return
         onChangeRef.current(notes.notifications.filter((row) => row.read !== true).length)
+        if (typeof alerts.unclaimed === 'number') onUnclaimed?.(alerts.unclaimed)
         const next = alerts.unlocked[0]
         if (next) setUnlock(next)
         const report = notes.notifications.find((row) => row.read !== true && row.title === 'Heist Attempted')

@@ -19,6 +19,7 @@ model User {
   passiveJobId     String?
   passivePaidFor   DateTime?
   reputationLevel  Int       @default(1)
+  vaultExposedUntil DateTime?
   starterClaimedAt DateTime?
   createdAt        DateTime  @default(now())
 

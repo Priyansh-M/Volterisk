@@ -7,6 +7,7 @@ import {
   claimAchievement,
   listAchievements,
   unannouncedAchievements,
+  unclaimedCount,
 } from "../services/achievementService.js";
 import { listNotifications, markNotificationRead } from "../services/notificationService.js";
 import { buyProperty, listProperties, upgradeProperty } from "../services/propertyService.js";
@@ -36,7 +37,11 @@ export async function achievements(req: Request, res: Response): Promise<void> {
 }
 
 export async function achievementAlerts(req: Request, res: Response): Promise<void> {
-  res.json({ unlocked: await unannouncedAchievements(currentUserId(req)) });
+  const userId = currentUserId(req);
+  res.json({
+    unlocked: await unannouncedAchievements(userId),
+    unclaimed: await unclaimedCount(userId),
+  });
 }
 
 export async function ackAchievement(req: Request, res: Response): Promise<void> {

@@ -25,6 +25,40 @@ function present(id: string): UnlockedAchievement {
  * Clean Hands treats ten collected contracts as the bar: heat is not a separate meter.
  * Redacted unlocks after REDACTED_HEIST_GOAL successful heists. The requirement stays off the client.
  */
+const EQUIPMENT_SPEND = ["weapon_buy", "weapon_upgrade", "shop_buy", "camera_buy", "camera_upgrade"];
+
+async function crossedRecently(userId: string): Promise<boolean> {
+  const hits = await prisma.heist.findMany({
+    where: { attackerId: userId, success: true, target: { isBot: false } },
+    select: { targetId: true, createdAt: true },
+  });
+  const windowMs = RULES.INSIDE_JOB_DAYS * 24 * 60 * 60 * 1000;
+  for (const hit of hits) {
+    const since = new Date(hit.createdAt.getTime() - windowMs);
+    const prior = await prisma.heist.findFirst({
+      where: {
+        createdAt: { gte: since, lt: hit.createdAt },
+        OR: [
+          { attackerId: userId, targetId: hit.targetId },
+          { attackerId: hit.targetId, targetId: userId },
+        ],
+      },
+    });
+    if (prior) return true;
+    const crossed = await prisma.transaction.findFirst({
+      where: {
+        createdAt: { gte: since, lt: hit.createdAt },
+        OR: [
+          { fromUserId: userId, toUserId: hit.targetId },
+          { fromUserId: hit.targetId, toUserId: userId },
+        ],
+      },
+    });
+    if (crossed) return true;
+  }
+  return false;
+}
+
 export async function syncAchievements(userId: string): Promise<UnlockedAchievement[]> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -32,13 +66,40 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   });
   if (!user || user.isBot) return [];
 
-  const [contracts, heists] = await Promise.all([
+  const [contracts, heists, weaponRows, spend, ledger, longShot, inside] = await Promise.all([
     prisma.contractRun.count({ where: { userId, collectedAt: { not: null } } }),
     prisma.heist.count({ where: { attackerId: userId, success: true } }),
+    prisma.userWeapon.findMany({
+      where: { userId, durability: { gt: 0 } },
+      select: { weaponId: true },
+      distinct: ["weaponId"],
+    }),
+    prisma.transaction.aggregate({
+      where: { fromUserId: userId, type: { in: EQUIPMENT_SPEND } },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.count({
+      where: { OR: [{ fromUserId: userId }, { toUserId: userId }] },
+    }),
+    prisma.heist.findFirst({
+      where: { attackerId: userId, success: true, successChance: { lte: RULES.AGAINST_THE_ODDS_CHANCE } },
+      select: { id: true },
+    }),
+    crossedRecently(userId),
   ]);
 
+  const weaponTypes = weaponRows.length;
   const owned = new Set(user.achievements.map((row) => row.achievementId));
   const due: string[] = [];
+  if (contracts >= 1 && !owned.has("first-steps")) due.push("first-steps");
+  if (heists >= 1 && !owned.has("first-blood")) due.push("first-blood");
+  if (weaponTypes >= 5 && !owned.has("armed-and-ready")) due.push("armed-and-ready");
+  if (weaponTypes >= 10 && !owned.has("growing-arsenal")) due.push("growing-arsenal");
+  if (weaponTypes >= 15 && !owned.has("full-arsenal")) due.push("full-arsenal");
+  if (inside && !owned.has("inside-job")) due.push("inside-job");
+  if (longShot && !owned.has("against-the-odds")) due.push("against-the-odds");
+  if ((spend._sum.amount ?? 0) >= RULES.BIG_SPENDER_CENTS && !owned.has("big-spender")) due.push("big-spender");
+  if (ledger >= RULES.PAPER_TRAIL_COUNT && !owned.has("paper-trail")) due.push("paper-trail");
   if (user.base && !owned.has("first-entry")) due.push("first-entry");
   if (contracts >= RULES.CLEAN_HANDS_CONTRACTS && !owned.has("clean-hands")) due.push("clean-hands");
   if ((user.vault?.level ?? 0) >= 5 && !owned.has("false-bottom")) due.push("false-bottom");
@@ -69,12 +130,17 @@ export async function listAchievements(userId: string) {
         description: entry.description,
         reward: entry.reward,
         unlocked: Boolean(row),
+        sealed: Boolean(entry.sealed) && !row,
         claimed: Boolean(row?.claimedAt),
         announced: Boolean(row?.announcedAt),
         unlockedAt: row?.unlockedAt.toISOString() ?? null,
       };
     }),
   };
+}
+
+export async function unclaimedCount(userId: string): Promise<number> {
+  return prisma.userAchievement.count({ where: { userId, claimedAt: null } });
 }
 
 export async function unannouncedAchievements(userId: string) {

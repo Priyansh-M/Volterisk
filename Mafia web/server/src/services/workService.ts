@@ -90,9 +90,13 @@ export async function listContracts(userId: string) {
     const previous = cooldownUntil.get(run.contractId);
     if (!previous || ends > previous) cooldownUntil.set(run.contractId, ends);
   }
+  const latestCollect = collected.find((run) => run.collectedAt)?.collectedAt ?? null;
+  const gapEnds = latestCollect ? minutesFromNow(RULES.WORK_GAP_MINUTES, latestCollect) : null;
+  const nextAcceptAt = gapEnds && gapEnds.getTime() > now.getTime() ? gapEnds : null;
 
   return {
     active: active ? presentActive(active, now) : null,
+    nextAcceptAt: nextAcceptAt ? nextAcceptAt.toISOString() : null,
     contracts: offered.map((contract) => {
       const cooldownEnds = cooldownUntil.get(contract.id) ?? null;
       const locked = level < contract.minLevel;
@@ -108,7 +112,7 @@ export async function listContracts(userId: string) {
         locationLabel: contract.locationLabel,
         requirement: workRequirementLabel(contract),
         locked,
-        available: !locked && !cooldownEnds && !active,
+        available: !locked && !cooldownEnds && !active && !nextAcceptAt,
         cooldownEndsAt: cooldownEnds ? cooldownEnds.toISOString() : null,
       };
     }),
@@ -158,6 +162,18 @@ export async function acceptContract(userId: string, contractId: string) {
       const existing = await tx.contractRun.findUnique({ where: { activeSlot: userId } });
       if (existing) {
         throw new GameError(409, "ACTIVE_CONTRACT", "Finish the contract you already have.");
+      }
+      const lastCollected = await tx.contractRun.findFirst({
+        where: { userId, collectedAt: { not: null } },
+        orderBy: { collectedAt: "desc" },
+      });
+      if (lastCollected?.collectedAt) {
+        const gapEnds = minutesFromNow(RULES.WORK_GAP_MINUTES, lastCollected.collectedAt);
+        if (gapEnds.getTime() > now.getTime()) {
+          throw new GameError(409, "BOARD_GAP", "The board waits an hour between active jobs.", {
+            cooldownEndsAt: gapEnds.toISOString(),
+          });
+        }
       }
       try {
         return await tx.contractRun.create({

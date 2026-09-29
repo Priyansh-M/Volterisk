@@ -29,6 +29,8 @@ export type Profile = {
     effectiveLevel: number
   } | null
   currentJob: { id: string; name: string; payPerDay: number } | null
+  penalty?: { active: boolean; endsAt: string | null }
+  unclaimedAchievements?: number
   cooldownEndsAt: string | null
   stats: {
     successfulHeists: number
@@ -174,6 +176,7 @@ export type ActiveContract = {
 
 export type WorkBoard = {
   active: ActiveContract | null
+  nextAcceptAt?: string | null
   contracts: WorkOffer[]
 }
 

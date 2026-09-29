@@ -148,7 +148,9 @@ export async function listTargets(attackerId: string) {
           vaultLevel: user.vault!.level,
           wealthBucket: wealthBucket(user.vault!.balance),
         estimatedWealth: wealthBandLabel(user.vault!.balance),
-          vulnerable: station ? !npcLocked : !protectedIds.has(user.id),
+          vulnerable: station
+            ? !npcLocked
+            : Boolean(user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()) || !protectedIds.has(user.id),
           sectorId: user.base?.sectorId ?? null,
           regionName: user.base?.regionName ?? null,
           cadence: station?.cadence ?? null,
@@ -318,13 +320,16 @@ export async function attemptHeist(
             });
           }
         } else {
-          const recentSuccess = await tx.heist.findFirst({
-            where: {
-              targetId: targetUserId,
-              success: true,
-              createdAt: { gt: hoursAgo(RULES.TARGET_PROTECTION_HOURS, now) },
-            },
-          });
+          const exposed = Boolean(target.vaultExposedUntil && target.vaultExposedUntil.getTime() > now.getTime());
+          const recentSuccess = exposed
+            ? null
+            : await tx.heist.findFirst({
+                where: {
+                  targetId: targetUserId,
+                  success: true,
+                  createdAt: { gt: hoursAgo(RULES.TARGET_PROTECTION_HOURS, now) },
+                },
+              });
           if (recentSuccess) {
             throw new GameError(409, "TARGET_PROTECTED", "That vault was hit recently and is still shut.", {
               protectionEndsAt: hoursFromNow(RULES.TARGET_PROTECTION_HOURS, recentSuccess.createdAt).toISOString(),
@@ -339,6 +344,15 @@ export async function attemptHeist(
         const broken = await wearWeapon(tx, owned.id);
 
         if (!success) {
+          const exposedUntil = hoursFromNow(RULES.FAILED_HEIST_EXPOSURE_HOURS, now);
+          const currentExposed = attacker.vaultExposedUntil;
+          await tx.user.update({
+            where: { id: attackerId },
+            data: {
+              vaultExposedUntil:
+                currentExposed && currentExposed.getTime() > exposedUntil.getTime() ? currentExposed : exposedUntil,
+            },
+          });
           const heist = await tx.heist.create({
             data: {
               attackerId,

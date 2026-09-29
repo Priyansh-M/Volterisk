@@ -13,6 +13,7 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js";
+import { unclaimedCount } from "./achievementService.js";
 import { settlePassivePay } from "./workService.js";
 import { publicProfileFor } from "./publicProfileService.js";
 
@@ -210,6 +211,11 @@ export async function getProfile(userId: string) {
           attack: attackPower(equipped.weapon.number, equipped.upgradeLevel),
         }
       : null,
+    penalty:
+      user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()
+        ? { active: true, endsAt: user.vaultExposedUntil.toISOString() }
+        : { active: false, endsAt: null },
+    unclaimedAchievements: await unclaimedCount(userId),
     currentJob: user.passiveJobId
       ? {
           id: user.passiveJobId,
@@ -261,7 +267,7 @@ export async function getLeaderboard() {
       base: user.base?.regionName ?? null,
     }))
     .sort((a, b) => b.netWorth - a.netWorth || a.username.localeCompare(b.username))
-    .slice(0, 20)
+    .slice(0, RULES.LEADERBOARD_SIZE)
     .map((row, index) => ({ rank: index + 1, ...row }));
 
   const names = new Map(users.map((user) => [user.id, user.username]));
@@ -272,13 +278,13 @@ export async function getLeaderboard() {
       return [{ username, successfulHeists: row._count._all }];
     })
     .sort((a, b) => b.successfulHeists - a.successfulHeists || a.username.localeCompare(b.username))
-    .slice(0, 20)
+    .slice(0, RULES.LEADERBOARD_SIZE)
     .map((row, index) => ({ rank: index + 1, ...row }));
 
   const biggest = await prisma.heist.findMany({
     where: { success: true, attackerId: { in: realIds } },
     orderBy: [{ amountStolen: "desc" }, { createdAt: "asc" }],
-    take: 20,
+    take: RULES.LEADERBOARD_SIZE,
     include: {
       attacker: { select: { username: true } },
       target: { select: { username: true } },

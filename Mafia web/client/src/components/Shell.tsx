@@ -4,7 +4,7 @@ import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { ReputationAlert } from './ReputationAlert.tsx'
 import { api, prefetch } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
-import { heatFromJobs, money } from '../lib/format.ts'
+import { heatFromJobs, money, remaining } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
 import {
   IconArsenal,
@@ -72,6 +72,11 @@ export function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notices, setNotices] = useState(0)
+  const [unclaimed, setUnclaimed] = useState(me?.unclaimedAchievements ?? 0)
+
+  useEffect(() => {
+    if (typeof me?.unclaimedAchievements === 'number') setUnclaimed(me.unclaimedAchievements)
+  }, [me?.unclaimedAchievements])
 
   useEffect(() => {
     Object.values(warm).flat().forEach(prefetch)
@@ -102,7 +107,7 @@ export function Shell() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <LedgerAlerts onChange={recount} />
+      <LedgerAlerts onChange={recount} onUnclaimed={setUnclaimed} />
       <ReputationAlert />
       {mobileOpen ? (
         <button aria-label="Close navigation overlay" className="fixed inset-0 z-40 bg-background/75 lg:hidden" onClick={() => setMobileOpen(false)} />
@@ -171,6 +176,13 @@ export function Shell() {
             >
               <link.Icon className="h-4 w-4 shrink-0" />
               {collapsed ? null : <span>{link.label}</span>}
+              {!collapsed && link.to === '/achievements' && unclaimed > 0 ? (
+                <span className="ml-auto text-primary" title="Reward ready to claim" aria-label="Reward ready to claim">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                    <path d="M7 4h10v2a5 5 0 0 1-4 4.9V14h3v2H8v-2h3v-3.1A5 5 0 0 1 7 6V4zm-3 1h2v2a3 3 0 0 0 1.2 2.4A4 4 0 0 1 4 6V5zm16 0v1a4 4 0 0 1-3.2 3.4A3 3 0 0 0 18 7V5h2zM9 18h6v2H9v-2z" />
+                  </svg>
+                </span>
+              ) : null}
             </NavLink>
           ))}
         </nav>
@@ -224,6 +236,12 @@ export function Shell() {
             </NavLink>
           </div>
         </header>
+        {me.penalty?.active ? (
+          <div className="border-b border-destructive/50 bg-destructive/15 px-4 py-2 text-center text-sm text-foreground">
+            Penalty active: no vault protection for 1 hour
+            {me.penalty.endsAt ? <span className="text-muted-foreground"> · lifts in {remaining(me.penalty.endsAt)}</span> : null}
+          </div>
+        ) : null}
         <div className="p-4 md:p-6 xl:p-8">
           <div className="mb-6 flex items-end justify-between border-b border-border pb-5">
             <div>

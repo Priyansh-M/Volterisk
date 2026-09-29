@@ -73,31 +73,20 @@ export const RULES = {
   CAMERA_ID: "security-camera",
   CAMERA_MAX_LEVEL: 40,
   ACHIEVEMENTS: [
-    {
-      id: "first-entry",
-      name: "First Entry",
-      description: "Establish your first operational base.",
-      reward: 1_000,
-    },
-    {
-      id: "clean-hands",
-      name: "Clean Hands",
-      description: "Complete 10 contracts without raising heat.",
-      reward: 5_000,
-    },
-    {
-      id: "false-bottom",
-      name: "False Bottom",
-      description: "Upgrade your vault to level 5.",
-      reward: 5_000,
-    },
-    {
-      id: "redacted",
-      name: "Redacted",
-      description: "Requirements remain classified.",
-      reward: 5_000,
-    },
-  ] as { id: string; name: string; description: string; reward: number }[],
+    { id: "first-steps", name: "First Steps", description: "Complete your first Work contract", reward: 2_000 },
+    { id: "first-blood", name: "First Blood", description: "Complete your first successful heist", reward: 3_000 },
+    { id: "armed-and-ready", name: "Armed and Ready", description: "Own 5 different weapon types", reward: 10_000 },
+    { id: "growing-arsenal", name: "Growing Arsenal", description: "Own 10 different weapon types", reward: 50_000 },
+    { id: "full-arsenal", name: "Full Arsenal", description: "Own all 15 weapon types", reward: 250_000 },
+    { id: "inside-job", name: "Inside Job", description: "Successfully rob a player who recently interacted with you", reward: 50_000, sealed: true },
+    { id: "against-the-odds", name: "Against the Odds", description: "Successfully complete a heist with a very low success probability", reward: 75_000, sealed: true },
+    { id: "big-spender", name: "Big Spender", description: "Spend $1,000,000 on weapons, upgrades and equipment", reward: 50_000, sealed: true },
+    { id: "paper-trail", name: "Paper Trail", description: "Accumulate 100 recorded transactions in your ledger", reward: 25_000, sealed: true },
+    { id: "first-entry", name: "First Entry", description: "Establish your first operational base.", reward: 1_000 },
+    { id: "clean-hands", name: "Clean Hands", description: "Complete 10 contracts without raising heat.", reward: 5_000 },
+    { id: "false-bottom", name: "False Bottom", description: "Upgrade your vault to level 5.", reward: 5_000 },
+    { id: "redacted", name: "Redacted", description: "Requirements remain classified.", reward: 5_000, sealed: true },
+  ] as { id: string; name: string; description: string; reward: number; sealed?: boolean }[],
   /** Successful heists required before Redacted unlocks. The client never shows this number. */
   REDACTED_HEIST_GOAL: 15,
   CLEAN_HANDS_CONTRACTS: 10,
@@ -268,7 +257,18 @@ export const RULES = {
   WORK_BOARD_SIZE: 6,
   WORK_BOARD_ROTATION_MINUTES: 30,
   /** After collecting, that one contract is unavailable for this long. */
-  WORK_CONTRACT_COOLDOWN_MINUTES: 10,
+  WORK_CONTRACT_COOLDOWN_MINUTES: 24 * 60,
+  /** After any active job is collected, the whole board waits this long. */
+  WORK_GAP_MINUTES: 60,
+  /** A failed heist leaves the attacker's vault unprotected for this long. */
+  FAILED_HEIST_EXPOSURE_HOURS: 1,
+  /** Against the Odds: a successful heist at or under this chance. */
+  AGAINST_THE_ODDS_CHANCE: 20,
+  /** Inside Job: the target must have crossed your ledger within this many days. */
+  INSIDE_JOB_DAYS: 7,
+  BIG_SPENDER_CENTS: 1_000_000,
+  PAPER_TRAIL_COUNT: 100,
+  LEADERBOARD_SIZE: 3,
   PASSIVE_JOBS: [
     { id: "volunteer", name: "Volunteer", payPerDay: 300, requires: [] },
     { id: "mail-man", name: "Mail Man", payPerDay: 450, requires: [] },
