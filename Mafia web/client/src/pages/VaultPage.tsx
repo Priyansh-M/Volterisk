@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Btn, Field, Notice, PageTitle, Panel, inputClass } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
@@ -18,7 +19,7 @@ const notes: Record<number, string> = {
 }
 
 export function VaultPage() {
-  const { refresh } = useAuth()
+  const { me, refresh } = useAuth()
   const [vault, setVault] = useState<VaultView | null>(null)
   const [amount, setAmount] = useState('5000')
   const [error, setError] = useState<string | null>(null)
@@ -68,52 +69,62 @@ export function VaultPage() {
     }
   }
 
-  if (!vault && !error) return <p className="text-sm text-muted">Opening the vault…</p>
-  if (!vault) return <p className="text-sm text-danger">{error}</p>
+  if (!vault && !error) return <Notice tone="muted">Opening the vault…</Notice>
+  if (!vault) return <Notice tone="danger">{error}</Notice>
+
+  const status = vault.level >= 4 ? 'Hardened' : 'Holding'
 
   return (
     <div className="max-w-xl space-y-4">
-      <h1 className="font-serif text-3xl">Vault</h1>
-      <section className="rounded-lg border border-line bg-panel p-4">
-        <p className="text-xs uppercase tracking-wide text-muted">Balance</p>
-        <p className="mt-1 font-serif text-3xl text-gold">{money(vault.balance)}</p>
-        <p className="mt-2 text-sm">Level {vault.level} of {vault.maxLevel}</p>
-        <p className="mt-3 text-sm text-muted">{notes[vault.level] ?? notes[1]}</p>
-      </section>
-      <section className="rounded-lg border border-line bg-panel p-4">
+      <PageTitle kicker="Counting house">Vault</PageTitle>
+      <Panel>
+        <dl className="space-y-3 text-sm">
+          <Row label="Cash" value={money(vault.balance)} gold />
+          <Row label="Pocket" value={me ? money(me.cash) : '—'} gold />
+          <Row label="Security" value={`Level ${vault.level} of ${vault.maxLevel}`} />
+          <div className="flex items-baseline justify-between gap-4 border-t border-line pt-3">
+            <dt className="text-muted">Status</dt>
+            <dd className="inline-flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-ok" aria-hidden="true" />
+              {status}
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-4 text-sm text-muted">{notes[vault.level] ?? notes[1]}</p>
+      </Panel>
+      <Panel>
         {vault.upgradeCost === null ? (
           <p className="text-sm text-muted">This vault is finished.</p>
         ) : (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void upgrade()}
-            className="cursor-pointer rounded-md bg-gold px-3 py-2 text-sm font-medium text-ink disabled:opacity-50"
-          >
+          <Btn variant="gold" disabled={busy} onClick={() => void upgrade()}>
             Upgrade for {money(vault.upgradeCost)}
-          </button>
+          </Btn>
         )}
         <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={(event) => void withdraw(event)}>
-          <label className="text-sm">
-            Withdraw to cash
+          <Field label="Withdraw to cash">
             <input
-              className="mt-1 block w-36 rounded-md border border-line bg-ink px-3 py-2"
+              className={`${inputClass} w-36`}
               inputMode="numeric"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
             />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm disabled:opacity-50"
-          >
+          </Field>
+          <Btn type="submit" disabled={busy}>
             Withdraw
-          </button>
+          </Btn>
         </form>
-        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
-        {note ? <p className="mt-3 text-sm text-ok">{note}</p> : null}
-      </section>
+        {error ? <p className="mt-3"><Notice tone="danger">{error}</Notice></p> : null}
+        {note ? <p className="mt-3"><Notice tone="ok">{note}</Notice></p> : null}
+      </Panel>
+    </div>
+  )
+}
+
+function Row({ label, value, gold }: { label: string; value: string; gold?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-muted">{label}</dt>
+      <dd className={gold ? 'font-semibold text-gold' : ''}>{value}</dd>
     </div>
   )
 }

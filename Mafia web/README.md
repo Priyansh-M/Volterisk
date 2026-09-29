@@ -78,9 +78,13 @@ successChance = clamp(60 + levelDifference * 8, 10, 95)
 
 On a hit, the take is `floor(vaultBalance * rewardPercent / 100)` inside a transaction with a conditional vault update. A miss pays nothing and still starts cooldown. The target is notified in the database either way.
 
+## Screens
+
+Framed night-ledger UI: top bar (title, cash, display-only heat from job count), left nav, city map with original SVG buildings, market shop for weapons `weapon:0001`–`0005`. Crew / intel / items / properties are marked Soon. Gameplay, formulas, and APIs are unchanged.
+
 ## Artwork
 
-Original inline SVG only (wordmark wheel and favicon). No downloaded images.
+Original inline SVG only (wordmark wheel, city map, weapon cards, favicon). No downloaded images. Google Fonts: Cinzel + Outfit.
 
 ## API
 

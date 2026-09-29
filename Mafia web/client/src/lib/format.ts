@@ -6,6 +6,21 @@ export function money(amount: number) {
   }).format(amount)
 }
 
+export function compactMoney(amount: number) {
+  if (amount >= 1_000_000) {
+    const value = amount / 1_000_000
+    return `$${value >= 10 ? value.toFixed(1) : value.toFixed(2)}M`
+  }
+  if (amount >= 10_000) {
+    return `$${(amount / 1_000).toFixed(amount >= 100_000 ? 0 : 1)}K`
+  }
+  return money(amount)
+}
+
+export function heatFromJobs(successful: number, failed: number) {
+  return successful + failed
+}
+
 export function remaining(iso: string | null) {
   if (!iso) return 'Ready'
   const ms = new Date(iso).getTime() - Date.now()

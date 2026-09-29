@@ -40,7 +40,7 @@ export function RegisterPage() {
         <label className="block text-sm">
           Name
           <input
-            className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2"
+            className="mt-1 w-full rounded-xl border border-line bg-ink px-3 py-2 outline-none focus:border-gold/40"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             autoComplete="username"
@@ -50,7 +50,7 @@ export function RegisterPage() {
         <label className="block text-sm">
           Password
           <input
-            className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2"
+            className="mt-1 w-full rounded-xl border border-line bg-ink px-3 py-2 outline-none focus:border-gold/40"
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -63,7 +63,7 @@ export function RegisterPage() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full cursor-pointer rounded-md bg-gold px-3 py-2 text-sm font-medium text-ink disabled:opacity-50"
+          className="gloss-gold w-full cursor-pointer rounded-full px-3 py-2 text-sm font-medium disabled:opacity-50"
         >
           {busy ? 'Writing the name…' : 'Create ledger'}
         </button>

@@ -1,17 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Segoe UI", "Avenir Next", system-ui, sans-serif;
-  --font-serif: Georgia, "Iowan Old Style", Palatino, serif;
-  --color-ink: #12110f;
-  --color-panel: #1c1b19;
-  --color-panel-2: #26231f;
-  --color-line: #3a342c;
-  --color-paper: #ebe6dc;
-  --color-muted: #a39886;
-  --color-gold: #e0b15a;
+  --font-sans: "Outfit", "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Cinzel", "Palatino Linotype", serif;
+  --color-ink: #08090c;
+  --color-board: #101218;
+  --color-panel: #161921;
+  --color-panel-2: #1d212b;
+  --color-line: #2c3140;
+  --color-paper: #f0ece4;
+  --color-muted: #9a9488;
+  --color-gold: #e2c075;
+  --color-gold-2: #c9a24a;
   --color-danger: #d4654f;
-  --color-ok: #7dba78;
+  --color-ok: #6fbf7a;
+  --color-steel: #8aa0c2;
 }
 
 html,
@@ -22,12 +25,52 @@ body,
 
 body {
   margin: 0;
-  background: #12110f;
-  color: #ebe6dc;
+  background: #08090c;
+  color: #f0ece4;
   font-family: var(--font-sans);
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
+}
+
+.gloss {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 42%, rgba(0, 0, 0, 0.18));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+.gloss-gold {
+  background: linear-gradient(180deg, #f0d58a, #c9a24a 55%, #9d7a2e);
+  color: #14110c;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 8px 18px rgba(201, 162, 74, 0.18);
+}
+
+.nav-pill {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.015) 48%, rgba(0, 0, 0, 0.22));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 4px 10px rgba(0, 0, 0, 0.22);
+}
+
+.nav-pill-active {
+  border-color: rgba(226, 192, 117, 0.45);
+  background: linear-gradient(180deg, rgba(226, 192, 117, 0.28), rgba(226, 192, 117, 0.08) 55%, rgba(0, 0, 0, 0.2));
+  color: #e2c075;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(226, 192, 117, 0.08);
+}
+
+.city-hotspot:hover .city-pin,
+.city-hotspot:focus-visible .city-pin {
+  filter: drop-shadow(0 0 10px rgba(226, 192, 117, 0.55));
 }

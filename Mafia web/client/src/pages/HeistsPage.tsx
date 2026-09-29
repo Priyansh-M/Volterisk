@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Btn, Field, Notice, PageTitle, Panel, inputClass } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
@@ -79,9 +80,11 @@ export function HeistsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="font-serif text-3xl">Heists</h1>
-      {targets === null && !error ? <p className="text-sm text-muted">Reading the city…</p> : null}
-      {targets && targets.length === 0 ? <p className="text-sm text-muted">No vault in the city is thick enough to hit.</p> : null}
+      <PageTitle kicker="Job street">Heists</PageTitle>
+      {targets === null && !error ? <Notice tone="muted">Reading the city…</Notice> : null}
+      {targets && targets.length === 0 ? (
+        <Notice tone="muted">No vault in the city is thick enough to hit.</Notice>
+      ) : null}
       <div className="grid gap-3 md:grid-cols-2">
         {targets?.map((row) => (
           <button
@@ -92,7 +95,7 @@ export function HeistsPage() {
               setConfirming(false)
               setResult(null)
             }}
-            className={`cursor-pointer rounded-lg border p-4 text-left ${
+            className={`cursor-pointer rounded-2xl border p-4 text-left ${
               targetId === row.userId ? 'border-gold bg-panel' : 'border-line bg-panel'
             }`}
           >
@@ -109,11 +112,10 @@ export function HeistsPage() {
         ))}
       </div>
 
-      <section className="rounded-lg border border-line bg-panel p-4">
-        <label className="block text-sm">
-          Weapon
+      <Panel>
+        <Field label="Weapon">
           <select
-            className="mt-1 w-full max-w-sm rounded-md border border-line bg-ink px-3 py-2"
+            className={`${inputClass} max-w-sm`}
             value={weaponId ?? ''}
             onChange={(event) => {
               setWeaponId(event.target.value)
@@ -126,46 +128,40 @@ export function HeistsPage() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
         <p className="mt-3 text-sm">
-          Server estimate:{' '}
-          <span className="text-gold">{chance === null ? '—' : `${chance}%`}</span>
+          Server estimate: <span className="text-gold">{chance === null ? '—' : `${chance}%`}</span>
           {weapon ? ` with ${weapon.name}` : ''}
         </p>
-        {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+        {error ? <p className="mt-2"><Notice tone="danger">{error}</Notice></p> : null}
         {!confirming ? (
-          <button
-            type="button"
+          <Btn
+            variant="danger"
+            className="mt-4"
             disabled={!target || !target.vulnerable || chance === null || cooling || busy}
             onClick={() => setConfirming(true)}
-            className="mt-4 cursor-pointer rounded-md bg-danger px-3 py-2 text-sm font-medium text-paper disabled:opacity-40"
           >
             {cooling ? `Cooling ${me ? remaining(me.cooldownEndsAt) : ''}` : 'Attempt heist'}
-          </button>
+          </Btn>
         ) : (
-          <div className="mt-4 rounded-md border border-line bg-ink p-3">
+          <div className="mt-4 rounded-2xl border border-line bg-ink p-3">
             <p className="text-sm">
               Hit {target?.username} with {weapon?.name}. The server puts this at {chance}%.
             </p>
             <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void commit()}
-                className="cursor-pointer rounded-md bg-gold px-3 py-2 text-sm font-medium text-ink disabled:opacity-50"
-              >
+              <Btn variant="gold" disabled={busy} onClick={() => void commit()}>
                 {busy ? 'Working…' : 'Confirm job'}
-              </button>
+              </Btn>
               <button type="button" className="cursor-pointer text-sm text-muted" onClick={() => setConfirming(false)}>
                 Back off
               </button>
             </div>
           </div>
         )}
-      </section>
+      </Panel>
 
       {result ? (
-        <section className={`rounded-lg border p-4 ${result.success ? 'border-ok' : 'border-danger'}`}>
+        <section className={`rounded-2xl border p-4 ${result.success ? 'border-ok' : 'border-danger'}`}>
           <h2 className={`font-serif text-2xl ${result.success ? 'text-ok' : 'text-danger'}`}>
             {result.success ? `Took ${money(result.amountStolen)}` : 'The door held'}
           </h2>
