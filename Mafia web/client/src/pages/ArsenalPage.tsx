@@ -12,11 +12,17 @@ type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null }
 export function ArsenalPage() {
   const { refresh } = useAuth()
   const [arsenal, setArsenal] = useState<Arsenal | null>(null)
+  const [predictors, setPredictors] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   async function load() {
-    setArsenal(await api<Arsenal>('/api/me/weapons'))
+    const [weapons, shop] = await Promise.all([
+      api<Arsenal>('/api/me/weapons'),
+      api<{ predictor: { quantity: number } }>('/api/shop'),
+    ])
+    setArsenal(weapons)
+    setPredictors(shop.predictor.quantity)
   }
 
   useEffect(() => {
@@ -55,7 +61,21 @@ export function ArsenalPage() {
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {!arsenal && !error ? <Notice tone="muted">Unlocking the case…</Notice> : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.length === 0 && arsenal ? <Notice tone="muted">The case is empty.</Notice> : null}
+        {cards.length === 0 && predictors < 1 && arsenal ? <Notice tone="muted">The case is empty.</Notice> : null}
+        {predictors > 0 ? (
+          <article className="flex flex-col border border-line bg-panel">
+            <div className="flex aspect-[11/7] items-center justify-center border-b border-line bg-panel-2 font-display text-5xl text-primary">EP</div>
+            <div className="flex flex-1 flex-col p-4">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="font-serif text-xl tracking-wide">Estimate Predictor</h2>
+                <span className="text-[10px] tracking-[0.16em] text-ok uppercase">Owned</span>
+              </div>
+              <p className="mt-2 font-display text-xl uppercase">Estimate Predictor</p>
+              <p className="mt-1 text-sm text-muted">Held {predictors}</p>
+              <p className="mt-2 flex-1 text-sm text-muted">Spend one under Inspect on a heist to read the server chance.</p>
+            </div>
+          </article>
+        ) : null}
         {cards.map(({ item, owned }) => {
           return (
             <article key={owned.instanceId ?? item.id} className="flex flex-col border border-line bg-panel">
@@ -74,9 +94,10 @@ export function ArsenalPage() {
                 <p className="mt-2 font-display text-xl uppercase">
                   {item.name} (L.{owned.upgradeLevel})
                 </p>
-                <p className="mt-1 text-sm text-muted">
-                  {`Attack ${owned.attack ?? owned.effectiveLevel}${owned.nextAttack != null ? ` · after upgrade ${owned.nextAttack}` : ''}`}
-                </p>
+                <p className="mt-1 text-sm text-muted">Attack {owned.attack ?? owned.effectiveLevel}</p>
+                {owned.nextAttack != null ? (
+                  <p className="mt-1 text-sm text-muted">After Upgrade → Attack {owned.nextAttack}</p>
+                ) : null}
                 {owned.maxDurability ? (
                   <div className="mt-3">
                     <div className="h-1.5 bg-muted">
@@ -100,7 +121,7 @@ export function ArsenalPage() {
                     <span className="self-center text-sm text-muted">Capped</span>
                   ) : (
                     <Btn variant="gold" disabled={busy !== null} onClick={() => void act('/api/weapons/upgrade', item.id, owned.instanceId)}>
-                      Upgrade · attack {owned.nextAttack ?? owned.nextEffectiveLevel} · {money(owned.nextUpgradeCost)}
+                      Upgrade {money(owned.nextUpgradeCost)}
                     </Btn>
                   )}
                 </div>
