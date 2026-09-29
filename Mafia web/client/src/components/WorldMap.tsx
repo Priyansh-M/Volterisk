@@ -373,7 +373,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
           }`}
           style={{ left: tip.x, top: tip.y }}
         >
-          <p className="text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-[#6d6860]">
             {focusPin?.isYou ? 'yours' : focusPin?.isNpc ? 'NPC crew' : focusPin ? 'Player' : 'Open sector'}
           </p>
           <p className="mt-1 font-mono text-[12px] tracking-[0.08em]">{focus.id.toUpperCase()}</p>
