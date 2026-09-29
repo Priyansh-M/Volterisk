@@ -175,8 +175,12 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim }: Pr
         viewBox={`${cam.x} ${cam.y} ${Math.max(size.w / cam.k, 1)} ${Math.max(size.h / cam.k, 1)}`}
         onPointerDown={(event) => {
           if (event.button !== 0) return
-          svgRef.current?.setPointerCapture(event.pointerId)
           drag.current = { px: event.clientX, py: event.clientY, x: camRef.current.x, y: camRef.current.y, moved: false }
+          try {
+            svgRef.current?.setPointerCapture(event.pointerId)
+          } catch {
+            /* capture is optional; the click still files */
+          }
         }}
         onPointerMove={(event) => {
           const active = drag.current
