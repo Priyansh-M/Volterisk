@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { WorldMap, claimErrorCopy } from '../components/WorldMap.tsx'
 import { Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api, isMissing } from '../lib/api.ts'
+import { ApiError, api, isMissing, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 import type { MapPin, PlayerBase, StarterClaim } from '../lib/types.ts'
@@ -18,7 +18,7 @@ export function MapPage() {
 
 function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
   const { me, refresh } = useAuth()
-  const [pins, setPins] = useState<MapPin[] | null>(null)
+  const [pins, setPins] = useState<MapPin[] | null>(() => peek<{ bases: MapPin[] }>('/api/map/bases')?.bases ?? null)
   const [pinNote, setPinNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -27,7 +27,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
 
   useEffect(() => {
     let cancelled = false
-    api<{ bases: MapPin[] }>('/api/map/bases')
+    load<{ bases: MapPin[] }>('/api/map/bases')
       .then((data) => {
         if (!cancelled) setPins(data.bases)
       })
@@ -119,6 +119,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
         <WorldMap
           className={onboarding ? 'h-[calc(100vh-9rem)] min-h-[480px]' : ''}
           showHint={onboarding}
+          loading={pins === null}
           pins={pins ?? []}
           canClaim={!needsKit && needsBase}
           claimHint={needsKit ? 'Take the kit before you plant a flag.' : needsBase ? null : 'This square is for reading. Your base is already filed.'}

@@ -20,6 +20,7 @@ type Props = {
   canClaim: boolean
   claimHint?: string | null
   busy: boolean
+  loading?: boolean
   onClaim: (sector: Sector) => void
   className?: string
   /** Onboarding only. The live map does not nag after login. */
@@ -33,7 +34,7 @@ function fitCamera(width: number, height: number): Cam {
   return { k, x: (WORLD.width - viewW) / 2, y: (WORLD.height - viewH) / 2 }
 }
 
-export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, className = '', showHint = false }: Props) {
+export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = false, onClaim, className = '', showHint = false }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const camRef = useRef<Cam>({ x: 0, y: 0, k: 0.4 })
@@ -46,6 +47,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
   const [pinned, setPinned] = useState<Sector | null>(null)
   const [tip, setTip] = useState({ x: 16, y: 16 })
   const [dossier, setDossier] = useState<PublicCard | null>(null)
+  const [squaresOn, setSquaresOn] = useState(false)
 
   const pinBySector = useMemo(() => new Map(pins.map((pin) => [pin.sectorId, pin])), [pins])
   const focus = pinned ?? hover
@@ -61,12 +63,19 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
     if (!el) return
     const measure = () => {
       const rect = el.getBoundingClientRect()
-      setSize({ w: Math.max(rect.width, 1), h: Math.max(rect.height, 1) })
+      const w = Math.max(Math.round(rect.width), 1)
+      const h = Math.max(Math.round(rect.height), 1)
+      setSize((current) => (current.w === w && current.h === h ? current : { w, h }))
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => setSquaresOn(true))
+    return () => cancelAnimationFrame(frameId)
   }, [])
 
   useEffect(() => {
@@ -166,16 +175,28 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
   const labelSize = 15 / cam.k
   const seaSize = 11 / cam.k
   const card = dossier ?? focusPin?.player ?? null
+  const fitted = size.w > 1 && size.h > 1
+  const viewBox = fitted
+    ? `${cam.x} ${cam.y} ${Math.max(size.w / cam.k, 1)} ${Math.max(size.h / cam.k, 1)}`
+    : `0 0 ${WORLD.width} ${WORLD.height}`
 
   return (
     <div
       ref={frame}
       className={`relative h-[calc(100vh-11rem)] min-h-[720px] overflow-hidden border border-[#1c1c1c] bg-[#efe6d4] text-[#1c1c1c] select-none ${className}`}
     >
+      {loading || !squaresOn ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#efe6d4]">
+          <div className="text-center">
+            <p className="font-mono text-[10px] tracking-[0.22em] text-[#6d6860] uppercase">Loading the chart</p>
+            <p className="mt-2 font-display text-3xl font-semibold uppercase text-[#1c1c1c]">Velmora</p>
+          </div>
+        </div>
+      ) : null}
       <svg
         ref={svgRef}
         className="block h-full w-full touch-none"
-        viewBox={`${cam.x} ${cam.y} ${Math.max(size.w / cam.k, 1)} ${Math.max(size.h / cam.k, 1)}`}
+        viewBox={viewBox}
         onPointerDown={(event) => {
           if (event.button !== 0) return
           drag.current = { px: event.clientX, py: event.clientY, x: camRef.current.x, y: camRef.current.y, moved: false }
@@ -237,7 +258,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
             </g>
           </g>
         ))}
-        {showSectors
+        {showSectors && squaresOn
           ? LANDMASSES.map((landmass) => (
               <g key={landmass.id} clipPath={`url(#coast-${landmass.id})`}>
                 {visible
