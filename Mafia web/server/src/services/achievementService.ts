@@ -78,7 +78,6 @@ export async function listAchievements(userId: string) {
 }
 
 export async function unannouncedAchievements(userId: string) {
-  await syncAchievements(userId);
   const rows = await prisma.userAchievement.findMany({
     where: { userId, announcedAt: null },
     orderBy: { unlockedAt: "asc" },

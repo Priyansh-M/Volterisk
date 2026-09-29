@@ -1,10 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
-import { Btn, Field, Notice, PageTitle, inputClass } from '../components/ui.tsx'
+import { Notice, inputClass } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
-import { bandLabel, money, remaining } from '../lib/format.ts'
-import type { HeistKind, HeistResult, OwnedWeapon, TargetBoard } from '../lib/types.ts'
+import { money, remaining } from '../lib/format.ts'
+import type { HeistKind, HeistResult, OwnedWeapon, Target, TargetBoard } from '../lib/types.ts'
+
+type Quote = {
+  attack: number
+  defense: number
+  advantage: number
+  estimatedChance: number
+  weaponName: string
+  weaponLevel: number
+  vaultTier: string
+  vaultLevel: number
+}
 
 export function HeistsPage() {
   const { me, refresh } = useAuth()
@@ -14,12 +25,13 @@ export function HeistsPage() {
   const [targetId, setTargetId] = useState<string | null>(null)
   const [weaponId, setWeaponId] = useState<string | null>(null)
   const [chance, setChance] = useState<number | null>(null)
-  const [quote, setQuote] = useState<{ attack: number; defense: number; advantage: number; estimatedChance: number; weaponName: string; weaponLevel: number; vaultTier: string; vaultLevel: number } | null>(null)
+  const [quote, setQuote] = useState<Quote | null>(null)
   const [predictors, setPredictors] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<HeistResult | null>(null)
+  const targetRef = useRef<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -37,48 +49,44 @@ export function HeistsPage() {
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load targets.'))
   }, [])
 
-  useEffect(() => {
-    if (!targetId || !weaponId) {
-      setQuote(null)
-      return
-    }
-    let cancelled = false
+  const targets = board ? (kind === 'npc' ? board.npc : board.players) : null
+  const selected = weapons.find((row) => (row.instanceId ?? row.id) === weaponId) ?? null
+  const cooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
+
+  function openTarget(userId: string, prepare: boolean) {
+    targetRef.current = userId
+    setTargetId(userId)
+    setChance(null)
+    setQuote(null)
+    setResult(null)
+    setConfirming(prepare)
+    if (!prepare || !weaponId) return
     const weapon = weapons.find((row) => (row.instanceId ?? row.id) === weaponId)
-    api<NonNullable<typeof quote>>('/api/heists/quote', {
+    const catalogId = weapon?.id
+    if (!catalogId) return
+    api<Quote>('/api/heists/quote', {
       method: 'POST',
       body: JSON.stringify({
-        targetUserId: targetId,
-        weaponId: weapon?.id ?? weaponId,
-        instanceId: weapon?.instanceId,
+        targetUserId: userId,
+        weaponId: catalogId,
+        instanceId: weapon.instanceId,
         kind,
       }),
     })
       .then((data) => {
-        if (!cancelled) setQuote(data)
+        if (targetRef.current === userId) setQuote(data)
       })
-      .catch(() => {
-        if (!cancelled) setQuote(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [targetId, weaponId, kind, weapons])
+      .catch(() => undefined)
+  }
 
   async function usePredictor() {
-    if (!targetId || !weaponId) return
-    const selected = weapons.find((row) => (row.instanceId ?? row.id) === weaponId)
-    const catalogId = selected?.id
-    if (!catalogId || !/^weapon:\d{4}$/.test(catalogId)) return
+    if (!targetId || !selected?.id) return
     setBusy(true)
     setError(null)
     try {
       const data = await api<{ estimatedChance: number }>('/api/heists/estimate', {
         method: 'POST',
-        body: JSON.stringify({
-          targetUserId: targetId,
-          weaponId: catalogId,
-          kind,
-        }),
+        body: JSON.stringify({ targetUserId: targetId, weaponId: selected.id, kind }),
       })
       setChance(data.estimatedChance)
       const shop = await api<{ predictor: { quantity: number } }>('/api/shop')
@@ -90,22 +98,17 @@ export function HeistsPage() {
     }
   }
 
-  const targets = board ? (kind === 'npc' ? board.npc : board.players) : null
-  const weapon = weapons.find((row) => (row.instanceId ?? row.id) === weaponId) ?? null
-  const cooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
-
   async function commit() {
-    if (!targetId || !weaponId) return
+    if (!targetId || !selected) return
     setBusy(true)
     setError(null)
     try {
-      const weapon = weapons.find((row) => (row.instanceId ?? row.id) === weaponId)
       const heist = await api<HeistResult & { broken?: boolean }>('/api/heists', {
         method: 'POST',
         body: JSON.stringify({
           targetUserId: targetId,
-          weaponId: weapon?.id ?? weaponId,
-          instanceId: weapon?.instanceId,
+          weaponId: selected.id,
+          instanceId: selected.instanceId,
           kind,
         }),
       })
@@ -126,136 +129,60 @@ export function HeistsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <PageTitle kicker="Dossiers">Heist intelligence</PageTitle>
+    <div>
       <Tabs
         value={kind}
         onValueChange={(value) => {
           setKind(value as HeistKind)
           setTargetId(null)
           setConfirming(false)
+          setQuote(null)
           setResult(null)
         }}
       >
-        <TabsList>
-          <TabsTrigger value="npc">NPC Heists</TabsTrigger>
-          <TabsTrigger value="player">Player Heists</TabsTrigger>
+        <TabsList className="border-border bg-transparent p-0">
+          <TabsTrigger value="npc" className="h-8 rounded-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            NPC heists
+          </TabsTrigger>
+          <TabsTrigger value="player" className="h-8 rounded-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            Player heists
+          </TabsTrigger>
         </TabsList>
       </Tabs>
       {targets === null && !error ? <Notice tone="muted">Reading the board…</Notice> : null}
       {targets && targets.length === 0 ? (
-        <Notice tone="muted">
-          {kind === 'npc' ? 'No night-crew vault is on the board.' : 'No other player vault is open.'}
-        </Notice>
+        <Notice tone="muted">{kind === 'npc' ? 'No crew vault is on the board.' : 'No other player vault is open.'}</Notice>
       ) : null}
-      <div className="grid gap-3 lg:grid-cols-2">
-        {targets?.map((row) => {
-          const open = targetId === row.userId
-          return (
-            <article key={row.userId} className={`border bg-panel p-4 ${open ? 'border-gold/50' : 'border-line'}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-serif text-xl tracking-wide">{row.username}</h2>
-                  <p className="mt-1 text-[12px] text-muted">
-                    {bandLabel(row.wealthBucket)} · vault lv {row.vaultLevel}
-                    {row.sectorId ? ` · ${row.regionName ?? 'Velmora'} ${row.sectorId.toUpperCase()}` : ''}
-                  </p>
-                </div>
-                <span className={`text-[11px] tracking-[0.14em] uppercase ${row.vulnerable ? 'text-ok' : 'text-danger'}`}>
-                  {row.vulnerable ? 'Open' : 'Protected'}
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                  <Btn
-                  onClick={() => {
-                    setTargetId(row.userId)
-                    setChance(null)
-                    setConfirming(false)
-                    setResult(null)
-                  }}
-                >
-                  Inspect
-                </Btn>
-                <Btn
-                  variant="gold"
-                  disabled={!row.vulnerable || cooling || busy}
-                  onClick={() => {
-                    setTargetId(row.userId)
-                    setChance(null)
-                    setConfirming(true)
-                    setResult(null)
-                  }}
-                >
-                  {cooling ? `Cooling ${me ? remaining(me.cooldownEndsAt) : ''}` : 'Prepare heist'}
-                </Btn>
-              </div>
-              {open ? (
-                <div className="mt-4 border-t border-line pt-3">
-                  <Field label="Weapon">
-                    <select
-                      className={`${inputClass} max-w-sm`}
-                      value={weaponId ?? ''}
-                      onChange={(event) => {
-                        setWeaponId(event.target.value)
-                        setChance(null)
-                        setConfirming(false)
-                      }}
-                    >
-                      {weapons.map((item) => (
-                        <option key={item.instanceId ?? item.id} value={item.instanceId ?? item.id}>
-                          {item.name} (L.{item.upgradeLevel}) · attack {item.attack ?? item.effectiveLevel}
-                          {item.durability != null ? ` · ${item.durability} uses` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  {quote ? (
-                    <div className="mt-3 grid gap-3 border border-border p-3 sm:grid-cols-2">
-                      <div>
-                        <p className="font-mono text-[9px] uppercase text-muted-foreground">Your equipment</p>
-                        <p className="font-display text-xl uppercase">{quote.weaponName}</p>
-                        <p className="text-sm">Level {quote.weaponLevel}</p>
-                        <p className="text-sm">Attack power: {quote.attack}</p>
-                      </div>
-                      <div>
-                        <p className="font-mono text-[9px] uppercase text-muted-foreground">Target vault</p>
-                        <p className="font-display text-xl uppercase">{quote.vaultTier} vault</p>
-                        <p className="text-sm">Level {quote.vaultLevel}</p>
-                        <p className="text-sm">Defense: {quote.defense}</p>
-                      </div>
-                      <p className="sm:col-span-2 font-mono text-xs">
-                        Attack advantage: {quote.advantage >= 0 ? `+${quote.advantage}` : quote.advantage}
-                        {chance !== null ? ` · Estimated success ${chance}%` : ''}
-                      </p>
-                    </div>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Btn disabled={busy || predictors < 1 || !weaponId} onClick={() => void usePredictor()}>
-                      Use Estimate Predictor
-                    </Btn>
-                    <span className="font-mono text-[10px] uppercase text-muted">{predictors} in the case</span>
-                  </div>
-                  {chance !== null ? (
-                    <p className="mt-3 text-sm">
-                      Server chance: <span className="text-primary">{chance}%</span>
-                      {weapon ? ` with ${weapon.name}` : ''}
-                    </p>
-                  ) : null}
-                  {confirming ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Btn variant="gold" disabled={busy || !row.vulnerable || cooling} onClick={() => void commit()}>
-                        {busy ? 'Working…' : 'Confirm job'}
-                      </Btn>
-                      <button type="button" className="cursor-pointer text-[12px] text-muted" onClick={() => setConfirming(false)}>
-                        Back off
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </article>
-          )
-        })}
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        {targets?.map((row, index) => (
+          <Dossier
+            key={row.userId}
+            row={row}
+            index={index}
+            open={targetId === row.userId}
+            cooling={cooling}
+            coolLabel={me ? remaining(me.cooldownEndsAt) : ''}
+            busy={busy}
+            confirming={confirming && targetId === row.userId}
+            weapons={weapons}
+            weaponId={weaponId}
+            quote={quote}
+            chance={chance}
+            predictors={predictors}
+            weaponName={selected?.name}
+            onInspect={() => openTarget(row.userId, false)}
+            onPrepare={() => openTarget(row.userId, true)}
+            onWeapon={(id) => {
+              setWeaponId(id)
+              setChance(null)
+              setQuote(null)
+              setConfirming(false)
+            }}
+            onPredict={() => void usePredictor()}
+            onCommit={() => void commit()}
+            onCancel={() => setConfirming(false)}
+          />
+        ))}
       </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {result ? (
@@ -288,6 +215,157 @@ export function HeistsPage() {
           </section>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function Dossier({
+  row,
+  index,
+  open,
+  cooling,
+  coolLabel,
+  busy,
+  confirming,
+  weapons,
+  weaponId,
+  quote,
+  chance,
+  predictors,
+  weaponName,
+  onInspect,
+  onPrepare,
+  onWeapon,
+  onPredict,
+  onCommit,
+  onCancel,
+}: {
+  row: Target
+  index: number
+  open: boolean
+  cooling: boolean
+  coolLabel: string
+  busy: boolean
+  confirming: boolean
+  weapons: OwnedWeapon[]
+  weaponId: string | null
+  quote: Quote | null
+  chance: number | null
+  predictors: number
+  weaponName?: string
+  onInspect: () => void
+  onPrepare: () => void
+  onWeapon: (id: string) => void
+  onPredict: () => void
+  onCommit: () => void
+  onCancel: () => void
+}) {
+  const vulnerability = row.vulnerable ? 'HIGH' : 'LOW'
+  const location = row.sectorId ? row.sectorId.replace('velmora-', 'SECTOR ').toUpperCase() : 'UNPLACED'
+  return (
+    <article className="relative overflow-hidden border border-border bg-card p-5">
+      <div className="absolute top-4 right-4 font-mono text-[9px] text-destructive">FILE H-{104 + index}</div>
+      <svg viewBox="0 0 24 24" className="mb-12 h-6 w-6 text-destructive" aria-hidden="true">
+        <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+      <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>
+      <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{row.username}</h2>
+      <div className="my-5 grid grid-cols-2 gap-4 border-y border-border py-4">
+        <Cell label="Clearance" value={`Level ${row.vaultLevel}`} />
+        <Cell label="Estimated wealth" value={row.estimatedWealth ?? '—'} />
+        <Cell label="Location" value={location} />
+        <Cell label="Vulnerability" value={vulnerability} tone={vulnerability === 'HIGH' ? 'ok' : 'bad'} />
+      </div>
+      <p className="mb-5 text-xs leading-5 text-muted-foreground">
+        {row.regionName ? `${row.regionName}. ` : ''}
+        {row.cadence === 'day' ? 'This crew can be robbed once a day. ' : row.cadence === 'week' ? 'This crew can be robbed once a week. ' : ''}
+        {row.vulnerable ? 'No recent successful hit. The vault is open.' : 'A recent hit is still on the door.'}
+      </p>
+      <div className="flex gap-2">
+        <button type="button" className="nav-pill h-9 flex-1 cursor-pointer text-xs" onClick={onInspect}>
+          Inspect
+        </button>
+        <button
+          type="button"
+          disabled={!row.vulnerable || cooling || busy}
+          className="gloss-gold h-9 flex-1 cursor-pointer text-xs disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={onPrepare}
+        >
+          {cooling ? `Cooling ${coolLabel}` : 'Prepare heist'}
+        </button>
+      </div>
+      {open ? (
+        <div className="mt-5 border-t border-border pt-4">
+          <label className="block font-mono text-[9px] uppercase text-muted-foreground">
+            Weapon
+            <select
+              className={`${inputClass} mt-2 max-w-full`}
+              value={weaponId ?? ''}
+              onChange={(event) => onWeapon(event.target.value)}
+            >
+              {weapons.map((item) => (
+                <option key={item.instanceId ?? item.id} value={item.instanceId ?? item.id}>
+                  {item.name} (L.{item.upgradeLevel}) · attack {item.attack ?? item.effectiveLevel}
+                  {item.durability != null ? ` · ${item.durability} uses` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {confirming && quote ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="font-mono text-[9px] uppercase text-muted-foreground">Your equipment</p>
+                <p className="font-display text-xl uppercase">{quote.weaponName}</p>
+                <p className="text-sm">Level {quote.weaponLevel}</p>
+                <p className="text-sm">Attack power: {quote.attack}</p>
+              </div>
+              <div>
+                <p className="font-mono text-[9px] uppercase text-muted-foreground">Target vault</p>
+                <p className="font-display text-xl uppercase">{quote.vaultTier} vault</p>
+                <p className="text-sm">Level {quote.vaultLevel}</p>
+                <p className="text-sm">Defense: {quote.defense}</p>
+              </div>
+              <p className="font-mono text-xs sm:col-span-2">
+                Attack advantage: {quote.advantage >= 0 ? `+${quote.advantage}` : quote.advantage}
+                {chance !== null ? ` · Estimated success ${chance}%` : ''}
+              </p>
+            </div>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button type="button" className="nav-pill h-9 cursor-pointer px-3 text-xs disabled:opacity-40" disabled={busy || predictors < 1} onClick={onPredict}>
+              Use Estimate Predictor
+            </button>
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">{predictors} in the case</span>
+          </div>
+          {chance !== null ? (
+            <p className="mt-3 text-sm">
+              Server chance: <span className="text-primary">{chance}%</span>
+              {weaponName ? ` with ${weaponName}` : ''}
+            </p>
+          ) : null}
+          {confirming ? (
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="gloss-gold h-9 flex-1 cursor-pointer text-xs disabled:opacity-40" disabled={busy || !row.vulnerable || cooling} onClick={onCommit}>
+                {busy ? 'Working…' : 'Confirm job'}
+              </button>
+              <button type="button" className="nav-pill h-9 cursor-pointer px-3 text-xs" onClick={onCancel}>
+                Back off
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+function Cell({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'bad' }) {
+  const color = tone === 'ok' ? 'text-success' : tone === 'bad' ? 'text-destructive' : 'text-foreground'
+  return (
+    <div>
+      <p className="font-mono text-[9px] uppercase text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-sm uppercase ${color}`}>{value}</p>
     </div>
   )
 }

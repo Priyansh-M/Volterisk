@@ -11,6 +11,7 @@ import {
   minutesAgo,
   minutesFromNow,
   vaultDefense,
+  wealthBandLabel,
   wealthBucket,
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
@@ -93,6 +94,7 @@ type TargetCard = {
   username: string;
   vaultLevel: number;
   wealthBucket: ReturnType<typeof wealthBucket>;
+  estimatedWealth: string;
   vulnerable: boolean;
   sectorId: string | null;
   regionName: string | null;
@@ -145,6 +147,7 @@ export async function listTargets(attackerId: string) {
           username: user.username,
           vaultLevel: user.vault!.level,
           wealthBucket: wealthBucket(user.vault!.balance),
+        estimatedWealth: wealthBandLabel(user.vault!.balance),
           vulnerable: station ? !npcLocked : !protectedIds.has(user.id),
           sectorId: user.base?.sectorId ?? null,
           regionName: user.base?.regionName ?? null,

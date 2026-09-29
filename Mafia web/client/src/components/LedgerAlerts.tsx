@@ -7,7 +7,7 @@ import type { GameNotice } from '../lib/types.ts'
 type Unlock = { id: string; name: string; description: string; reward: number }
 type HeistNotice = { id: string; by: string; success: boolean; amountStolen: number | null }
 
-export function LedgerAlerts({ onChange }: { onChange: () => void }) {
+export function LedgerAlerts({ onChange }: { onChange: (unread?: number) => void }) {
   const navigate = useNavigate()
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -23,7 +23,7 @@ export function LedgerAlerts({ onChange }: { onChange: () => void }) {
           api<{ notifications: GameNotice[] }>('/api/notifications'),
         ])
         if (cancelled) return
-        onChangeRef.current()
+        onChangeRef.current(notes.notifications.filter((row) => row.read !== true).length)
         const next = alerts.unlocked[0]
         if (next) setUnlock(next)
         const report = notes.notifications.find((row) => row.read !== true && row.title === 'Heist Attempted')
@@ -46,7 +46,7 @@ export function LedgerAlerts({ onChange }: { onChange: () => void }) {
       }
     }
     void poll()
-    const timer = window.setInterval(() => void poll(), 8000)
+    const timer = window.setInterval(() => void poll(), 30000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
