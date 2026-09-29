@@ -80,7 +80,7 @@ On a hit, the take is `floor(vaultBalance * rewardPercent / 100)` inside a trans
 
 ## Screens
 
-Framed night-ledger UI: top bar (title, cash, display-only heat from job count), left nav, city map with original SVG buildings, market shop for weapons `weapon:0001`–`0005`. Crew / intel / items / properties are marked Soon. Gameplay, formulas, and APIs are unchanged.
+Framed night-ledger UI: top bar (title, cash, display-only heat from job count), left nav, city map with original SVG buildings, market shop for weapons `weapon:0001`–`0005`. Crew, intel, and items are marked Soon. Gameplay, formulas, and APIs are unchanged.
 
 ## Artwork
 

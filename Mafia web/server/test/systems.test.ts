@@ -177,6 +177,32 @@ describe("heist boards", () => {
     setHeistRng(() => 1);
   });
 
+  it("puts seeded night-crew on npc and real accounts on players", async () => {
+    const { ensureNightCrew, NIGHT_CREW } = await import("../src/services/nightCrew.js");
+    const player = await registerUser("Nell Crowe");
+    const other = await registerUser("Otto Crowe");
+    await ensureNightCrew();
+
+    const board = await request(app).get("/api/heists/targets").set(auth(player.token));
+    expect(board.status).toBe(200);
+    const npcNames = board.body.npc.map((row: { username: string }) => row.username);
+    const playerNames = board.body.players.map((row: { username: string }) => row.username);
+    expect(npcNames.sort()).toEqual(NIGHT_CREW.map((bot) => bot.username).sort());
+    expect(playerNames).toContain(other.username);
+    expect(playerNames).not.toContain(player.username);
+    for (const bot of NIGHT_CREW) {
+      expect(playerNames).not.toContain(bot.username);
+    }
+
+    const boardAgain = await request(app).get("/api/leaderboard").set(auth(player.token));
+    const richest = boardAgain.body.richest.map((row: { username: string }) => row.username);
+    expect(richest).toContain(player.username);
+    expect(richest).toContain(other.username);
+    for (const bot of NIGHT_CREW) {
+      expect(richest).not.toContain(bot.username);
+    }
+  });
+
   it("keeps npc and player targets on separate paths", async () => {
     const player = await registerUser("Gil Crowe");
     const other = await registerUser("Hana Crowe");

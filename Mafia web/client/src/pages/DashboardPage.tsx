@@ -57,10 +57,6 @@ export function DashboardPage() {
               <span>Crew</span>
               <span className="text-[10px] uppercase tracking-[0.16em]">Soon</span>
             </li>
-            <li className="flex justify-between gap-3 text-muted/70">
-              <span>Properties</span>
-              <span className="text-[10px] uppercase tracking-[0.16em]">Soon</span>
-            </li>
           </ul>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link to="/map" className="nav-pill rounded-full px-3 py-1.5 text-sm text-paper no-underline">

@@ -1,23 +1,12 @@
 import "dotenv/config";
 import { randomBytes } from "node:crypto";
 import { RULES, effectiveWeaponLevel } from "../src/game/rules.js";
+import { NIGHT_CREW, heistableVaultBalance, type NightCrewMember } from "../src/services/nightCrew.js";
 import { prisma } from "../src/prisma.js";
 import { createPlayer, ensureWeaponCatalog } from "../src/services/userService.js";
 
-const bots = [
-  { username: "Mara Voss", cash: 12_000, vaultBalance: 18_000, vaultLevel: 1 },
-  { username: "Eddie Quill", cash: 8_000, vaultBalance: 42_000, vaultLevel: 1 },
-  { username: "Nia Pell", cash: 22_000, vaultBalance: 96_000, vaultLevel: 2 },
-  { username: "Hugo Brandt", cash: 15_000, vaultBalance: 80_000, vaultLevel: 4 },
-  { username: "Colette Marsh", cash: 40_000, vaultBalance: 240_000, vaultLevel: 3 },
-  { username: "Felix Dunn", cash: 90_000, vaultBalance: 880_000, vaultLevel: 6 },
-  { username: "Ruth Keene", cash: 6_000, vaultBalance: 55_000, vaultLevel: 2 },
-  { username: "Samir Odeh", cash: 120_000, vaultBalance: 1_500_000, vaultLevel: 8 },
-  { username: "Inez Calder", cash: 3_000, vaultBalance: 12_000, vaultLevel: 1 },
-  { username: "Paulie Tran", cash: 18_000, vaultBalance: 300_000, vaultLevel: 5 },
-];
-
-async function upsertBot(bot: (typeof bots)[number]) {
+async function upsertBot(bot: NightCrewMember) {
+  const vaultBalance = heistableVaultBalance(bot.vaultBalance);
   const existing = await prisma.user.findUnique({ where: { usernameKey: bot.username.toLowerCase() } });
   if (!existing) {
     await createPlayer({
@@ -25,7 +14,7 @@ async function upsertBot(bot: (typeof bots)[number]) {
       password: randomBytes(24).toString("hex"),
       isBot: true,
       cash: bot.cash,
-      vaultBalance: bot.vaultBalance,
+      vaultBalance,
       vaultLevel: bot.vaultLevel,
     });
     return;
@@ -36,7 +25,7 @@ async function upsertBot(bot: (typeof bots)[number]) {
   });
   await prisma.vault.update({
     where: { userId: existing.id },
-    data: { balance: bot.vaultBalance, level: bot.vaultLevel },
+    data: { balance: vaultBalance, level: bot.vaultLevel },
   });
 }
 
@@ -95,11 +84,11 @@ async function seedHistory() {
 
 async function main() {
   await ensureWeaponCatalog();
-  for (const bot of bots) {
+  for (const bot of NIGHT_CREW) {
     await upsertBot(bot);
   }
   await seedHistory();
-  console.log(`Seeded ${bots.length} night-crew ledgers.`);
+  console.log(`Seeded ${NIGHT_CREW.length} night-crew ledgers.`);
 }
 
 main()

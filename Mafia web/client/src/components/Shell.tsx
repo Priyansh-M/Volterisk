@@ -15,7 +15,6 @@ import {
   IconMap,
   IconMarket,
   IconProfile,
-  IconProperty,
   IconSignal,
   IconVault,
 } from './Icons.tsx'
@@ -38,7 +37,6 @@ const soon = [
   { label: 'Crew', Icon: IconCrew },
   { label: 'Intel', Icon: IconIntel },
   { label: 'Items', Icon: IconItems },
-  { label: 'Properties', Icon: IconProperty },
 ]
 
 export function Shell() {
