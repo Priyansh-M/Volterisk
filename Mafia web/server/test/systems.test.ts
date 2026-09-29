@@ -372,9 +372,9 @@ describe("reputation", () => {
     expect(opening.body.nextLevel).toBe(2);
     expect(opening.body.ready).toBe(false);
     expect(opening.body.conditions.map((row: { label: string }) => row.label)).toEqual([
-      "Buy Garage",
-      "Buy Car",
-      "Have a passive income job",
+      "Buy a garage to keep your car",
+      "Own your very first car",
+      "Find a passive income job",
     ]);
 
     const early = await request(app).post("/api/reputation/claim").set(auth(player.token)).send({});
@@ -399,7 +399,9 @@ describe("reputation", () => {
     expect(claimed.body.nextLevel).toBe(3);
     expect(claimed.body.ready).toBe(false);
     expect(claimed.body.cash).toBe(200_000 + 50_000);
-    expect(claimed.body.conditions.map((row: { label: string }) => row.label)).toContain("Own a Hangar");
+    expect(claimed.body.conditions.map((row: { label: string }) => row.label)).toContain(
+      "Own a hangar so the aircraft has a home",
+    );
 
     const me = await request(app).get("/api/me").set(auth(player.token));
     expect(me.body.level).toBe(2);

@@ -58,7 +58,7 @@ const pageMeta: Record<string, [string, string]> = {
   '/assets': ['Assets', 'Properties and vehicles you already hold.'],
   '/properties': ['Assets', 'Properties and vehicles you already hold.'],
   '/work': ['Contract Board', 'Select underground work by reward, risk, and location.'],
-  '/reputation': ['Reputation', 'The level on your file. Work and your rank read this ladder.'],
+  '/reputation': ['Reputation', ''],
   '/map': ['World Intelligence', 'Monitor territories and inspect the network.'],
   '/achievements': ['Criminal Record', 'Archived milestones, sealed cases, and distinctions.'],
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
@@ -229,7 +229,7 @@ export function Shell() {
             <div>
               <p className="font-mono text-[9px] uppercase text-primary">Blackledger / {location.pathname === '/' ? 'dashboard' : location.pathname.slice(1)}</p>
               <h1 className="font-display text-4xl font-semibold uppercase md:text-5xl">{meta[0]}</h1>
-              <p className="mt-1 max-w-xl text-sm text-muted-foreground">{meta[1]}</p>
+              {meta[1] ? <p className="mt-1 max-w-xl text-sm text-muted-foreground">{meta[1]}</p> : null}
             </div>
             <p className="hidden font-mono text-[9px] uppercase text-muted-foreground md:block">{stamp}</p>
           </div>
