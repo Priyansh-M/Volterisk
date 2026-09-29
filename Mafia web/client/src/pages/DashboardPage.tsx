@@ -1,90 +1,57 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Panel, PageTitle, Notice } from '../components/ui.tsx'
+import { Notice, PageTitle, Panel } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
-import { compactMoney, money, when } from '../lib/format.ts'
-import type { HistoryRow, OwnedWeapon } from '../lib/types.ts'
+import { money, when } from '../lib/format.ts'
+import type { HistoryRow, TargetBoard, WorkBoard } from '../lib/types.ts'
 
 export function DashboardPage() {
   const { me } = useAuth()
   const [rows, setRows] = useState<HistoryRow[] | null>(null)
-  const [weapons, setWeapons] = useState<OwnedWeapon[] | null>(null)
+  const [targets, setTargets] = useState<number | null>(null)
+  const [openContracts, setOpenContracts] = useState<number | null>(null)
+  const [activeJob, setActiveJob] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
       api<{ heists: HistoryRow[] }>('/api/heists/history'),
-      api<{ owned: OwnedWeapon[] }>('/api/me/weapons'),
+      api<TargetBoard>('/api/heists/targets'),
+      api<WorkBoard>('/api/work/contracts'),
     ])
-      .then(([history, arsenal]) => {
+      .then(([history, board, work]) => {
         setRows(history.heists.slice(0, 8))
-        setWeapons(arsenal.owned)
+        setTargets(board.npc.length + board.players.length)
+        setOpenContracts(work.contracts.filter((row) => row.available && !row.locked).length)
+        setActiveJob(work.active?.name ?? null)
       })
-      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load activity.'))
+      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load the center.'))
   }, [])
 
   if (!me) return null
 
   return (
-    <div className="space-y-6">
-      <PageTitle kicker="Night ledger">Your Empire</PageTitle>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
+    <div className="space-y-5">
+      <PageTitle kicker={`Rank #${me.rank}`}>Operations center</PageTitle>
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <Stat label="Available cash" value={money(me.cash)} gold />
+        <Stat label="Vault balance" value={money(me.vault.balance)} gold />
+        <Stat label="Equipped weapon" value={me.equippedWeapon?.name ?? '—'} />
+        <Stat label="Active base" value={me.base ? me.base.regionName : '—'} />
+        <Stat label="Heist targets" value={targets === null ? '—' : String(targets)} />
+        <Stat label="Open contracts" value={openContracts === null ? '—' : String(openContracts)} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
         <Panel>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">Safehouse</p>
-          <p className="mt-1 font-serif text-2xl">{me.username}</p>
-          <p className="text-sm text-muted">
-            {me.title} · Level {me.level}
-          </p>
-          <ul className="mt-4 space-y-3 text-sm">
-            <li className="flex justify-between gap-3">
-              <span className="text-muted">Cash</span>
-              <span className="font-semibold text-gold">{compactMoney(me.cash)}</span>
-            </li>
-            <li className="flex justify-between gap-3">
-              <span className="text-muted">Vault</span>
-              <span className="text-gold">{compactMoney(me.vault.balance)}</span>
-            </li>
-            <li className="flex justify-between gap-3">
-              <span className="text-muted">Weapons owned</span>
-              <span>{weapons ? weapons.length : '—'}</span>
-            </li>
-            <li className="flex justify-between gap-3">
-              <span className="text-muted">Base</span>
-              <span>{me.base ? me.base.regionName : 'Unfiled'}</span>
-            </li>
-            <li className="flex justify-between gap-3 text-muted/70">
-              <span>Crew</span>
-              <span className="text-[10px] uppercase tracking-[0.16em]">Soon</span>
-            </li>
-          </ul>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Link to="/map" className="nav-pill rounded-full px-3 py-1.5 text-sm text-paper no-underline">
-              Open chart
-            </Link>
-            <Link to="/city" className="nav-pill rounded-full px-3 py-1.5 text-sm text-paper no-underline">
-              Open city
-            </Link>
-            <Link to="/market" className="nav-pill rounded-full px-3 py-1.5 text-sm text-paper no-underline">
-              Visit market
-            </Link>
-          </div>
-        </Panel>
-        <Panel>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">Recent jobs</p>
-          {error ? <Notice tone="danger">{error}</Notice> : null}
+          <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Recent activity</p>
           {rows === null && !error ? <p className="mt-3 text-sm text-muted">Pulling the file…</p> : null}
-          {rows && rows.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">No jobs yet. The crowbar is still clean.</p>
-          ) : null}
+          {rows && rows.length === 0 ? <p className="mt-3 text-sm text-muted">No jobs on the book yet.</p> : null}
           <ul className="mt-3 divide-y divide-line">
             {rows?.map((row) => (
               <li key={row.id} className="flex items-baseline justify-between gap-3 py-2.5 text-sm">
                 <span className="min-w-0">
-                  <span
-                    className={`mr-2 inline-block h-2 w-2 rounded-full ${row.success ? 'bg-ok' : 'bg-danger'}`}
-                    aria-hidden="true"
-                  />
+                  <span className={`mr-2 inline-block h-1.5 w-1.5 ${row.success ? 'bg-ok' : 'bg-danger'}`} aria-hidden="true" />
                   {row.role === 'attacker'
                     ? row.success
                       ? `Took ${money(row.amountStolen)} from ${row.otherUsername}`
@@ -98,7 +65,28 @@ export function DashboardPage() {
             ))}
           </ul>
         </Panel>
+        <div className="space-y-4">
+          <Panel>
+            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">On the clock</p>
+            <p className="mt-2 text-sm">{activeJob ?? '—'}</p>
+            <p className="mt-1 text-[12px] text-muted">{activeJob ? 'One live contract.' : 'No contract is running.'}</p>
+          </Panel>
+          <Panel>
+            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Property income</p>
+            <p className="mt-2 font-serif text-2xl text-muted">—</p>
+            <p className="mt-1 text-[12px] text-muted">No property income is posted.</p>
+          </Panel>
+        </div>
       </div>
     </div>
+  )
+}
+
+function Stat({ label, value, gold }: { label: string; value: string; gold?: boolean }) {
+  return (
+    <article className="border border-line bg-panel px-4 py-3">
+      <p className="text-[10px] tracking-[0.18em] text-muted uppercase">{label}</p>
+      <p className={`mt-1 truncate text-lg ${gold ? 'text-gold' : ''}`}>{value}</p>
+    </article>
   )
 }

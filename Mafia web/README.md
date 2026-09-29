@@ -1,6 +1,6 @@
-# Iron Hour
+# Blackledger
 
-A browser heist game. You keep cash and a vault. Other players (and seeded night-crew ledgers) can be robbed only while their vault is vulnerable. The server rolls the job. The client never sends weapon level, vault level, chance, or reward.
+The playable client is Blackledger. Underneath it is the Iron Hour ledger: a browser heist game. You keep cash and a vault. Other players (and seeded night-crew ledgers) can be robbed only while their vault is vulnerable. The server rolls the job. The client never sends weapon level, vault level, chance, or reward.
 
 All game code lives in this folder.
 

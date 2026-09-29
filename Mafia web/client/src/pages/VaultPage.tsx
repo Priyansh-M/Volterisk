@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Btn, Field, Notice, PageTitle, Panel, inputClass } from '../components/ui.tsx'
+import { Btn, Field, Notice, PageTitle, inputClass } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
@@ -72,50 +72,51 @@ export function VaultPage() {
   if (!vault && !error) return <Notice tone="muted">Opening the vault…</Notice>
   if (!vault) return <Notice tone="danger">{error}</Notice>
 
-  const status = vault.level >= 4 ? 'Hardened' : 'Holding'
-
   return (
-    <div className="max-w-xl space-y-4">
-      <PageTitle kicker="Counting house">Vault</PageTitle>
-      <Panel>
-        <dl className="space-y-3 text-sm">
-          <Row label="Cash" value={money(vault.balance)} gold />
-          <Row label="Pocket" value={me ? money(me.cash) : '—'} gold />
-          <Row label="Security" value={`Level ${vault.level} of ${vault.maxLevel}`} />
-          <div className="flex items-baseline justify-between gap-4 border-t border-line pt-3">
-            <dt className="text-muted">Status</dt>
-            <dd className="inline-flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-ok" aria-hidden="true" />
-              {status}
-            </dd>
+    <div className="space-y-4">
+      <PageTitle kicker="Facility">Vault facility</PageTitle>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <section className="border border-line bg-panel p-4">
+          <div className="grid min-h-[280px] place-items-center border border-line/80 bg-ink">
+            <div className="w-[70%] border border-gold/30 p-6 text-center">
+              <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Inner cage</p>
+              <p className="mt-2 font-serif text-4xl text-gold">{money(vault.balance)}</p>
+              <p className="mt-2 text-sm text-muted">Level {vault.level} of {vault.maxLevel}</p>
+            </div>
           </div>
-        </dl>
-        <p className="mt-4 text-sm text-muted">{notes[vault.level] ?? notes[1]}</p>
-      </Panel>
-      <Panel>
-        {vault.upgradeCost === null ? (
-          <p className="text-sm text-muted">This vault is finished.</p>
-        ) : (
-          <Btn variant="gold" disabled={busy} onClick={() => void upgrade()}>
-            Upgrade for {money(vault.upgradeCost)}
-          </Btn>
-        )}
-        <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={(event) => void withdraw(event)}>
-          <Field label="Withdraw to cash">
-            <input
-              className={`${inputClass} w-36`}
-              inputMode="numeric"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-            />
-          </Field>
-          <Btn type="submit" disabled={busy}>
-            Withdraw
-          </Btn>
-        </form>
-        {error ? <p className="mt-3"><Notice tone="danger">{error}</Notice></p> : null}
-        {note ? <p className="mt-3"><Notice tone="ok">{note}</Notice></p> : null}
-      </Panel>
+          <p className="mt-4 text-sm text-muted">{notes[vault.level] ?? notes[1]}</p>
+        </section>
+        <aside className="space-y-4 border border-line bg-panel p-4">
+          <dl className="space-y-3 text-sm">
+            <Row label="Balance" value={money(vault.balance)} gold />
+            <Row label="Pocket" value={me ? money(me.cash) : '—'} gold />
+            <Row label="Level" value={`${vault.level} / ${vault.maxLevel}`} />
+            <Row label="Protection" value={`Level ${vault.level}`} />
+          </dl>
+          {vault.upgradeCost === null ? (
+            <p className="text-sm text-muted">This vault is finished.</p>
+          ) : (
+            <Btn variant="gold" disabled={busy} onClick={() => void upgrade()}>
+              Upgrade for {money(vault.upgradeCost)}
+            </Btn>
+          )}
+          <form className="space-y-2" onSubmit={(event) => void withdraw(event)}>
+            <Field label="Withdraw to cash">
+              <input
+                className={inputClass}
+                inputMode="numeric"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+            </Field>
+            <Btn type="submit" disabled={busy}>
+              Withdraw
+            </Btn>
+          </form>
+          {error ? <Notice tone="danger">{error}</Notice> : null}
+          {note ? <Notice tone="ok">{note}</Notice> : null}
+        </aside>
+      </div>
     </div>
   )
 }

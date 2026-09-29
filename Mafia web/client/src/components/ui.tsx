@@ -3,15 +3,15 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 export function PageTitle({ kicker, children }: { kicker?: string; children: ReactNode }) {
   return (
     <header className="mb-5">
-      {kicker ? <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">{kicker}</p> : null}
-      <h1 className="font-serif text-3xl tracking-wide">{children}</h1>
+      {kicker ? <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-muted">{kicker}</p> : null}
+      <h1 className="font-serif text-3xl tracking-[0.14em] text-paper uppercase">{children}</h1>
     </header>
   )
 }
 
 export function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl border border-line bg-panel p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-5 ${className}`}>
+    <section className={`border border-line bg-panel p-4 md:p-5 ${className}`}>
       {children}
     </section>
   )
@@ -33,7 +33,7 @@ export function Btn({
     <button
       type={type}
       {...props}
-      className={`cursor-pointer rounded-full px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${look} ${className}`}
+      className={`cursor-pointer rounded-sm px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${look} ${className}`}
     />
   )
 }
@@ -53,4 +53,4 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 export const inputClass =
-  'w-full rounded-xl border border-line bg-ink px-3 py-2 text-paper outline-none ring-gold/0 transition focus:border-gold/40 focus:ring-2 focus:ring-gold/20'
+  'w-full rounded-sm border border-line bg-ink px-3 py-2 text-paper outline-none ring-gold/0 transition focus:border-gold/40 focus:ring-2 focus:ring-gold/20'

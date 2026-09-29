@@ -17,6 +17,13 @@ export function compactMoney(amount: number) {
   return money(amount)
 }
 
+export function bandLabel(bucket: string) {
+  if (bucket === 'fortune') return 'Fortune'
+  if (bucket === 'heavy') return 'Heavy'
+  if (bucket === 'modest') return 'Modest'
+  return '—'
+}
+
 export function heatFromJobs(successful: number, failed: number) {
   return successful + failed
 }

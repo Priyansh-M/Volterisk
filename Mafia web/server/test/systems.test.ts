@@ -188,6 +188,15 @@ describe("heist boards", () => {
     const npcNames = board.body.npc.map((row: { username: string }) => row.username);
     const playerNames = board.body.players.map((row: { username: string }) => row.username);
     expect(npcNames.sort()).toEqual(NIGHT_CREW.map((bot) => bot.username).sort());
+    const { NPC_STATIONS } = await import("../src/services/nightCrew.js");
+    const stationed = await prisma.base.findMany();
+    expect(stationed).toHaveLength(NPC_STATIONS.length);
+    expect(new Set(stationed.map((row) => row.sectorId)).size).toBe(NPC_STATIONS.length);
+    for (const station of NPC_STATIONS) {
+      const card = board.body.npc.find((row: { username: string }) => row.username === station.username);
+      expect(card.sectorId).toBe(station.sectorId);
+      expect(card.regionName).toBe(station.regionName);
+    }
     expect(playerNames).toContain(other.username);
     expect(playerNames).not.toContain(player.username);
     for (const bot of NIGHT_CREW) {
