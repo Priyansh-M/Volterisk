@@ -9,7 +9,7 @@ import {
   unannouncedAchievements,
 } from "../services/achievementService.js";
 import { listNotifications, markNotificationRead } from "../services/notificationService.js";
-import { buyProperty, listProperties } from "../services/propertyService.js";
+import { buyProperty, listProperties, upgradeProperty } from "../services/propertyService.js";
 import { buyShopItem, shopView, upgradeCamera } from "../services/shopService.js";
 import { getLeaderboard } from "../services/userService.js";
 
@@ -65,6 +65,11 @@ export async function properties(req: Request, res: Response): Promise<void> {
 export async function buyPropertyHandler(req: Request, res: Response): Promise<void> {
   const body = z.object({ catalogId: z.string().min(1).max(40) }).strict().parse(req.body ?? {});
   res.status(201).json(await buyProperty(currentUserId(req), body.catalogId));
+}
+
+export async function upgradePropertyHandler(req: Request, res: Response): Promise<void> {
+  const body = z.object({ id: z.string().min(1).max(40) }).strict().parse(req.body ?? {});
+  res.json(await upgradeProperty(currentUserId(req), body.id));
 }
 
 export async function cameraUpgrade(req: Request, res: Response): Promise<void> {

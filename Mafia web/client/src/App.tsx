@@ -45,7 +45,8 @@ export default function App() {
         <Route path="/vault" element={<VaultPage />} />
         <Route path="/arsenal" element={<ArsenalPage />} />
         <Route path="/market" element={<MarketPage />} />
-        <Route path="/properties" element={<PropertiesPage />} />
+        <Route path="/assets" element={<PropertiesPage />} />
+        <Route path="/properties" element={<Navigate to="/assets" replace />} />
         <Route path="/work" element={<WorkPage />} />
         <Route path="/achievements" element={<AchievementsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />

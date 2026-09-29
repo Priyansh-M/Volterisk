@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AssetGlyph } from '../components/AssetGlyph.tsx'
 import { WeaponArt } from '../components/WeaponArt.tsx'
 import { Btn, Notice, PageTitle } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
@@ -8,6 +9,8 @@ import { money } from '../lib/format.ts'
 import type { OwnedWeapon, ShopWeapon } from '../lib/types.ts'
 
 type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null }
+type SaleLot = { id: string; name: string; price: number; note: string; owned: boolean }
+
 type Counter = {
   predictor: { id: string; name: string; price: number; quantity: number }
   camera: { id: string; name: string; level: number; nextCost: number | null; installed: boolean }
@@ -19,12 +22,20 @@ export function MarketPage() {
   const [counter, setCounter] = useState<Counter | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [stall, setStall] = useState<'tools' | 'luxury'>('tools')
+  const [stall, setStall] = useState<'tools' | 'property' | 'automobiles'>('tools')
+  const [lots, setLots] = useState<SaleLot[] | null>(null)
+  const [motors, setMotors] = useState<SaleLot[] | null>(null)
 
   async function load() {
-    const [weapons, shop] = await Promise.all([api<Arsenal>('/api/me/weapons'), api<Counter>('/api/shop')])
+    const [weapons, shop, assets] = await Promise.all([
+      api<Arsenal>('/api/me/weapons'),
+      api<Counter>('/api/shop'),
+      api<{ propertyCatalog: SaleLot[]; vehicleCatalog: SaleLot[] }>('/api/properties'),
+    ])
     setArsenal(weapons)
     setCounter(shop)
+    setLots(assets.propertyCatalog)
+    setMotors(assets.vehicleCatalog)
   }
 
   useEffect(() => {
@@ -37,8 +48,10 @@ export function MarketPage() {
     try {
       if (itemId.startsWith('weapon:')) {
         await api('/api/weapons/buy', { method: 'POST', body: JSON.stringify({ weaponId: itemId }) })
-      } else {
+      } else if (itemId === 'estimate-predictor' || itemId === 'security-camera') {
         await api('/api/shop/buy', { method: 'POST', body: JSON.stringify({ itemId }) })
+      } else {
+        await api('/api/properties/buy', { method: 'POST', body: JSON.stringify({ catalogId: itemId }) })
       }
       await load()
       await refresh()
@@ -85,15 +98,11 @@ export function MarketPage() {
       <PageTitle kicker="Night market">Market</PageTitle>
       <div className="mb-4 flex gap-2">
         <Btn variant={stall === 'tools' ? 'gold' : 'ghost'} onClick={() => setStall('tools')}>Tools</Btn>
-        <Btn variant={stall === 'luxury' ? 'gold' : 'ghost'} onClick={() => setStall('luxury')}>Luxury</Btn>
+        <Btn variant={stall === 'property' ? 'gold' : 'ghost'} onClick={() => setStall('property')}>Property</Btn>
+        <Btn variant={stall === 'automobiles' ? 'gold' : 'ghost'} onClick={() => setStall('automobiles')}>Automobiles</Btn>
       </div>
-      {stall === 'luxury' ? (
-        <section className="border border-border bg-card p-8">
-          <p className="font-mono text-[9px] uppercase text-primary">Sealed case</p>
-          <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Luxury</h2>
-          <p className="mt-3 max-w-lg text-sm text-muted-foreground">The luxury counter is reserved. Stock for that case has not been filed yet.</p>
-        </section>
-      ) : null}
+      {stall === 'property' ? <LotGrid lots={lots} busy={busy} cash={me?.cash ?? 0} onBuy={(id) => void buy(id)} /> : null}
+      {stall === 'automobiles' ? <LotGrid lots={motors} busy={busy} cash={me?.cash ?? 0} onBuy={(id) => void buy(id)} /> : null}
       {stall === 'tools' ? (
       <>
       <p className="mb-4 max-w-2xl text-sm text-muted">
@@ -186,6 +195,43 @@ export function MarketPage() {
       </div>
       </>
       ) : null}
+    </div>
+  )
+}
+
+function LotGrid({
+  lots,
+  busy,
+  cash,
+  onBuy,
+}: {
+  lots: SaleLot[] | null
+  busy: string | null
+  cash: number
+  onBuy: (id: string) => void
+}) {
+  if (!lots) return <Notice tone="muted">Opening the counter…</Notice>
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {lots.map((lot) => (
+        <article key={lot.id} className="border border-border bg-card">
+          <div className="flex h-36 items-center justify-center border-b border-border">
+            <AssetGlyph id={lot.id} />
+          </div>
+          <div className="p-5">
+            <h2 className="font-display text-2xl font-semibold uppercase">{lot.name}</h2>
+            <p className="mt-2 min-h-10 text-sm text-muted-foreground">{lot.note}</p>
+            <p className="mt-3 font-mono text-sm text-primary">{money(lot.price)}</p>
+            {lot.owned ? (
+              <p className="mt-4 text-sm text-success">Held. Upgrade it under Assets.</p>
+            ) : (
+              <Btn className="mt-4" variant="gold" disabled={busy !== null || cash < lot.price} onClick={() => onBuy(lot.id)}>
+                {busy === lot.id ? 'Buying…' : `Buy ${money(lot.price)}`}
+              </Btn>
+            )}
+          </div>
+        </article>
+      ))}
     </div>
   )
 }

@@ -1,61 +1,89 @@
 import { useEffect, useState } from 'react'
+import { AssetGlyph } from '../components/AssetGlyph.tsx'
 import { Btn, Notice } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 
-type CatalogItem = { id: string; name: string; price: number; note: string; owned: boolean }
+type OwnedAsset = {
+  id: string
+  catalogId: string
+  name: string
+  note: string
+  level: number
+  maxLevel: number
+  nextUpgradeCost: number | null
+}
+
+type Ledger = {
+  properties: OwnedAsset[]
+  vehicles: OwnedAsset[]
+}
 
 export function PropertiesPage() {
-  const { me, refresh } = useAuth()
-  const [catalog, setCatalog] = useState<CatalogItem[] | null>(null)
+  const { refresh } = useAuth()
+  const [ledger, setLedger] = useState<Ledger | null>(null)
+  const [tab, setTab] = useState<'properties' | 'vehicles'>('properties')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   async function load() {
-    const data = await api<{ catalog: CatalogItem[] }>('/api/properties')
-    setCatalog(data.catalog)
+    setLedger(await api<Ledger>('/api/properties'))
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The property desk is shut.'))
+    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The asset ledger did not open.'))
   }, [])
 
-  async function buy(catalogId: string) {
-    setBusy(catalogId)
+  async function upgrade(id: string) {
+    setBusy(id)
     setError(null)
     try {
-      await api('/api/properties/buy', { method: 'POST', body: JSON.stringify({ catalogId }) })
+      await api('/api/properties/upgrade', { method: 'POST', body: JSON.stringify({ id }) })
       await load()
       await refresh()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The sale did not file.')
+      setError(err instanceof ApiError ? err.message : 'The upgrade did not file.')
     } finally {
       setBusy(null)
     }
   }
 
+  const rows = tab === 'properties' ? ledger?.properties : ledger?.vehicles
+
   return (
-    <div className="space-y-4">
-      <p className="max-w-xl text-sm text-muted-foreground">
-        A garage qualifies you for the elite vault survey. Other lots stay off the book until they are priced.
-      </p>
+    <div>
+      <div className="mb-4 flex gap-2">
+        <Btn variant={tab === 'properties' ? 'gold' : 'ghost'} onClick={() => setTab('properties')}>
+          Properties
+        </Btn>
+        <Btn variant={tab === 'vehicles' ? 'gold' : 'ghost'} onClick={() => setTab('vehicles')}>
+          Vehicles
+        </Btn>
+      </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      {!catalog && !error ? <Notice tone="muted">Reading the deeds…</Notice> : null}
-      <div className="grid gap-4 md:grid-cols-2">
-        {catalog?.map((lot) => (
-          <article key={lot.id} className="border border-border bg-card p-5">
-            <p className="font-mono text-[9px] uppercase text-muted-foreground">{lot.owned ? 'Held' : 'For sale'}</p>
-            <h2 className="font-display text-3xl font-semibold uppercase">{lot.name}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{lot.note}</p>
-            <p className="mt-4 font-mono text-sm text-primary">{money(lot.price)}</p>
-            {lot.owned ? (
-              <p className="mt-4 text-sm text-success">On your ledger.</p>
-            ) : (
-              <Btn className="mt-4" variant="gold" disabled={busy !== null || (me !== null && me.cash < lot.price)} onClick={() => void buy(lot.id)}>
-                {busy === lot.id ? 'Buying…' : 'Buy'}
-              </Btn>
-            )}
+      {!ledger && !error ? <Notice tone="muted">Opening the ledger…</Notice> : null}
+      {rows && rows.length === 0 ? (
+        <Notice tone="muted">{tab === 'properties' ? 'No property on the books. Buy one in the marketplace.' : 'No vehicle in the garage. Buy one under Automobiles.'}</Notice>
+      ) : null}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {rows?.map((asset) => (
+          <article key={asset.id} className="border border-border bg-card">
+            <div className="flex h-36 items-center justify-center border-b border-border">
+              <AssetGlyph id={asset.catalogId} />
+            </div>
+            <div className="p-5">
+              <p className="font-mono text-[9px] uppercase text-muted-foreground">Level {asset.level}</p>
+              <h2 className="font-display text-2xl font-semibold uppercase">{asset.name}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{asset.note}</p>
+              {asset.nextUpgradeCost == null ? (
+                <p className="mt-4 text-sm text-muted-foreground">Level {asset.maxLevel}. No further upgrade.</p>
+              ) : (
+                <Btn className="mt-4" variant="gold" disabled={busy !== null} onClick={() => void upgrade(asset.id)}>
+                  {busy === asset.id ? 'Upgrading…' : `Upgrade ${money(asset.nextUpgradeCost)}`}
+                </Btn>
+              )}
+            </div>
           </article>
         ))}
       </div>

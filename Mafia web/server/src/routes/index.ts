@@ -8,6 +8,7 @@ import {
   achievements,
   ackAchievement,
   buyPropertyHandler,
+  upgradePropertyHandler,
   buyShop,
   cameraUpgrade,
   claimAchievementReward,
@@ -71,6 +72,7 @@ api.post("/achievements/claim", requireAuth, asyncHandler(claimAchievementReward
 
 api.get("/properties", requireAuth, asyncHandler(properties));
 api.post("/properties/buy", requireAuth, asyncHandler(buyPropertyHandler));
+api.post("/properties/upgrade", requireAuth, asyncHandler(upgradePropertyHandler));
 
 api.get("/shop", requireAuth, asyncHandler(shop));
 api.post("/shop/buy", requireAuth, asyncHandler(buyShop));
