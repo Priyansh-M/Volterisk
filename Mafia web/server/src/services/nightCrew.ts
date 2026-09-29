@@ -22,6 +22,19 @@ export const NIGHT_CREW = [
 
 export type NightCrewMember = (typeof NIGHT_CREW)[number];
 
+/**
+ * Five Velmora squares held by existing night-crew bots.
+ * Sector ids match the client chart (stationSectors in world.ts).
+ * No other squares are reserved.
+ */
+export const NPC_STATIONS = [
+  { username: "Mara Voss", sectorId: "velmora-0027", landmassId: "velmora", regionName: "North Horn" },
+  { username: "Eddie Quill", sectorId: "velmora-0091", landmassId: "velmora", regionName: "West Reach" },
+  { username: "Nia Pell", sectorId: "velmora-0275", landmassId: "velmora", regionName: "Inner Shelf" },
+  { username: "Hugo Brandt", sectorId: "velmora-0206", landmassId: "velmora", regionName: "East Bight" },
+  { username: "Colette Marsh", sectorId: "velmora-0426", landmassId: "velmora", regionName: "South Keys" },
+] as const;
+
 /** Seed balance, lifted to the heist floor only when the roster itself is too thin. */
 export function heistableVaultBalance(balance: number): number {
   return balance >= RULES.MIN_VAULT_BALANCE ? balance : RULES.MIN_VAULT_BALANCE;
@@ -50,6 +63,29 @@ export async function ensureNightCrew(): Promise<void> {
       cash: bot.cash,
       vaultBalance: heistableVaultBalance(bot.vaultBalance),
       vaultLevel: bot.vaultLevel,
+    });
+  }
+  await ensureNpcStations();
+}
+
+/** Plants the five station squares once. Skips a square a player already holds. */
+export async function ensureNpcStations(): Promise<void> {
+  for (const station of NPC_STATIONS) {
+    const user = await prisma.user.findUnique({
+      where: { usernameKey: station.username.toLowerCase() },
+    });
+    if (!user?.isBot) continue;
+    const owned = await prisma.base.findUnique({ where: { userId: user.id } });
+    if (owned) continue;
+    const taken = await prisma.base.findUnique({ where: { sectorId: station.sectorId } });
+    if (taken) continue;
+    await prisma.base.create({
+      data: {
+        userId: user.id,
+        sectorId: station.sectorId,
+        landmassId: station.landmassId,
+        regionName: station.regionName,
+      },
     });
   }
 }

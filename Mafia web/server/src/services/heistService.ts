@@ -88,6 +88,8 @@ type TargetCard = {
   vaultLevel: number;
   wealthBucket: ReturnType<typeof wealthBucket>;
   vulnerable: boolean;
+  sectorId: string | null;
+  regionName: string | null;
 };
 
 function assertTargetKind(target: { isBot: boolean }, kind: HeistKind): void {
@@ -102,7 +104,7 @@ function assertTargetKind(target: { isBot: boolean }, kind: HeistKind): void {
 export async function listTargets(attackerId: string) {
   const users = await prisma.user.findMany({
     where: { id: { not: attackerId } },
-    include: { vault: true },
+    include: { vault: true, base: true },
     orderBy: { username: "asc" },
   });
   const recentHits = await prisma.heist.findMany({
@@ -124,6 +126,8 @@ export async function listTargets(attackerId: string) {
         vaultLevel: user.vault!.level,
         wealthBucket: wealthBucket(user.vault!.balance),
         vulnerable: !protectedIds.has(user.id),
+        sectorId: user.base?.sectorId ?? null,
+        regionName: user.base?.regionName ?? null,
       } satisfies TargetCard,
     }));
 

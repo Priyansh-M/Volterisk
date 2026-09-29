@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Btn, Notice, PageTitle, Panel } from '../components/ui.tsx'
+import { Btn, Notice, PageTitle } from '../components/ui.tsx'
 import { ApiError, api, isMissing } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
@@ -66,15 +66,14 @@ export function WorkPage() {
 
   return (
     <div className="space-y-4">
-      <PageTitle kicker="Contract board">Work</PageTitle>
-      <p className="max-w-2xl text-sm text-muted">One job at a time. The server stamps the reward and the clock.</p>
+      <PageTitle kicker="Board">Contract board</PageTitle>
       {missing ? <Notice tone="muted">The work board has not been posted.</Notice> : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {note ? <Notice tone="ok">{note}</Notice> : null}
       {!board && !error ? <Notice tone="muted">Reading the board…</Notice> : null}
       {board?.active ? (
-        <Panel>
-          <p className="text-[11px] font-semibold tracking-[0.22em] text-muted uppercase">On the clock</p>
+        <section className="border border-gold/40 bg-panel p-4">
+          <p className="text-[10px] tracking-[0.22em] text-gold uppercase">On the clock</p>
           <h2 className="mt-1 font-serif text-2xl">{board.active.name}</h2>
           <p className="mt-1 text-sm text-muted">
             {board.active.locationLabel} · {board.active.risk.toLowerCase()} risk · {money(board.active.reward)}
@@ -88,22 +87,22 @@ export function WorkPage() {
               <p className="text-sm text-muted">Finishes in {remaining(board.active.completesAt)}.</p>
             )}
           </div>
-        </Panel>
+        </section>
       ) : null}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="border border-line">
         {board?.contracts.map((contract) => (
-          <article key={contract.id} className="rounded-2xl border border-line bg-panel p-4">
-            <div className="flex items-baseline justify-between gap-2">
-              <h2 className="font-serif text-xl">{contract.name}</h2>
-              <span className={contract.risk === 'HIGH' ? 'text-sm text-danger' : contract.risk === 'MEDIUM' ? 'text-sm text-gold' : 'text-sm text-ok'}>
-                {contract.risk}
-              </span>
+          <article key={contract.id} className="grid gap-3 border-b border-line bg-panel p-4 last:border-b-0 md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))_auto] md:items-center">
+            <div>
+              <h2 className="font-serif text-lg">{contract.name}</h2>
+              <p className="text-[12px] text-muted">{contract.requirement}</p>
             </div>
-            <p className="mt-1 text-sm text-muted">
-              {contract.locationLabel} · {contract.durationMinutes}m · {contract.requirement}
+            <p className="text-sm text-muted">{contract.locationLabel}</p>
+            <p className="text-sm">{contract.durationMinutes}m</p>
+            <p className={contract.risk === 'HIGH' ? 'text-sm text-danger' : contract.risk === 'MEDIUM' ? 'text-sm text-gold' : 'text-sm text-ok'}>
+              {contract.risk}
             </p>
-            <p className="mt-2 font-semibold text-gold">{money(contract.reward)}</p>
-            <div className="mt-3">
+            <div className="flex items-center justify-between gap-3 md:justify-end">
+              <span className="text-gold">{money(contract.reward)}</span>
               {contract.locked ? (
                 <Btn disabled>Level {contract.minLevel}</Btn>
               ) : contract.cooldownEndsAt ? (

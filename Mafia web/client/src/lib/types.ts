@@ -60,6 +60,8 @@ export type Target = {
   vaultLevel: number
   wealthBucket: 'modest' | 'heavy' | 'fortune'
   vulnerable: boolean
+  sectorId?: string | null
+  regionName?: string | null
 }
 
 /** `player` is the heist kind. The targets payload names that list `players`. */

@@ -5,7 +5,7 @@ export type RegionSeed = { name: string; x: number; y: number }
 export type Landmass = {
   id: string
   name: string
-  /** Grid step in world units. Tuned so each coast holds about 500 sectors. */
+  /** Grid step in world units. Every cell whose center sits on land is a sector. */
   step: number
   polygon: Pt[]
   regions: RegionSeed[]
@@ -13,98 +13,120 @@ export type Landmass = {
   label: Pt
 }
 
-export const WORLD = { width: 2000, height: 1160 }
+/** Paper chart bounds. The coastline is traced from the Velmora plate. */
+export const WORLD = { width: 520, height: 760 }
 
-const ashmere: Landmass = {
-  id: 'ashmere',
-  name: 'Ashmere',
-  step: 26,
-  label: [360, 430],
+const velmora: Landmass = {
+  id: 'velmora',
+  name: 'Velmora',
+  step: 16,
+  label: [300, 340],
   polygon: [
-    [118, 248], [150, 188], [196, 142], [250, 118], [312, 96], [368, 128], [402, 92], [468, 118],
-    [522, 96], [578, 138], [630, 188], [668, 246], [692, 312], [664, 368], [706, 424], [678, 488],
-    [712, 552], [674, 616], [620, 668], [552, 704], [478, 736], [402, 754], [328, 728], [262, 756],
-    [198, 712], [146, 652], [108, 586], [86, 514], [78, 442], [96, 368], [84, 304],
+    [259, 53],
+    [248, 65],
+    [264, 68],
+    [266, 83],
+    [248, 104],
+    [177, 107],
+    [157, 155],
+    [68, 167],
+    [62, 182],
+    [95, 194],
+    [100, 218],
+    [178, 236],
+    [186, 245],
+    [142, 254],
+    [83, 266],
+    [94, 311],
+    [85, 329],
+    [116, 347],
+    [110, 377],
+    [119, 386],
+    [201, 407],
+    [187, 443],
+    [204, 446],
+    [198, 470],
+    [219, 491],
+    [226, 530],
+    [302, 542],
+    [286, 563],
+    [305, 578],
+    [290, 599],
+    [306, 614],
+    [301, 638],
+    [330, 648],
+    [347, 653],
+    [362, 638],
+    [350, 623],
+    [369, 614],
+    [388, 590],
+    [391, 551],
+    [386, 533],
+    [371, 509],
+    [393, 485],
+    [396, 467],
+    [387, 455],
+    [362, 449],
+    [372, 431],
+    [343, 425],
+    [347, 410],
+    [333, 383],
+    [353, 371],
+    [346, 347],
+    [385, 344],
+    [394, 323],
+    [437, 284],
+    [441, 230],
+    [426, 221],
+    [417, 185],
+    [405, 158],
+    [382, 155],
+    [384, 137],
+    [336, 122],
+    [308, 92],
+    [284, 86],
+    [267, 53],
   ],
   regions: [
-    { name: 'Grey Marches', x: 230, y: 210 },
-    { name: 'Salt Mere', x: 500, y: 210 },
-    { name: 'Harrow Coast', x: 190, y: 470 },
-    { name: 'Low Vellum', x: 500, y: 500 },
-    { name: 'Crow Fen', x: 340, y: 680 },
+    { name: 'North Horn', x: 310, y: 130 },
+    { name: 'West Reach', x: 120, y: 200 },
+    { name: 'Inner Shelf', x: 250, y: 330 },
+    { name: 'East Bight', x: 390, y: 270 },
+    { name: 'South Keys', x: 340, y: 560 },
   ],
   borders: [
-    [[140, 330], [280, 300], [430, 340], [560, 300], [670, 360]],
-    [[300, 140], [270, 280], [240, 430], [210, 580], [250, 720]],
-    [[430, 360], [480, 500], [520, 640], [470, 730]],
+    [[176, 150], [230, 190], [300, 170], [360, 150], [410, 190]],
+    [[110, 210], [170, 280], [200, 380], [230, 500], [290, 610]],
+    [[120, 340], [210, 320], [300, 350], [390, 330]],
+    [[250, 420], [300, 470], [340, 540], [360, 600]],
+    [[300, 110], [280, 200], [300, 300], [330, 420]],
   ],
 }
 
-const calderune: Landmass = {
-  id: 'calderune',
-  name: 'Calderune',
-  step: 26,
-  label: [1340, 330],
-  polygon: [
-    [969, 215], [1030, 137], [1113, 83], [1206, 64], [1306, 95], [1396, 66], [1486, 108], [1577, 81],
-    [1665, 137], [1730, 205], [1762, 288], [1723, 364], [1769, 442], [1701, 515], [1608, 559],
-    [1504, 532], [1401, 588], [1294, 547], [1194, 600], [1098, 554], [1018, 486], [962, 405],
-    [933, 325], [950, 264],
-  ],
-  regions: [
-    { name: 'North Spit', x: 1180, y: 180 },
-    { name: 'Cinder Shelf', x: 1560, y: 190 },
-    { name: 'Lantern Reach', x: 1220, y: 430 },
-    { name: 'Pale Hook', x: 1560, y: 440 },
-  ],
-  borders: [
-    [[980, 300], [1140, 270], [1320, 310], [1500, 260], [1680, 320]],
-    [[1280, 90], [1240, 220], [1220, 360], [1260, 500], [1320, 580]],
-  ],
-}
-
-const brineholt: Landmass = {
-  id: 'brineholt',
-  name: 'Brineholt',
-  step: 26,
-  label: [1360, 860],
-  polygon: [
-    [890, 794], [977, 725], [1078, 680], [1192, 712], [1299, 653], [1413, 695], [1530, 638],
-    [1646, 680], [1763, 646], [1864, 712], [1909, 799], [1869, 886], [1790, 956], [1676, 1013],
-    [1547, 1060], [1413, 1030], [1279, 1077], [1145, 1035], [1026, 1092], [922, 1013], [843, 928],
-    [823, 849],
-  ],
-  regions: [
-    { name: 'Silt Keys', x: 1040, y: 820 },
-    { name: 'Amber Bight', x: 1420, y: 780 },
-    { name: 'Moth Harbor', x: 1680, y: 880 },
-    { name: 'Quiet Shoal', x: 1180, y: 1000 },
-  ],
-  borders: [
-    [[860, 900], [1040, 860], [1240, 910], [1460, 850], [1680, 900], [1840, 860]],
-    [[1240, 700], [1200, 840], [1180, 960], [1240, 1060]],
-    [[1500, 680], [1540, 820], [1580, 960], [1520, 1050]],
-  ],
-}
-
-export const LANDMASSES: Landmass[] = [ashmere, calderune, brineholt]
+export const LANDMASSES: Landmass[] = [velmora]
 
 /** Decorative islands. They are not claimable sectors. */
 export const ISLANDS: Pt[][] = [
-  [[46, 430], [78, 396], [118, 412], [108, 456], [64, 470]],
-  [[760, 168], [804, 140], [846, 166], [828, 208], [774, 204]],
-  [[790, 250], [824, 232], [858, 258], [830, 286], [792, 274]],
-  [[620, 860], [668, 832], [708, 868], [674, 910], [622, 896]],
-  [[1848, 150], [1892, 128], [1930, 162], [1896, 198], [1852, 186]],
-  [[1704, 1108], [1752, 1084], [1790, 1120], [1740, 1146], [1696, 1128]],
-  [[520, 140], [552, 122], [578, 146], [548, 168]],
+  [[28, 188], [46, 172], [68, 184], [62, 208], [36, 214]],
+  [[454, 118], [472, 108], [488, 124], [470, 140], [450, 132]],
+  [[36, 430], [52, 416], [70, 428], [58, 448], [38, 446]],
+  [[448, 500], [466, 486], [486, 504], [468, 522], [446, 514]],
+  [[70, 600], [84, 590], [98, 604], [82, 618]],
 ]
 
-export const SEA_LABELS: { name: string; at: Pt }[] = [
-  { name: 'The Vesper Sea', at: [800, 460] },
-  { name: 'Cinder Gulf', at: [820, 240] },
-  { name: 'South Roads', at: [480, 980] },
-]
+export const SEA_LABELS: { name: string; at: Pt }[] = []
+
+/**
+ * Five points on Velmora. Night-crew stations use the sectors these resolve to.
+ * The server stores the same sector ids so the squares stay occupied.
+ */
+export const NPC_STATION_MARKS = [
+  { username: 'Mara Voss', x: 300, y: 140 },
+  { username: 'Eddie Quill', x: 110, y: 196 },
+  { username: 'Nia Pell', x: 250, y: 340 },
+  { username: 'Hugo Brandt', x: 390, y: 280 },
+  { username: 'Colette Marsh', x: 340, y: 560 },
+] as const
 
 export type Sector = {
   id: string
@@ -223,6 +245,18 @@ export function sectorAt(x: number, y: number): Sector | null {
     return list.find((sector) => sector.x === sx && sector.y === sy) ?? null
   }
   return null
+}
+
+export function stationSectors() {
+  return NPC_STATION_MARKS.map((mark) => {
+    const sector = sectorAt(mark.x, mark.y)
+    return {
+      username: mark.username,
+      sectorId: sector?.id ?? null,
+      landmassId: sector?.landmassId ?? null,
+      regionName: sector?.regionName ?? null,
+    }
+  })
 }
 
 export function toPath(points: Pt[]) {

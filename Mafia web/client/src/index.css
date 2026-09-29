@@ -3,15 +3,15 @@
 @theme {
   --font-sans: "Outfit", "Segoe UI", system-ui, sans-serif;
   --font-serif: "Cinzel", "Palatino Linotype", serif;
-  --color-ink: #08090c;
-  --color-board: #101218;
-  --color-panel: #161921;
-  --color-panel-2: #1d212b;
-  --color-line: #2c3140;
-  --color-paper: #f0ece4;
-  --color-muted: #9a9488;
-  --color-gold: #e2c075;
-  --color-gold-2: #c9a24a;
+  --color-ink: #070708;
+  --color-board: #0c0c0e;
+  --color-panel: #121214;
+  --color-panel-2: #19191c;
+  --color-line: #2a2a2e;
+  --color-paper: #f3efe6;
+  --color-muted: #8f8a82;
+  --color-gold: #c6a15b;
+  --color-gold-2: #9a7840;
   --color-danger: #d4654f;
   --color-ok: #6fbf7a;
   --color-steel: #8aa0c2;
@@ -25,9 +25,17 @@ body,
 
 body {
   margin: 0;
-  background: #08090c;
-  color: #f0ece4;
+  background: #070708;
+  color: #f3efe6;
   font-family: var(--font-sans);
+}
+
+.classified-grid {
+  background-color: #080808;
+  background-image:
+    linear-gradient(rgba(243, 239, 230, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(243, 239, 230, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
 }
 
 button,

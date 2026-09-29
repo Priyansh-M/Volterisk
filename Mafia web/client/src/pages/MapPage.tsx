@@ -6,9 +6,17 @@ import { ApiError, api, isMissing } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 import type { MapPin, PlayerBase, StarterClaim } from '../lib/types.ts'
-import type { Sector } from '../lib/world.ts'
+import { SECTORS, type Sector } from '../lib/world.ts'
+
+export function OnboardingChart() {
+  return <ChartScreen onboarding />
+}
 
 export function MapPage() {
+  return <ChartScreen />
+}
+
+function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
   const { me, refresh } = useAuth()
   const [pins, setPins] = useState<MapPin[] | null>(null)
   const [pinNote, setPinNote] = useState<string | null>(null)
@@ -84,15 +92,15 @@ export function MapPage() {
 
   return (
     <div className="space-y-4">
-      <PageTitle kicker="World chart">Map</PageTitle>
+      {onboarding ? null : <PageTitle kicker="Chart">World intelligence map</PageTitle>}
       {needsKit ? (
-        <section className="rounded-2xl border border-line bg-panel p-4">
+        <section className="border border-line bg-panel p-4">
           <p className="text-[11px] font-semibold tracking-[0.22em] text-gold uppercase">Operation initialized</p>
-          <p className="mt-2 text-sm text-muted">The desk is holding $20,000 and a Rusty Crowbar. Take them, then choose a coast.</p>
+          <p className="mt-2 text-sm text-muted">The desk is holding $20,000 and a Rusty Crowbar. Take them, then choose a square.</p>
           <button
             type="button"
             disabled={busy}
-            className="gloss-gold mt-3 cursor-pointer rounded-full px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="gloss-gold mt-3 cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase disabled:opacity-50"
             onClick={() => void takeKit()}
           >
             {busy ? 'Signing…' : 'Accept the kit'}
@@ -105,29 +113,57 @@ export function MapPage() {
           {kit.items.length ? ` and ${kit.items.map((item) => item.name).join(', ')}` : ''}. Select your base.
         </Notice>
       ) : null}
-      {!needsKit && needsBase ? (
-        <p className="text-sm text-muted">Select your base. Zoom in, hover a sector, and claim one that is still open.</p>
-      ) : null}
-      {filed && (established || !needsBase) && established ? (
-        <section className="rounded-2xl border border-gold/40 bg-panel p-4">
-          <p className="text-[11px] font-semibold tracking-[0.22em] text-gold uppercase">Base established</p>
-          <p className="mt-2 font-serif text-2xl">{filed.regionName}</p>
-          <p className="mt-1 font-mono text-sm tracking-wide text-muted">{filed.sectorId.toUpperCase()}</p>
-          <Link to="/" className="nav-pill mt-3 inline-block rounded-full px-3 py-1.5 text-sm text-paper no-underline">
-            Open the ledger
-          </Link>
-        </section>
-      ) : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {pinNote ? <Notice tone="muted">{pinNote}</Notice> : null}
       {pins === null ? <Notice tone="muted">Pulling the chart…</Notice> : null}
-      <WorldMap
-        pins={pins ?? []}
-        canClaim={!needsKit && needsBase}
-        claimHint={needsKit ? 'Take the kit before you plant a flag.' : null}
-        busy={busy}
-        onClaim={(sector) => void claimSector(sector)}
-      />
+      <div className={onboarding ? '' : 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]'}>
+        <WorldMap
+          className={onboarding ? 'h-[calc(100vh-9rem)] min-h-[480px]' : ''}
+          pins={pins ?? []}
+          canClaim={!needsKit && needsBase}
+          claimHint={needsKit ? 'Take the kit before you plant a flag.' : null}
+          busy={busy}
+          onClaim={(sector) => void claimSector(sector)}
+        />
+        {onboarding ? null : (
+          <aside className="border border-line bg-panel p-4">
+            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">World intelligence</p>
+            <h2 className="mt-1 font-serif text-xl tracking-[0.12em]">VELMORA</h2>
+            <dl className="mt-4 space-y-2 text-sm">
+              <Intel label="Sectors" value={String(SECTORS.length)} />
+              <Intel label="Occupied" value={pins ? String(pins.length) : '—'} />
+              <Intel label="Your base" value={filed ? filed.regionName : '—'} />
+              <Intel label="Square" value={filed ? filed.sectorId.toUpperCase() : '—'} />
+            </dl>
+            {established ? (
+              <Link to="/" className="mt-4 inline-block border border-gold/40 px-3 py-1.5 text-[11px] tracking-[0.14em] text-gold uppercase no-underline">
+                Open the ledger
+              </Link>
+            ) : null}
+            <p className="mt-4 text-[11px] tracking-[0.14em] text-muted uppercase">Stations</p>
+            <ul className="mt-2 max-h-64 space-y-2 overflow-auto text-sm">
+              {pins && pins.length === 0 ? <li className="text-muted">No bases filed.</li> : null}
+              {pins?.map((pin) => (
+                <li key={pin.sectorId} className="border-b border-line/70 pb-2">
+                  <p className={pin.isYou ? 'text-gold' : ''}>{pin.player.username}</p>
+                  <p className="text-[12px] text-muted">
+                    {pin.regionName} · {pin.sectorId.toUpperCase()}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Intel({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-muted">{label}</dt>
+      <dd className="truncate text-right">{value}</dd>
     </div>
   )
 }
