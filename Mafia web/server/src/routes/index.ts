@@ -62,7 +62,7 @@ api.get("/work/contracts", requireAuth, asyncHandler(contracts));
 api.post("/work/contracts/accept", requireAuth, asyncHandler(accept));
 api.post("/work/contracts/collect", requireAuth, asyncHandler(collect));
 api.get("/work/passive", requireAuth, asyncHandler(passive));
-api.post("/work/passive/collect", requireAuth, asyncHandler(collectPassivePay));
+api.post("/work/passive/select", requireAuth, asyncHandler(collectPassivePay));
 
 api.get("/leaderboard", requireAuth, asyncHandler(leaderboard));
 api.get("/notifications", requireAuth, asyncHandler(notifications));

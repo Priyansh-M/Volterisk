@@ -14,6 +14,7 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js";
+import { settlePassivePay } from "./workService.js";
 import { publicProfileFor } from "./publicProfileService.js";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -130,6 +131,7 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 }
 
 export async function getProfile(userId: string) {
+  await settlePassivePay(userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
@@ -178,6 +180,13 @@ export async function getProfile(userId: string) {
           upgradeLevel: equipped.upgradeLevel,
           effectiveLevel: attackPower(equipped.weapon.number, equipped.upgradeLevel),
           attack: attackPower(equipped.weapon.number, equipped.upgradeLevel),
+        }
+      : null,
+    currentJob: user.passiveJobId
+      ? {
+          id: user.passiveJobId,
+          name: RULES.PASSIVE_JOBS.find((job) => job.id === user.passiveJobId)?.name ?? user.passiveJobId,
+          payPerDay: RULES.PASSIVE_JOBS.find((job) => job.id === user.passiveJobId)?.payPerDay ?? 0,
         }
       : null,
     cooldownEndsAt: await cooldownEndsAt(userId),

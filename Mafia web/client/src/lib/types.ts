@@ -28,6 +28,7 @@ export type Profile = {
     upgradeLevel: number
     effectiveLevel: number
   } | null
+  currentJob: { id: string; name: string; payPerDay: number } | null
   cooldownEndsAt: string | null
   stats: {
     successfulHeists: number

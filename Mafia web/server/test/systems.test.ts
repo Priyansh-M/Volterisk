@@ -313,3 +313,52 @@ describe("leaderboard", () => {
     );
   });
 });
+
+describe("work board", () => {
+  it("lets a level 1 player pick a starter job that pays at noon GMT", async () => {
+    const starter = RULES.PASSIVE_JOBS.filter((job) => job.requires.length === 0);
+    expect(starter.map((job) => job.id)).toEqual(["volunteer", "mail-man"]);
+    expect(starter.map((job) => job.payPerDay)).toEqual([300, 450]);
+    for (const job of RULES.PASSIVE_JOBS) {
+      if (job.requires.length === 0) expect(job.payPerDay).toBeGreaterThanOrEqual(300);
+      else expect(job.payPerDay).toBeGreaterThanOrEqual(3_000);
+      expect(job.payPerDay).toBeLessThanOrEqual(job.requires.length === 0 ? 500 : 6_000);
+    }
+    const sweep = RULES.WORK_CONTRACTS.find((job) => job.id === "street-sweep");
+    const drop = RULES.WORK_CONTRACTS.find((job) => job.id === "parcel-drop");
+    expect(sweep).toMatchObject({ minLevel: 1, reward: 1_000, durationMinutes: 5 });
+    expect(drop).toMatchObject({ minLevel: 1, reward: 1_200, durationMinutes: 10 });
+
+    const player = await registerUser("June Crowe");
+    const board = await request(app).get("/api/work/passive").set(auth(player.token));
+    expect(board.status).toBe(200);
+    const volunteer = board.body.jobs.find((job: { id: string }) => job.id === "volunteer");
+    const runner = board.body.jobs.find((job: { id: string }) => job.id === "package-runner");
+    expect(volunteer).toMatchObject({ qualified: true, selected: false, payPerDay: 300, requirement: "No requirements" });
+    expect(runner.qualified).toBe(false);
+
+    const locked = await request(app).post("/api/work/passive/select").set(auth(player.token)).send({ jobId: "package-runner" });
+    expect(locked.status).toBe(403);
+    expect(locked.body.code).toBe("NOT_QUALIFIED");
+
+    const picked = await request(app).post("/api/work/passive/select").set(auth(player.token)).send({ jobId: "volunteer" });
+    expect(picked.status).toBe(200);
+    expect(picked.body).toMatchObject({ jobId: "volunteer", name: "Volunteer", payPerDay: 300, cash: player.cash });
+
+    const beforePay = await request(app).get("/api/me").set(auth(player.token));
+    expect(beforePay.body.currentJob).toEqual({ id: "volunteer", name: "Volunteer", payPerDay: 300 });
+    expect(beforePay.body.cash).toBe(player.cash);
+
+    await prisma.user.update({
+      where: { id: player.id },
+      data: { passivePaidFor: new Date("2020-01-01T12:00:00.000Z") },
+    });
+    const paid = await request(app).get("/api/me").set(auth(player.token));
+    expect(paid.body.cash).toBe(player.cash + 300);
+    const again = await request(app).get("/api/me").set(auth(player.token));
+    expect(again.body.cash).toBe(player.cash + 300);
+    expect(
+      await prisma.transaction.count({ where: { type: "passive_payday", toUserId: player.id } }),
+    ).toBe(1);
+  });
+});

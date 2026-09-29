@@ -11,8 +11,7 @@ type PassiveJob = {
   payPerDay: number
   requirement: string
   qualified: boolean
-  available: boolean
-  nextAt: string | null
+  selected: boolean
 }
 
 export function WorkPage() {
@@ -86,26 +85,25 @@ export function WorkPage() {
     }
   }
 
-  async function collectPassive(job: PassiveJob) {
-    if (!me) return
-    const snapshot = me.cash
-    applyCash(snapshot + job.payPerDay)
-    setPassive((current) => current?.map((row) => (row.id === job.id ? { ...row, available: false, nextAt: new Date(Date.now() + 86400000).toISOString() } : row)) ?? null)
-    setNote(`Collected ${money(job.payPerDay)} for today.`)
+  async function selectJob(job: PassiveJob) {
+    if (!me || !job.qualified || job.selected) return
+    setBusy(true)
     setError(null)
+    setNote(null)
+    setPassive((current) => current?.map((row) => ({ ...row, selected: row.id === job.id })) ?? null)
     try {
-      const paid = await api<{ cash: number }>('/api/work/passive/collect', {
+      const picked = await api<{ name: string; payPerDay: number }>('/api/work/passive/select', {
         method: 'POST',
         body: JSON.stringify({ jobId: job.id }),
       })
-      applyCash(paid.cash)
+      setNote(`${picked.name} is your current job. ${money(picked.payPerDay)} lands at 12:00 GMT.`)
       void load()
       void refresh()
     } catch (err) {
-      applyCash(snapshot)
       void load()
-      setNote(null)
-      setError(err instanceof ApiError ? err.message : 'That pay is not ready.')
+      setError(err instanceof ApiError ? err.message : 'That job is not open.')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -116,21 +114,25 @@ export function WorkPage() {
         <Btn variant={lane === 'passive' ? 'gold' : 'ghost'} onClick={() => setLane('passive')}>Passive</Btn>
         <Btn variant={lane === 'active' ? 'gold' : 'ghost'} onClick={() => setLane('active')}>Active</Btn>
       </div>
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      {note ? <Notice tone="ok">{note}</Notice> : null}
       {lane === 'passive' ? (
         <div className="grid gap-3">
-          <p className="text-sm text-muted-foreground">Each open job pays {money(3000)} per day. A higher level than the requirement still qualifies.</p>
+          <p className="text-sm text-muted-foreground">Pick one current job. It pays once a day at 12:00 GMT and shows on your profile. A higher level than the requirement still qualifies.</p>
           {passive?.map((job) => (
-            <article key={job.id} className="border border-border bg-card p-4">
+            <article key={job.id} className={`border bg-card p-4 ${job.selected ? 'border-gold/50' : 'border-border'}`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="font-display text-2xl font-semibold uppercase">{job.name}</h2>
                   <p className="mt-1 text-sm text-muted-foreground">{job.requirement}</p>
                   <p className="mt-1 font-mono text-xs text-primary">{money(job.payPerDay)} per day</p>
                 </div>
-                {job.available ? (
-                  <Btn variant="gold" onClick={() => void collectPassive(job)}>Collect</Btn>
+                {job.selected ? (
+                  <Btn disabled>Current job</Btn>
+                ) : job.qualified ? (
+                  <Btn variant="gold" disabled={busy} onClick={() => void selectJob(job)}>Select</Btn>
                 ) : (
-                  <Btn disabled>{job.qualified ? 'Collected today' : 'Locked'}</Btn>
+                  <Btn disabled>Locked</Btn>
                 )}
               </div>
             </article>
@@ -139,8 +141,6 @@ export function WorkPage() {
       ) : null}
       {lane === 'active' ? (<>
       {missing ? <Notice tone="muted">The work board has not been posted.</Notice> : null}
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      {note ? <Notice tone="ok">{note}</Notice> : null}
       {!board && !error ? <Notice tone="muted">Reading the board…</Notice> : null}
       {board?.active ? (
         <section className="border border-gold/40 bg-panel p-4">

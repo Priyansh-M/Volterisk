@@ -16,6 +16,8 @@ model User {
   tokenVersion     Int       @default(0)
   isBot            Boolean   @default(false)
   cameraLevel      Int       @default(0)
+  passiveJobId     String?
+  passivePaidFor   DateTime?
   starterClaimedAt DateTime?
   createdAt        DateTime  @default(now())
 

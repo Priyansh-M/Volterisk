@@ -27,6 +27,7 @@ export function ProfilePage() {
             <Row label="Level" value={String(me.level)} />
             <Row label="Rank" value={`#${me.rank}`} />
             <Row label="Base" value={me.base ? `${me.base.name?.trim() || 'Unnamed'} · ${me.base.regionName}` : '—'} />
+            <Row label="Current job" value={me.currentJob ? `${me.currentJob.name} · ${money(me.currentJob.payPerDay)} / day` : 'None'} />
             <Row label="Cash" value={money(me.cash)} gold />
             <Row label="Vault" value={`${money(me.vault.balance)} · lv ${me.vault.level}`} gold />
             <Row label="Equipped" value={me.equippedWeapon ? `${me.equippedWeapon.name} · lv ${me.equippedWeapon.effectiveLevel}` : '—'} />
