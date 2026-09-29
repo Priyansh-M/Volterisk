@@ -3,11 +3,12 @@ import { Btn, Field, Notice, PageTitle, Panel, inputClass } from '../components/
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
-import type { HeistResult, OwnedWeapon, Target } from '../lib/types.ts'
+import type { HeistKind, HeistResult, OwnedWeapon, TargetBoard } from '../lib/types.ts'
 
 export function HeistsPage() {
   const { me, refresh } = useAuth()
-  const [targets, setTargets] = useState<Target[] | null>(null)
+  const [kind, setKind] = useState<HeistKind>('npc')
+  const [board, setBoard] = useState<TargetBoard | null>(null)
   const [weapons, setWeapons] = useState<OwnedWeapon[]>([])
   const [targetId, setTargetId] = useState<string | null>(null)
   const [weaponId, setWeaponId] = useState<string | null>(null)
@@ -19,11 +20,11 @@ export function HeistsPage() {
 
   useEffect(() => {
     Promise.all([
-      api<{ targets: Target[] }>('/api/heists/targets'),
+      api<TargetBoard>('/api/heists/targets'),
       api<{ owned: OwnedWeapon[] }>('/api/me/weapons'),
     ])
       .then(([targetData, weaponData]) => {
-        setTargets(targetData.targets)
+        setBoard(targetData)
         setWeapons(weaponData.owned)
         const equipped = weaponData.owned.find((weapon) => weapon.equipped)
         setWeaponId(equipped?.id ?? weaponData.owned[0]?.id ?? null)
@@ -37,7 +38,7 @@ export function HeistsPage() {
       return
     }
     let cancelled = false
-    const query = new URLSearchParams({ targetUserId: targetId, weaponId })
+    const query = new URLSearchParams({ targetUserId: targetId, weaponId, kind })
     api<{ estimatedChance: number }>(`/api/heists/preview?${query.toString()}`)
       .then((data) => {
         if (!cancelled) setChance(data.estimatedChance)
@@ -51,8 +52,9 @@ export function HeistsPage() {
     return () => {
       cancelled = true
     }
-  }, [targetId, weaponId])
+  }, [targetId, weaponId, kind])
 
+  const targets = board ? (kind === 'npc' ? board.npc : board.players) : null
   const target = targets?.find((row) => row.userId === targetId) ?? null
   const weapon = weapons.find((row) => row.id === weaponId) ?? null
   const cooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
@@ -64,13 +66,12 @@ export function HeistsPage() {
     try {
       const heist = await api<HeistResult>('/api/heists', {
         method: 'POST',
-        body: JSON.stringify({ targetUserId: targetId, weaponId }),
+        body: JSON.stringify({ targetUserId: targetId, weaponId, kind }),
       })
       setResult(heist)
       setConfirming(false)
       await refresh()
-      const next = await api<{ targets: Target[] }>('/api/heists/targets')
-      setTargets(next.targets)
+      setBoard(await api<TargetBoard>('/api/heists/targets'))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The job failed to start.')
     } finally {
@@ -81,9 +82,35 @@ export function HeistsPage() {
   return (
     <div className="space-y-4">
       <PageTitle kicker="Job street">Heists</PageTitle>
+      <div className="flex flex-wrap gap-2">
+        <KindButton
+          active={kind === 'npc'}
+          onClick={() => {
+            setKind('npc')
+            setTargetId(null)
+            setConfirming(false)
+            setResult(null)
+          }}
+        >
+          NPC Heists
+        </KindButton>
+        <KindButton
+          active={kind === 'player'}
+          onClick={() => {
+            setKind('player')
+            setTargetId(null)
+            setConfirming(false)
+            setResult(null)
+          }}
+        >
+          Player Heists
+        </KindButton>
+      </div>
       {targets === null && !error ? <Notice tone="muted">Reading the city…</Notice> : null}
       {targets && targets.length === 0 ? (
-        <Notice tone="muted">No vault in the city is thick enough to hit.</Notice>
+        <Notice tone="muted">
+          {kind === 'npc' ? 'No night-crew vault is thick enough to hit.' : 'No other player vault is open.'}
+        </Notice>
       ) : null}
       <div className="grid gap-3 md:grid-cols-2">
         {targets?.map((row) => (
@@ -192,5 +219,25 @@ export function HeistsPage() {
         </section>
       ) : null}
     </div>
+  )
+}
+
+function KindButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`nav-pill cursor-pointer rounded-full px-4 py-2 text-sm ${active ? 'nav-pill-active' : 'text-paper'}`}
+    >
+      {children}
+    </button>
   )
 }

@@ -12,8 +12,12 @@ export function ProfilePage() {
       <PageTitle kicker="The name on the book">Profile</PageTitle>
       <Panel>
         <p className="font-serif text-3xl">{me.username}</p>
-        <p className="mt-1 text-sm text-muted">Level {me.level}</p>
+        <p className="mt-1 text-sm text-muted">
+          {me.title} · Level {me.level}
+        </p>
         <dl className="mt-5 space-y-3 text-sm">
+          <Row label="Rank" value={`#${me.rank}`} />
+          <Row label="Base" value={me.base ? `${me.base.regionName} · ${me.base.sectorId.toUpperCase()}` : 'Unfiled'} />
           <Row label="Cash" value={money(me.cash)} gold />
           <Row label="Vault" value={`${money(me.vault.balance)} · lv ${me.vault.level}`} gold />
           <Row

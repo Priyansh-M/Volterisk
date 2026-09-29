@@ -11,9 +11,12 @@ import {
   IconHome,
   IconIntel,
   IconItems,
+  IconContract,
+  IconMap,
   IconMarket,
   IconProfile,
   IconProperty,
+  IconSignal,
   IconVault,
 } from './Icons.tsx'
 
@@ -26,6 +29,9 @@ const links = [
   { to: '/market', label: 'Market', end: false, Icon: IconMarket },
   { to: '/profile', label: 'Profile', end: false, Icon: IconProfile },
   { to: '/leaderboard', label: 'Leaderboard', end: false, Icon: IconBoard },
+  { to: '/map', label: 'Map', end: false, Icon: IconMap },
+  { to: '/work', label: 'Work', end: false, Icon: IconContract },
+  { to: '/notifications', label: 'Notifications', end: false, Icon: IconSignal },
 ]
 
 const soon = [
