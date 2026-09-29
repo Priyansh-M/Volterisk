@@ -8,22 +8,92 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  username     String
-  usernameKey  String   @unique
-  passwordHash String
-  cash         Int
-  tokenVersion Int      @default(0)
-  isBot        Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  id               String    @id @default(cuid())
+  username         String
+  usernameKey      String    @unique
+  passwordHash     String
+  cash             Int
+  tokenVersion     Int       @default(0)
+  isBot            Boolean   @default(false)
+  starterClaimedAt DateTime?
+  createdAt        DateTime  @default(now())
 
   vault          Vault?
+  base           Base?
   weapons        UserWeapon[]
-  heistsAttacked Heist[]        @relation("HeistAttacker")
-  heistsDefended Heist[]        @relation("HeistTarget")
+  properties     Property[]
+  contracts      ContractRun[]
+  achievements   UserAchievement[]
+  heistsAttacked Heist[]           @relation("HeistAttacker")
+  heistsDefended Heist[]           @relation("HeistTarget")
   notifications  Notification[]
-  txFrom         Transaction[]  @relation("TxFrom")
-  txTo           Transaction[]  @relation("TxTo")
+  txFrom         Transaction[]     @relation("TxFrom")
+  txTo           Transaction[]     @relation("TxTo")
+}
+
+/**
+ * One claimed map sector per player. sectorId is unique, so two players cannot
+ * hold the same sector even under concurrent claims.
+ */
+model Base {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  sectorId   String   @unique
+  landmassId String
+  regionName String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([landmassId])
+}
+
+/**
+ * An owned asset with a level and storage capacity. No passive income.
+ */
+model Property {
+  id         String   @id @default(cuid())
+  userId     String
+  catalogId  String
+  level      Int      @default(1)
+  sectorId   String?
+  regionName String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+/**
+ * One accepted work-board contract. Reward is stamped from rules.ts at accept time.
+ */
+model ContractRun {
+  id              String    @id @default(cuid())
+  userId          String
+  contractId      String
+  reward          Int
+  acceptedAt      DateTime  @default(now())
+  completesAt     DateTime
+  collectedAt     DateTime?
+  readyNotifiedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, collectedAt])
+  @@index([userId, contractId, collectedAt])
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId, unlockedAt])
 }
 
 model Vault {
@@ -35,11 +105,11 @@ model Vault {
 }
 
 model Weapon {
-  id      String @id
-  name    String
-  number  Int    @unique
-  owners  UserWeapon[]
-  heists  Heist[]
+  id     String       @id
+  name   String
+  number Int          @unique
+  owners UserWeapon[]
+  heists Heist[]
 }
 
 model UserWeapon {
@@ -99,6 +169,7 @@ model Notification {
   heistId   String?  @unique
   title     String
   body      String
+  severity  String   @default("INFO")
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
