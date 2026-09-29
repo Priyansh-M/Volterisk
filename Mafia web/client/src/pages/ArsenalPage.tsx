@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { WeaponArt } from '../components/WeaponArt.tsx'
 import { Btn, Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, api, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { WEAPON_CATALOG } from '../lib/catalog.ts'
 import { money } from '../lib/format.ts'
@@ -11,22 +11,22 @@ type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null }
 
 export function ArsenalPage() {
   const { refresh } = useAuth()
-  const [arsenal, setArsenal] = useState<Arsenal | null>(null)
-  const [predictors, setPredictors] = useState(0)
+  const [arsenal, setArsenal] = useState<Arsenal | null>(() => peek<Arsenal>('/api/me/weapons'))
+  const [predictors, setPredictors] = useState(() => peek<{ predictor: { quantity: number } }>('/api/shop')?.predictor.quantity ?? 0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  async function load() {
+  async function reload() {
     const [weapons, shop] = await Promise.all([
-      api<Arsenal>('/api/me/weapons'),
-      api<{ predictor: { quantity: number } }>('/api/shop'),
+      load<Arsenal>('/api/me/weapons'),
+      load<{ predictor: { quantity: number } }>('/api/shop'),
     ])
     setArsenal(weapons)
     setPredictors(shop.predictor.quantity)
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the arsenal.'))
+    reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the arsenal.'))
   }, [])
 
   async function act(path: string, weaponId: string, instanceId?: string) {
@@ -34,7 +34,7 @@ export function ArsenalPage() {
     setError(null)
     try {
       await api(path, { method: 'POST', body: JSON.stringify({ weaponId, instanceId }) })
-      await load()
+      await reload()
       await refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That did not go through.')

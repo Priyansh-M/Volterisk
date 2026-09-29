@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { Notice, inputClass } from '../components/ui.tsx'
 import { ApiError, api, load, peek } from '../lib/api.ts'
@@ -19,6 +20,10 @@ type Quote = {
 
 export function HeistsPage() {
   const { me, refresh } = useAuth()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const [query, setQuery] = useState('')
+  const [pickedId, setPickedId] = useState<string | null>(null)
   const [kind, setKind] = useState<HeistKind>('npc')
   const [board, setBoard] = useState<TargetBoard | null>(() => peek<TargetBoard>('/api/heists/targets'))
   const [weapons, setWeapons] = useState<OwnedWeapon[]>(() => peek<{ owned: OwnedWeapon[] }>('/api/me/weapons')?.owned ?? [])
@@ -60,7 +65,22 @@ export function HeistsPage() {
     }
   }, [])
 
-  const targets = board ? (kind === 'npc' ? board.npc : board.players) : null
+  const targets = board ? (kind === 'npc' ? board.npc : shownPlayers(board.players, query, pickedId)) : null
+
+  useEffect(() => {
+    const name = params.get('player')
+    const nextKind = params.get('kind')
+    if (nextKind === 'npc' || nextKind === 'player') setKind(nextKind)
+    if (!board || !name) return
+    const pool = nextKind === 'npc' ? board.npc : board.players
+    const found = pool.find((row) => row.username.toLowerCase() === name.toLowerCase())
+    if (!found) return
+    setKind(nextKind === 'npc' ? 'npc' : 'player')
+    setPickedId(found.userId)
+    setQuery(found.username)
+    setTargetId(found.userId)
+    setConfirming(true)
+  }, [params, board])
   const selected = weapons.find((row) => (row.instanceId ?? row.id) === weaponId) ?? null
   const cooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
 
@@ -160,9 +180,50 @@ export function HeistsPage() {
           </TabsTrigger>
         </TabsList>
       </Tabs>
+      {kind === 'player' ? (
+        <div className="relative mt-4 max-w-md">
+          <input
+            className={inputClass}
+            value={query}
+            placeholder="Search a player"
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setPickedId(null)
+            }}
+          />
+          {query.trim() && !pickedId ? (
+            <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto border border-border bg-card">
+              {(board?.players ?? [])
+                .filter((row) => row.username.toLowerCase().includes(query.trim().toLowerCase()))
+                .slice(0, 12)
+                .map((row) => (
+                  <li key={row.userId}>
+                    <button
+                      type="button"
+                      className="block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-accent"
+                      onClick={() => {
+                        setPickedId(row.userId)
+                        setQuery(row.username)
+                        setTargetId(row.userId)
+                      }}
+                    >
+                      {row.username}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {targets === null && !error ? <Notice tone="muted">Reading the board…</Notice> : null}
       {targets && targets.length === 0 ? (
-        <Notice tone="muted">{kind === 'npc' ? 'No crew vault is on the board.' : 'No other player vault is open.'}</Notice>
+        <Notice tone="muted">
+          {kind === 'player' && (board?.players.length ?? 0) > 0
+            ? 'Search a name. Their card opens from the list.'
+            : kind === 'npc'
+              ? 'No crew vault is on the board.'
+              : 'No other player vault is open.'}
+        </Notice>
       ) : null}
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         {targets?.map((row, index) => (
@@ -192,6 +253,9 @@ export function HeistsPage() {
             onPredict={() => void usePredictor()}
             onCommit={() => void commit()}
             onCancel={() => setConfirming(false)}
+            onLocate={() => {
+              if (row.sectorId) navigate(`/map?sector=${encodeURIComponent(row.sectorId)}`)
+            }}
           />
         ))}
       </div>
@@ -230,6 +294,13 @@ export function HeistsPage() {
   )
 }
 
+function shownPlayers(players: Target[], query: string, pickedId: string | null) {
+  const needle = query.trim().toLowerCase()
+  if (pickedId) return players.filter((row) => row.userId === pickedId)
+  if (!needle) return players.length > 8 ? [] : players
+  return players.filter((row) => row.username.toLowerCase().includes(needle))
+}
+
 function Dossier({
   row,
   index,
@@ -250,6 +321,7 @@ function Dossier({
   onPredict,
   onCommit,
   onCancel,
+  onLocate,
 }: {
   row: Target
   index: number
@@ -270,16 +342,22 @@ function Dossier({
   onPredict: () => void
   onCommit: () => void
   onCancel: () => void
+  onLocate: () => void
 }) {
   const vulnerability = row.vulnerable ? 'HIGH' : 'LOW'
   const location = row.sectorId ? row.sectorId.replace('velmora-', 'SECTOR ').toUpperCase() : 'UNPLACED'
   return (
     <article className="relative overflow-hidden border border-border bg-card p-5">
       <div className="absolute top-4 right-4 font-mono text-[9px] text-destructive">FILE H-{104 + index}</div>
-      <svg viewBox="0 0 24 24" className="mb-12 h-6 w-6 text-destructive" aria-hidden="true">
-        <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
+      <div className="mb-12 flex items-center gap-3">
+        <svg viewBox="0 0 24 24" className="h-6 w-6 text-destructive" aria-hidden="true">
+          <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+        <button type="button" className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary disabled:opacity-40" disabled={!row.sectorId} onClick={onLocate}>
+          Locate
+        </button>
+      </div>
       <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>
       <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{row.username}</h2>
       <div className="my-5 grid grid-cols-2 gap-4 border-y border-border py-4">

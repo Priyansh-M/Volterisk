@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Btn, Field, Notice, PageTitle, inputClass } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, api, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 import type { VaultView } from '../lib/types.ts'
@@ -20,18 +20,18 @@ const notes: Record<number, string> = {
 
 export function VaultPage() {
   const { me, refresh } = useAuth()
-  const [vault, setVault] = useState<VaultView | null>(null)
+  const [vault, setVault] = useState<VaultView | null>(() => peek<VaultView>('/api/me/vault'))
   const [amount, setAmount] = useState('5000')
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function load() {
-    setVault(await api<VaultView>('/api/me/vault'))
+  async function reload() {
+    setVault(await load<VaultView>('/api/me/vault'))
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the vault.'))
+    reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the vault.'))
   }, [])
 
   async function upgrade() {
@@ -59,7 +59,7 @@ export function VaultPage() {
         method: 'POST',
         body: JSON.stringify({ amount: Number(amount) }),
       })
-      await load()
+      await reload()
       await refresh()
       setNote('Moved to cash.')
     } catch (err) {
@@ -69,42 +69,43 @@ export function VaultPage() {
     }
   }
 
-  if (!vault && !error) return <Notice tone="muted">Opening the vault…</Notice>
-  if (!vault) return <Notice tone="danger">{error}</Notice>
+  const shown = vault ?? (me ? { balance: me.vault.balance, level: me.vault.level, maxLevel: 5, upgradeCost: null, tier: 'standard', tierLabel: 'Standard Vault' } : null)
+  if (!shown && !error) return <Notice tone="muted">Opening the vault…</Notice>
+  if (!shown) return <Notice tone="danger">{error}</Notice>
 
   return (
     <div className="space-y-4">
       <PageTitle kicker="Facility">Vault facility</PageTitle>
-      {vault.tierLabel ? (
+      {shown.tierLabel ? (
         <section className="border border-border bg-card p-5">
-          <p className="font-mono text-[9px] uppercase text-primary">{vault.tierLabel}</p>
-          <p className="font-display text-4xl font-semibold uppercase">Level {vault.level}</p>
-          <p className="mt-2 text-sm text-muted-foreground">Defense {vault.defense} · Capacity {vault.capacity ? money(vault.capacity) : '—'}</p>
+          <p className="font-mono text-[9px] uppercase text-primary">{shown.tierLabel}</p>
+          <p className="font-display text-4xl font-semibold uppercase">Level {shown.level}</p>
+          <p className="mt-2 text-sm text-muted-foreground">Defense {shown.defense} · Capacity {shown.capacity ? money(shown.capacity) : '—'}</p>
           <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono uppercase">
             {['standard', 'silver', 'gold', 'diamond'].map((tier) => (
-              <span key={tier} className={`border px-2 py-1 ${vault.tier === tier ? 'border-primary text-primary' : 'border-border text-muted-foreground'}`}>{tier}</span>
+              <span key={tier} className={`border px-2 py-1 ${shown.tier === tier ? 'border-primary text-primary' : 'border-border text-muted-foreground'}`}>{tier}</span>
             ))}
           </div>
-          <p className="mt-4 text-sm">Secured {vault.secured != null ? money(vault.secured) : '—'} · Exposed {vault.exposed != null ? money(vault.exposed) : '—'}</p>
-          {vault.next ? (
+          <p className="mt-4 text-sm">Secured {shown.secured != null ? money(shown.secured) : '—'} · Exposed {shown.exposed != null ? money(shown.exposed) : '—'}</p>
+          {shown.next ? (
             <p className="mt-3 text-sm">
-              Next upgrade: {vault.next.tierLabel} level {vault.next.level} · defense {vault.next.defense}
-              {vault.upgradeCost ? ` · ${money(vault.upgradeCost)}` : ''}
+              Next upgrade: {shown.next.tierLabel} level {shown.next.level} · defense {shown.next.defense}
+              {shown.upgradeCost ? ` · ${money(shown.upgradeCost)}` : ''}
             </p>
           ) : null}
           <div className="mt-4">
             <Btn
-              variant={vault.insured ? 'ghost' : 'gold'}
+              variant={shown.insured ? 'ghost' : 'gold'}
               disabled={busy}
               onClick={() => {
                 setBusy(true)
-                api('/api/vault/insurance', { method: 'POST', body: JSON.stringify({ enabled: !vault.insured }) })
-                  .then(() => load())
+                api('/api/vault/insurance', { method: 'POST', body: JSON.stringify({ enabled: !shown.insured }) })
+                  .then(() => reload())
                   .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Insurance did not file.'))
                   .finally(() => setBusy(false))
               }}
             >
-              {vault.insured ? 'Drop insurance' : 'Vault insurance · $4,000 / day · 60% cover'}
+              {shown.insured ? 'Drop insurance' : 'Vault insurance · $4,000 / day · 60% cover'}
             </Btn>
           </div>
         </section>
@@ -114,24 +115,24 @@ export function VaultPage() {
           <div className="grid min-h-[280px] place-items-center border border-line/80 bg-ink">
             <div className="w-[70%] border border-gold/30 p-6 text-center">
               <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Inner cage</p>
-              <p className="mt-2 font-serif text-4xl text-gold">{money(vault.balance)}</p>
-              <p className="mt-2 text-sm text-muted">Level {vault.level} of {vault.maxLevel}</p>
+              <p className="mt-2 font-serif text-4xl text-gold">{money(shown.balance)}</p>
+              <p className="mt-2 text-sm text-muted">Level {shown.level} of {shown.maxLevel}</p>
             </div>
           </div>
-          <p className="mt-4 text-sm text-muted">{notes[vault.level] ?? notes[1]}</p>
+          <p className="mt-4 text-sm text-muted">{notes[shown.level] ?? notes[1]}</p>
         </section>
         <aside className="space-y-4 border border-line bg-panel p-4">
           <dl className="space-y-3 text-sm">
-            <Row label="Balance" value={money(vault.balance)} gold />
+            <Row label="Balance" value={money(shown.balance)} gold />
             <Row label="Pocket" value={me ? money(me.cash) : '—'} gold />
-            <Row label="Level" value={`${vault.level} / ${vault.maxLevel}`} />
-            <Row label="Protection" value={`Level ${vault.level}`} />
+            <Row label="Level" value={`${shown.level} / ${shown.maxLevel}`} />
+            <Row label="Protection" value={`Level ${shown.level}`} />
           </dl>
-          {vault.upgradeCost === null ? (
+          {shown.upgradeCost === null ? (
             <p className="text-sm text-muted">This vault is finished.</p>
           ) : (
             <Btn variant="gold" disabled={busy} onClick={() => void upgrade()}>
-              Upgrade for {money(vault.upgradeCost)}
+              Upgrade for {money(shown.upgradeCost)}
             </Btn>
           )}
           <form className="space-y-2" onSubmit={(event) => void withdraw(event)}>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ApiError, api } from '../lib/api.ts'
 import type { MapPin, PublicCard } from '../lib/types.ts'
 import {
@@ -21,6 +22,7 @@ type Props = {
   claimHint?: string | null
   busy: boolean
   loading?: boolean
+  focusSectorId?: string | null
   onClaim: (sector: Sector) => void
   className?: string
   /** Onboarding only. The live map does not nag after login. */
@@ -34,7 +36,8 @@ function fitCamera(width: number, height: number): Cam {
   return { k, x: (WORLD.width - viewW) / 2, y: (WORLD.height - viewH) / 2 }
 }
 
-export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = false, onClaim, className = '', showHint = false }: Props) {
+export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = false, focusSectorId = null, onClaim, className = '', showHint = false }: Props) {
+  const navigate = useNavigate()
   const frame = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const camRef = useRef<Cam>({ x: 0, y: 0, k: 0.4 })
@@ -72,6 +75,19 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    if (!focusSectorId || !size.w || !size.h) return
+    const sector = sectorById.get(focusSectorId)
+    if (!sector) return
+    const k = Math.max(fitK.current * 2.4, 1.4)
+    const next = { k, x: sector.cx - size.w / 2 / k, y: sector.cy - size.h / 2 / k }
+    userMoved.current = true
+    camRef.current = next
+    setCam(next)
+    setPinned(sector)
+    setTip({ x: 24, y: 24 })
+  }, [focusSectorId, size.w, size.h])
 
   useEffect(() => {
     const frameId = requestAnimationFrame(() => setSquaresOn(true))
@@ -408,7 +424,9 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
           </p>
           <p className="mt-1 font-mono text-[12px] tracking-[0.08em]">{focus.id.toUpperCase()}</p>
           <p className="mt-1 text-[12px] text-[#3c3a36]">
-            {focus.landmassName} · {focus.regionName}
+            {focusPin && !focusPin.isYou && !focusPin.isNpc
+              ? focusPin.player.username
+              : `${focus.regionName}`}
           </p>
           {focusPin && card ? (
             <dl className="mt-2 space-y-1 border-t border-[#1c1c1c]/15 pt-2 text-[12px]">
@@ -422,6 +440,19 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
               <Row label="Heists" value={String(card.successfulHeists)} />
               {card.failedHeists !== undefined ? <Row label="Misses" value={String(card.failedHeists)} /> : null}
             </dl>
+          ) : null}
+          {pinned && focusPin && !focusPin.isYou ? (
+            <button
+              type="button"
+              className="gloss-gold mt-2 w-full cursor-pointer px-3 py-1.5 text-sm font-medium"
+              onClick={() =>
+                navigate(
+                  `/heists?player=${encodeURIComponent(focusPin.player.username)}&kind=${focusPin.isNpc ? 'npc' : 'player'}`,
+                )
+              }
+            >
+              Prepare heist
+            </button>
           ) : null}
           {pinned && !focusPin && canClaim ? (
             <button

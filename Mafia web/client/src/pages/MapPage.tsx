@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { WorldMap, claimErrorCopy } from '../components/WorldMap.tsx'
 import { Notice, PageTitle } from '../components/ui.tsx'
 import { ApiError, api, isMissing, load, peek } from '../lib/api.ts'
@@ -18,6 +18,7 @@ export function MapPage() {
 
 function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
   const { me, refresh } = useAuth()
+  const [params] = useSearchParams()
   const [pins, setPins] = useState<MapPin[] | null>(() => peek<{ bases: MapPin[] }>('/api/map/bases')?.bases ?? null)
   const [pinNote, setPinNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -120,6 +121,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
           className={onboarding ? 'h-[calc(100vh-9rem)] min-h-[480px]' : ''}
           showHint={onboarding}
           loading={pins === null}
+          focusSectorId={params.get('sector')}
           pins={pins ?? []}
           canClaim={!needsKit && needsBase}
           claimHint={needsKit ? 'Take the kit before you plant a flag.' : needsBase ? null : 'This square is for reading. Your base is already filed.'}
@@ -141,20 +143,12 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
                 Open the ledger
               </Link>
             ) : null}
-            <p className="mt-4 text-[11px] tracking-[0.14em] text-muted uppercase">Stations</p>
-            <ul className="mt-2 max-h-64 space-y-2 overflow-auto text-sm">
-              {pins && pins.length === 0 ? <li className="text-muted">No bases filed.</li> : null}
-              {pins?.map((pin) => (
-                <li key={pin.sectorId} className="border-b border-line/70 pb-2">
-                  <p className={pin.isYou ? 'text-gold' : pin.isNpc ? 'text-[#c47a72]' : ''}>
-                    {pin.player.username}
-                    {pin.isNpc ? <span className="ml-2 text-[10px] tracking-[0.14em] text-muted">NPC</span> : null}
-                  </p>
-                  <p className="text-[12px] text-muted">
-                    {pin.regionName} · {pin.sectorId.toUpperCase()}
-                  </p>
-                </li>
-              ))}
+            <p className="mt-5 text-[11px] tracking-[0.14em] text-muted uppercase">Legend</p>
+            <ul className="mt-2 space-y-2 text-sm">
+              <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#2e9e48]" /> Yours</li>
+              <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#c45c26]" /> NPC</li>
+              <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#2f5f9e]" /> Player</li>
+              <li className="flex items-center gap-2"><span className="h-3 w-3 border border-[#1c1c1c] bg-[#f7f1e4]" /> Open</li>
             </ul>
           </aside>
         )}
