@@ -18,6 +18,7 @@ model User {
   cameraLevel      Int       @default(0)
   passiveJobId     String?
   passivePaidFor   DateTime?
+  reputationLevel  Int       @default(1)
   starterClaimedAt DateTime?
   createdAt        DateTime  @default(now())
 

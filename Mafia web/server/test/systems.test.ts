@@ -362,3 +362,51 @@ describe("work board", () => {
     ).toBe(1);
   });
 });
+
+describe("reputation", () => {
+  it("starts at level 1 and pays 50000 when the first rung is claimed", async () => {
+    const player = await registerUser("Nell Crowe");
+    const opening = await request(app).get("/api/reputation").set(auth(player.token));
+    expect(opening.status).toBe(200);
+    expect(opening.body.level).toBe(1);
+    expect(opening.body.nextLevel).toBe(2);
+    expect(opening.body.ready).toBe(false);
+    expect(opening.body.conditions.map((row: { label: string }) => row.label)).toEqual([
+      "Buy Garage",
+      "Buy Car",
+      "Have a passive income job",
+    ]);
+
+    const early = await request(app).post("/api/reputation/claim").set(auth(player.token)).send({});
+    expect(early.status).toBe(400);
+    expect(early.body.code).toBe("NOT_READY");
+
+    await prisma.user.update({ where: { id: player.id }, data: { cash: 200_000, passiveJobId: "volunteer" } });
+    await prisma.property.createMany({
+      data: [
+        { userId: player.id, catalogId: "garage", level: 1 },
+        { userId: player.id, catalogId: "car", level: 1 },
+      ],
+    });
+
+    const ready = await request(app).get("/api/reputation").set(auth(player.token));
+    expect(ready.body.ready).toBe(true);
+    expect(ready.body.reward).toBe(50_000);
+
+    const claimed = await request(app).post("/api/reputation/claim").set(auth(player.token)).send({});
+    expect(claimed.status).toBe(200);
+    expect(claimed.body.level).toBe(2);
+    expect(claimed.body.nextLevel).toBe(3);
+    expect(claimed.body.ready).toBe(false);
+    expect(claimed.body.cash).toBe(200_000 + 50_000);
+    expect(claimed.body.conditions.map((row: { label: string }) => row.label)).toContain("Own a Hangar");
+
+    const me = await request(app).get("/api/me").set(auth(player.token));
+    expect(me.body.level).toBe(2);
+    expect(me.body.title).toBe("Corner Fixer");
+
+    const again = await request(app).post("/api/reputation/claim").set(auth(player.token)).send({});
+    expect(again.status).toBe(400);
+    expect(again.body.code).toBe("NOT_READY");
+  });
+});

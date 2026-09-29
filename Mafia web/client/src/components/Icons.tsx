@@ -478,6 +478,16 @@ export function IconProperty(props: IconProps) {
   )
 }
 
+export function IconRank(props: IconProps) {
+  return (
+    <svg {...shellGlyph(props)}>
+      <path d="M5 19V11" />
+      <path d="M12 19V6" />
+      <path d="M19 19V3" />
+    </svg>
+  )
+}
+
 export function IconFlame(props: IconProps) {
   return (
     <svg {...shellGlyph(props)}>

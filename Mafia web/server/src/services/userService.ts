@@ -8,7 +8,6 @@ import {
   maxDurability,
   minutesAgo,
   minutesFromNow,
-  playerLevelFromHeists,
   titleForLevel,
   weaponById,
 } from "../game/rules.js";
@@ -187,7 +186,7 @@ export async function getProfile(userId: string) {
   ]);
 
   const successfulHeists = won._count;
-  const level = playerLevelFromHeists(successfulHeists);
+  const level = user.reputationLevel;
   const equipped = user.weapons[0];
   const standing = await publicProfileFor(userId);
   return {
@@ -257,7 +256,7 @@ export async function getLeaderboard() {
     .map((user) => ({
       username: user.username,
       netWorth: user.cash + (user.vault?.balance ?? 0),
-      level: playerLevelFromHeists(wins.get(user.id) ?? 0),
+      level: user.reputationLevel,
       successfulHeists: wins.get(user.id) ?? 0,
       base: user.base?.regionName ?? null,
     }))

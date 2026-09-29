@@ -13,6 +13,7 @@ import { MarketPage } from './pages/MarketPage.tsx'
 import { NotificationsPage } from './pages/NotificationsPage.tsx'
 import { OnboardingPage } from './pages/OnboardingPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
+import { ReputationPage } from './pages/ReputationPage.tsx'
 import { PropertiesPage } from './pages/PropertiesPage.tsx'
 import { RegisterPage } from './pages/RegisterPage.tsx'
 import { VaultPage } from './pages/VaultPage.tsx'
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/assets" element={<PropertiesPage />} />
         <Route path="/properties" element={<Navigate to="/assets" replace />} />
         <Route path="/work" element={<WorkPage />} />
+        <Route path="/reputation" element={<ReputationPage />} />
         <Route path="/achievements" element={<AchievementsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />

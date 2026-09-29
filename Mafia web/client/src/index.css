@@ -119,3 +119,11 @@ select {
 .animate-heist {
   animation: heist-pop 480ms ease-out both;
 }
+
+.rep-bar-fill {
+  transition: width 700ms ease;
+}
+
+.rep-shift .rep-label {
+  animation: dossier-enter 700ms ease;
+}

@@ -1,4 +1,4 @@
-import { playerLevelFromHeists, titleForLevel, wealthBandLabel } from "../game/rules.js";
+import { titleForLevel, wealthBandLabel } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 
 /**
@@ -48,7 +48,7 @@ export async function loadPublicProfiles(): Promise<Map<string, PublicProfile>> 
   const index = new Map<string, PublicProfile>();
   ranked.forEach((row, position) => {
     const successfulHeists = wins.get(row.user.id) ?? 0;
-    const level = playerLevelFromHeists(successfulHeists);
+    const level = row.user.reputationLevel;
     index.set(row.user.id, {
       userId: row.user.id,
       username: row.user.username,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
+import { ReputationAlert } from './ReputationAlert.tsx'
 import { api, prefetch } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { heatFromJobs, money } from '../lib/format.ts'
@@ -17,6 +18,7 @@ import {
   IconSignal,
   IconVault,
   IconContract,
+  IconRank,
 } from './Icons.tsx'
 
 const warm: Record<string, string[]> = {
@@ -27,6 +29,7 @@ const warm: Record<string, string[]> = {
   '/arsenal': ['/api/me/weapons', '/api/shop'],
   '/vault': ['/api/me/vault'],
   '/work': ['/api/work/contracts'],
+  '/reputation': ['/api/reputation'],
   '/map': ['/api/map/bases'],
   '/leaderboard': ['/api/leaderboard'],
 }
@@ -39,6 +42,7 @@ const links = [
   { to: '/market', label: 'Marketplace', end: false, Icon: IconBoard },
   { to: '/assets', label: 'Assets', end: false, Icon: IconProperty },
   { to: '/work', label: 'Work', end: false, Icon: IconContract },
+  { to: '/reputation', label: 'Reputation', end: false, Icon: IconRank },
   { to: '/map', label: 'Map', end: false, Icon: IconMap },
   { to: '/achievements', label: 'Achievements', end: false, Icon: IconSeal },
   { to: '/profile', label: 'Profile', end: false, Icon: IconProfile },
@@ -54,6 +58,7 @@ const pageMeta: Record<string, [string, string]> = {
   '/assets': ['Assets', 'Properties and vehicles you already hold.'],
   '/properties': ['Assets', 'Properties and vehicles you already hold.'],
   '/work': ['Contract Board', 'Select underground work by reward, risk, and location.'],
+  '/reputation': ['Reputation', 'The level on your file. Work and your rank read this ladder.'],
   '/map': ['World Intelligence', 'Monitor territories and inspect the network.'],
   '/achievements': ['Criminal Record', 'Archived milestones, sealed cases, and distinctions.'],
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
@@ -98,6 +103,7 @@ export function Shell() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <LedgerAlerts onChange={recount} />
+      <ReputationAlert />
       {mobileOpen ? (
         <button aria-label="Close navigation overlay" className="fixed inset-0 z-40 bg-background/75 lg:hidden" onClick={() => setMobileOpen(false)} />
       ) : null}

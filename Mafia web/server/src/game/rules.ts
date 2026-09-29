@@ -173,6 +173,7 @@ export const RULES = {
     { minLevel: 1, title: "Street Operator" },
     { minLevel: 2, title: "Corner Fixer" },
     { minLevel: 3, title: "Night Courier" },
+    { minLevel: 4, title: "Block Captain" },
     { minLevel: 5, title: "Safehouse Broker" },
     { minLevel: 7, title: "Ward Lieutenant" },
     { minLevel: 10, title: "Vault Specialist" },
@@ -180,6 +181,66 @@ export const RULES = {
     { minLevel: 18, title: "Shadow Underboss" },
     { minLevel: 25, title: "Iron Hour Kingpin" },
   ] as { minLevel: number; title: string }[],
+  /**
+   * Reputation is the player level. Claiming a rung pays the reward and
+   * raises the level that work and the dossier use. Everyone starts at 1.
+   * Level 5 finishes every holding that the earlier rungs left short of level 5.
+   */
+  REPUTATION_MAX_LEVEL: 5,
+  REPUTATION: [
+    {
+      level: 2,
+      reward: 50_000,
+      conditions: [
+        { kind: "asset", id: "garage", minLevel: 1, label: "Buy Garage" },
+        { kind: "asset", id: "car", minLevel: 1, label: "Buy Car" },
+        { kind: "passive", label: "Have a passive income job" },
+      ],
+    },
+    {
+      level: 3,
+      reward: 20_000,
+      conditions: [
+        { kind: "asset", id: "hangar", minLevel: 1, label: "Own a Hangar" },
+        { kind: "asset", id: "airplane", minLevel: 1, label: "Own an Airplane" },
+        { kind: "asset", id: "garage", minLevel: 2, label: "Upgrade Garage to level 2" },
+        { kind: "asset", id: "car", minLevel: 2, label: "Upgrade Car to level 2" },
+        { kind: "asset", id: "bike", minLevel: 1, label: "Own a Bike" },
+      ],
+    },
+    {
+      level: 4,
+      reward: 500_000,
+      conditions: [
+        { kind: "asset", id: "hangar", minLevel: 3, label: "Upgrade Hangar to level 3" },
+        { kind: "asset", id: "airplane", minLevel: 3, label: "Upgrade Airplane to level 3" },
+        { kind: "asset", id: "truck", minLevel: 1, label: "Own a Truck" },
+        { kind: "asset", id: "bike", minLevel: 3, label: "Upgrade Bike to level 3" },
+        { kind: "asset", id: "front", minLevel: 1, label: "Own a Front Business" },
+        { kind: "asset", id: "front", minLevel: 3, label: "Upgrade Front Business to level 3" },
+      ],
+    },
+    {
+      level: 5,
+      reward: 1_000_000,
+      conditions: [
+        { kind: "asset", id: "garage", minLevel: 5, label: "Upgrade Garage to level 5" },
+        { kind: "asset", id: "car", minLevel: 5, label: "Upgrade Car to level 5" },
+        { kind: "asset", id: "hangar", minLevel: 5, label: "Upgrade Hangar to level 5" },
+        { kind: "asset", id: "airplane", minLevel: 5, label: "Upgrade Airplane to level 5" },
+        { kind: "asset", id: "bike", minLevel: 5, label: "Upgrade Bike to level 5" },
+        { kind: "asset", id: "truck", minLevel: 5, label: "Upgrade Truck to level 5" },
+        { kind: "asset", id: "front", minLevel: 5, label: "Upgrade Front Business to level 5" },
+        { kind: "asset", id: "safehouse", minLevel: 5, label: "Buy Safehouse and upgrade it to level 5" },
+        { kind: "asset", id: "caravan", minLevel: 5, label: "Buy Caravan and upgrade it to level 5" },
+        { kind: "asset", id: "warehouse", minLevel: 5, label: "Buy Warehouse and upgrade it to level 5" },
+      ],
+    },
+  ] as {
+    level: number;
+    reward: number;
+    conditions: { kind: "asset" | "passive"; id?: string; minLevel?: number; label: string }[];
+  }[],
   /**
    * Public wealth bands. Net worth is only ever reported as one of these labels,
    * so an exact cash or vault figure never leaves the server for another player.
@@ -317,7 +378,7 @@ export const RULES = {
     {
       id: "armoured-tail",
       name: "Armoured Tail",
-      minLevel: 6,
+      minLevel: 5,
       durationMinutes: 95,
       reward: 96_000,
       risk: "HIGH",
@@ -326,7 +387,7 @@ export const RULES = {
     {
       id: "vault-survey",
       name: "Vault Survey",
-      minLevel: 8,
+      minLevel: 5,
       durationMinutes: 120,
       reward: 165_000,
       risk: "HIGH",

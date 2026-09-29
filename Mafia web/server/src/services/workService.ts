@@ -4,7 +4,6 @@ import {
   RULES,
   minutesAgo,
   minutesFromNow,
-  playerLevelFromHeists,
   workContractById,
   workDifficulty,
   workRequirementLabel,
@@ -27,8 +26,8 @@ function offeredContracts(now: Date) {
 }
 
 async function playerLevel(userId: string): Promise<number> {
-  const wins = await prisma.heist.count({ where: { attackerId: userId, success: true } });
-  return playerLevelFromHeists(wins);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { reputationLevel: true } });
+  return user?.reputationLevel ?? 1;
 }
 
 function presentActive(run: ContractRun, now: Date) {
@@ -123,8 +122,8 @@ export async function acceptContract(userId: string, contractId: string) {
   const active = await withSqliteRetry(() =>
     prisma.$transaction(async (tx) => {
       const now = new Date();
-      const wins = await tx.heist.count({ where: { attackerId: userId, success: true } });
-      const level = playerLevelFromHeists(wins);
+      const standing = await tx.user.findUnique({ where: { id: userId }, select: { reputationLevel: true } });
+      const level = standing?.reputationLevel ?? 1;
       if (level < definition.minLevel) {
         throw new GameError(403, "LEVEL_LOCKED", `That job needs level ${definition.minLevel}.`);
       }
