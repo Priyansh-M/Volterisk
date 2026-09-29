@@ -1,8 +1,24 @@
+export type Onboarding = {
+  needsIntro: boolean
+  hasClaimedStarter: boolean
+  hasBase: boolean
+}
+
+export type PlayerBase = {
+  sectorId: string
+  landmassId: string
+  regionName: string
+}
+
 export type Profile = {
   id: string
   username: string
   level: number
+  title: string
+  rank: number
   cash: number
+  onboarding: Onboarding
+  base: PlayerBase | null
   vault: { balance: number; level: number }
   equippedWeapon: {
     id: string
@@ -46,6 +62,14 @@ export type Target = {
   vulnerable: boolean
 }
 
+/** `player` is the heist kind. The targets payload names that list `players`. */
+export type HeistKind = 'npc' | 'player'
+
+export type TargetBoard = {
+  npc: Target[]
+  players: Target[]
+}
+
 export type HeistResult = {
   id: string
   success: boolean
@@ -78,6 +102,72 @@ export type Leaderboard = {
     amount: number
     createdAt: string
   }[]
+}
+
+export type PublicCard = {
+  username: string
+  title: string
+  level: number
+  rank: number
+  estimatedWealth: string
+  properties: number
+  weapons: number
+  successfulHeists: number
+  failedHeists?: number
+  base?: PlayerBase | null
+}
+
+export type MapPin = {
+  sectorId: string
+  landmassId: string
+  regionName: string
+  isYou: boolean
+  player: PublicCard
+}
+
+export type WorkOffer = {
+  id: string
+  name: string
+  minLevel: number
+  durationMinutes: number
+  reward: number
+  risk: string
+  locationLabel: string
+  requirement: string
+  locked: boolean
+  available: boolean
+  cooldownEndsAt: string | null
+}
+
+export type ActiveContract = {
+  id: string
+  contractId: string
+  name: string
+  reward: number
+  risk: string
+  locationLabel: string
+  acceptedAt: string
+  completesAt: string
+  ready: boolean
+}
+
+export type WorkBoard = {
+  active: ActiveContract | null
+  contracts: WorkOffer[]
+}
+
+export type StarterClaim = {
+  cash: number
+  items: { id: string; name: string; label: string; level: number }[]
+}
+
+export type GameNotice = {
+  id: string
+  title: string
+  body: string
+  read?: boolean
+  severity?: string
+  createdAt: string
 }
 
 export type VaultView = {

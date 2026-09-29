@@ -13,7 +13,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (!loading && me) return <Navigate to="/" replace />
+  if (!loading && me) return <Navigate to={me.onboarding.hasBase ? '/' : '/map'} replace />
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -25,7 +25,7 @@ export function LoginPage() {
         body: JSON.stringify({ username, password }),
       })
       await login(result.token)
-      navigate('/')
+      navigate(result.user.onboarding.hasBase ? '/' : '/map')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in.')
     } finally {

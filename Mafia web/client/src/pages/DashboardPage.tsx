@@ -33,7 +33,9 @@ export function DashboardPage() {
         <Panel>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">Safehouse</p>
           <p className="mt-1 font-serif text-2xl">{me.username}</p>
-          <p className="text-sm text-muted">Level {me.level}</p>
+          <p className="text-sm text-muted">
+            {me.title} · Level {me.level}
+          </p>
           <ul className="mt-4 space-y-3 text-sm">
             <li className="flex justify-between gap-3">
               <span className="text-muted">Cash</span>
@@ -47,6 +49,10 @@ export function DashboardPage() {
               <span className="text-muted">Weapons owned</span>
               <span>{weapons ? weapons.length : '—'}</span>
             </li>
+            <li className="flex justify-between gap-3">
+              <span className="text-muted">Base</span>
+              <span>{me.base ? me.base.regionName : 'Unfiled'}</span>
+            </li>
             <li className="flex justify-between gap-3 text-muted/70">
               <span>Crew</span>
               <span className="text-[10px] uppercase tracking-[0.16em]">Soon</span>
@@ -57,6 +63,9 @@ export function DashboardPage() {
             </li>
           </ul>
           <div className="mt-5 flex flex-wrap gap-2">
+            <Link to="/map" className="nav-pill rounded-full px-3 py-1.5 text-sm text-paper no-underline">
+              Open chart
+            </Link>
             <Link to="/city" className="nav-pill rounded-full px-3 py-1.5 text-sm text-paper no-underline">
               Open city
             </Link>

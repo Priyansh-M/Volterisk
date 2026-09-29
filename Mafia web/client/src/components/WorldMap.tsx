@@ -1,0 +1,451 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ApiError, api } from '../lib/api.ts'
+import type { MapPin, PublicCard } from '../lib/types.ts'
+import {
+  ISLANDS,
+  LANDMASSES,
+  SEA_LABELS,
+  SECTORS,
+  WORLD,
+  sectorById,
+  openPath,
+  sectorAt,
+  sectorsInView,
+  toPath,
+  type Sector,
+} from '../lib/world.ts'
+
+type Cam = { x: number; y: number; k: number }
+
+type Props = {
+  pins: MapPin[]
+  canClaim: boolean
+  claimHint?: string | null
+  busy: boolean
+  onClaim: (sector: Sector) => void
+}
+
+const SECTOR_ZOOM = 2.35
+
+function fitCamera(width: number, height: number): Cam {
+  const k = Math.min(width / WORLD.width, height / WORLD.height) * 0.92
+  const viewW = width / k
+  const viewH = height / k
+  return { k, x: (WORLD.width - viewW) / 2, y: (WORLD.height - viewH) / 2 }
+}
+
+export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim }: Props) {
+  const frame = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const camRef = useRef<Cam>({ x: 0, y: 0, k: 0.4 })
+  const fitK = useRef(0.4)
+  const drag = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
+  const userMoved = useRef(false)
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  const [cam, setCam] = useState<Cam>({ x: 0, y: 0, k: 0.4 })
+  const [hover, setHover] = useState<Sector | null>(null)
+  const [pinned, setPinned] = useState<Sector | null>(null)
+  const [tip, setTip] = useState({ x: 16, y: 16 })
+  const [dossier, setDossier] = useState<PublicCard | null>(null)
+
+  const pinBySector = useMemo(() => new Map(pins.map((pin) => [pin.sectorId, pin])), [pins])
+  const focus = pinned ?? hover
+  const focusPin = focus ? pinBySector.get(focus.id) ?? null : null
+  const showSectors = size.w > 0 && cam.k >= fitK.current * SECTOR_ZOOM
+
+  useEffect(() => {
+    camRef.current = cam
+  }, [cam])
+
+  useEffect(() => {
+    const el = frame.current
+    if (!el) return
+    const measure = () => {
+      const rect = el.getBoundingClientRect()
+      setSize({ w: Math.max(rect.width, 1), h: Math.max(rect.height, 1) })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!size.w || !size.h || userMoved.current) return
+    const next = fitCamera(size.w, size.h)
+    fitK.current = next.k
+    camRef.current = next
+    setCam(next)
+  }, [size.w, size.h])
+
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const sx = event.clientX - rect.left
+      const sy = event.clientY - rect.top
+      const current = camRef.current
+      const worldX = current.x + sx / current.k
+      const worldY = current.y + sy / current.k
+      userMoved.current = true
+      const nextK = Math.min(Math.max(current.k * (event.deltaY < 0 ? 1.12 : 0.9), fitK.current * 0.85), fitK.current * 14)
+      const next = { k: nextK, x: worldX - sx / nextK, y: worldY - sy / nextK }
+      camRef.current = next
+      setCam(next)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [size.w])
+
+  useEffect(() => {
+    const name = focusPin?.player.username
+    if (!name || name === 'Unknown') {
+      setDossier(null)
+      return
+    }
+    setDossier(null)
+    let cancelled = false
+    api<PublicCard>(`/api/players/${encodeURIComponent(name)}/public`)
+      .then((card) => {
+        if (!cancelled) setDossier(card)
+      })
+      .catch(() => {
+        if (!cancelled) setDossier(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [focusPin?.player.username])
+
+  const visible = useMemo(() => {
+    if (!showSectors || cam.k <= 0) return []
+    const view = { x: cam.x, y: cam.y, w: size.w / cam.k, h: size.h / cam.k }
+    return LANDMASSES.flatMap((landmass) => sectorsInView(landmass.id, view))
+  }, [showSectors, cam.x, cam.y, cam.k, size.w, size.h])
+
+  function worldFromEvent(event: { clientX: number; clientY: number }) {
+    const rect = svgRef.current?.getBoundingClientRect()
+    const current = camRef.current
+    if (!rect) return { x: 0, y: 0 }
+    return {
+      x: current.x + (event.clientX - rect.left) / current.k,
+      y: current.y + (event.clientY - rect.top) / current.k,
+    }
+  }
+
+  function placeTip(event: { clientX: number; clientY: number }) {
+    const rect = frame.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = event.clientX - rect.left + 14
+    const y = event.clientY - rect.top + 14
+    setTip({
+      x: x + 230 > rect.width ? Math.max(8, x - 250) : x,
+      y: y + 210 > rect.height ? Math.max(8, y - 220) : y,
+    })
+  }
+
+  function zoomToward(worldX: number, worldY: number, factor: number) {
+    userMoved.current = true
+    const current = camRef.current
+    const nextK = Math.min(Math.max(current.k * factor, fitK.current * 0.85), fitK.current * 14)
+    const next = { k: nextK, x: worldX - size.w / 2 / nextK, y: worldY - size.h / 2 / nextK }
+    camRef.current = next
+    setCam(next)
+  }
+
+  function zoomBy(factor: number) {
+    const current = camRef.current
+    zoomToward(current.x + size.w / 2 / current.k, current.y + size.h / 2 / current.k, factor)
+  }
+
+  const labelSize = 15 / cam.k
+  const seaSize = 11 / cam.k
+  const card = dossier ?? focusPin?.player ?? null
+
+  return (
+    <div
+      ref={frame}
+      className="relative h-[68vh] min-h-[420px] overflow-hidden rounded-2xl border border-[#1c1c1c] bg-[#f1eee6] text-[#1c1c1c] select-none"
+    >
+      <svg
+        ref={svgRef}
+        className="block h-full w-full touch-none"
+        viewBox={`${cam.x} ${cam.y} ${Math.max(size.w / cam.k, 1)} ${Math.max(size.h / cam.k, 1)}`}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return
+          svgRef.current?.setPointerCapture(event.pointerId)
+          drag.current = { px: event.clientX, py: event.clientY, x: camRef.current.x, y: camRef.current.y, moved: false }
+        }}
+        onPointerMove={(event) => {
+          const active = drag.current
+          if (active) {
+            const dx = event.clientX - active.px
+            const dy = event.clientY - active.py
+            if (Math.hypot(dx, dy) > 4) {
+              active.moved = true
+              userMoved.current = true
+            }
+            if (active.moved) {
+              const next = { ...camRef.current, x: active.x - dx / camRef.current.k, y: active.y - dy / camRef.current.k }
+              camRef.current = next
+              setCam(next)
+            }
+            return
+          }
+          const world = worldFromEvent(event)
+          const sector = showSectors ? sectorAt(world.x, world.y) : null
+          setHover(sector)
+          if (sector || pinned) placeTip(event)
+        }}
+        onPointerUp={(event) => {
+          const active = drag.current
+          drag.current = null
+          if (!active || active.moved) return
+          const world = worldFromEvent(event)
+          const sector = sectorAt(world.x, world.y)
+          if (!showSectors) {
+            if (sector) zoomToward(world.x, world.y, 1.9)
+            setPinned(null)
+            return
+          }
+          setPinned(sector)
+          placeTip(event)
+        }}
+        role="application"
+        aria-label="World chart. Drag to pan, scroll to zoom, click a sector to read it."
+      >
+        <defs>
+          <pattern id="chart-grid" width="80" height="80" patternUnits="userSpaceOnUse">
+            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#d4cfc3" strokeWidth="0.7" />
+          </pattern>
+          {LANDMASSES.map((landmass) => (
+            <clipPath id={`coast-${landmass.id}`} key={landmass.id}>
+              <path d={toPath(landmass.polygon)} />
+            </clipPath>
+          ))}
+        </defs>
+        <rect x={-400} y={-400} width={WORLD.width + 800} height={WORLD.height + 800} fill="url(#chart-grid)" />
+        {LANDMASSES.map((landmass) => (
+          <g key={landmass.id}>
+            <path d={toPath(landmass.polygon)} fill="#f7f4ec" stroke="#141414" strokeWidth={1.35} vectorEffect="non-scaling-stroke" />
+            {landmass.borders.map((border, index) => (
+              <path
+                key={index}
+                d={openPath(border)}
+                fill="none"
+                stroke="#141414"
+                strokeWidth={0.8}
+                vectorEffect="non-scaling-stroke"
+                opacity={0.72}
+              />
+            ))}
+          </g>
+        ))}
+        {ISLANDS.map((island, index) => (
+          <path
+            key={index}
+            d={toPath(island)}
+            fill="#f7f4ec"
+            stroke="#141414"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {showSectors
+          ? LANDMASSES.map((landmass) => (
+              <g key={landmass.id} clipPath={`url(#coast-${landmass.id})`}>
+                {visible
+                  .filter((sector) => sector.landmassId === landmass.id)
+                  .map((sector) => {
+                    const pin = pinBySector.get(sector.id)
+                    const hot = focus?.id === sector.id
+                    const fill = pin?.isYou
+                      ? 'rgba(226,192,117,0.72)'
+                      : pin
+                        ? 'rgba(212,101,79,0.38)'
+                        : hot
+                          ? 'rgba(20,20,20,0.08)'
+                          : 'transparent'
+                    return (
+                      <rect
+                        key={sector.id}
+                        x={sector.x}
+                        y={sector.y}
+                        width={sector.w}
+                        height={sector.h}
+                        fill={fill}
+                        stroke="#141414"
+                        strokeWidth={hot ? 1.4 : 0.45}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    )
+                  })}
+              </g>
+            ))
+          : pins.map((pin) => {
+              const sector = sectorById.get(pin.sectorId)
+              if (!sector) return null
+              return (
+                <circle
+                  key={pin.sectorId}
+                  cx={sector.cx}
+                  cy={sector.cy}
+                  r={5 / cam.k}
+                  fill={pin.isYou ? '#c9a24a' : '#8d3d32'}
+                  stroke="#141414"
+                  strokeWidth={0.8}
+                  vectorEffect="non-scaling-stroke"
+                />
+              )
+            })}
+        {!showSectors
+          ? LANDMASSES.map((landmass) => (
+              <text
+                key={landmass.id}
+                x={landmass.label[0]}
+                y={landmass.label[1]}
+                textAnchor="middle"
+                fill="#1c1c1c"
+                fontFamily="Outfit, sans-serif"
+                fontSize={labelSize}
+                letterSpacing={1.6 / cam.k}
+              >
+                {landmass.name.toUpperCase()}
+              </text>
+            ))
+          : null}
+        {SEA_LABELS.map((sea) => (
+          <text
+            key={sea.name}
+            x={sea.at[0]}
+            y={sea.at[1]}
+            textAnchor="middle"
+            fill="#8d877c"
+            fontFamily="Outfit, sans-serif"
+            fontSize={seaSize}
+            letterSpacing={1.4 / cam.k}
+          >
+            {sea.name.toUpperCase()}
+          </text>
+        ))}
+      </svg>
+
+      <div className="pointer-events-none absolute top-3 left-3 text-[10px] font-semibold tracking-[0.22em] text-[#3c3a36] uppercase">
+        Iron Hour · Chart 01
+      </div>
+      <div className="pointer-events-none absolute top-3 right-3 text-right text-[10px] font-semibold tracking-[0.18em] text-[#3c3a36] uppercase">
+        Three coasts
+        <div className="mt-1 tracking-[0.14em] text-[#8d877c]">{SECTORS.length} sectors</div>
+      </div>
+      <div className="pointer-events-none absolute bottom-3 left-3 text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
+        {showSectors ? 'Sector grid' : 'Zoom to read sectors'}
+      </div>
+
+      <div className="absolute right-3 bottom-14 flex flex-col gap-1.5">
+        <ChartButton label="Zoom in" onClick={() => zoomBy(1.25)}>
+          +
+        </ChartButton>
+        <ChartButton label="Zoom out" onClick={() => zoomBy(0.8)}>
+          −
+        </ChartButton>
+        <ChartButton
+          label="Fit chart"
+          onClick={() => {
+            const next = fitCamera(size.w, size.h)
+            fitK.current = next.k
+            camRef.current = next
+            setCam(next)
+          }}
+        >
+          ⌂
+        </ChartButton>
+      </div>
+      <svg viewBox="0 0 64 64" className="pointer-events-none absolute right-3 bottom-3 h-12 w-12 text-[#1c1c1c]" aria-hidden="true">
+        <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" strokeWidth="1" />
+        <path d="M32 12 L35 32 L32 28 L29 32 Z" fill="currentColor" />
+        <path d="M32 52 L29 32 L32 36 L35 32 Z" fill="none" stroke="currentColor" strokeWidth="1" />
+        <text x="32" y="11" textAnchor="middle" fontSize="7" fontFamily="Outfit, sans-serif" fill="currentColor">
+          N
+        </text>
+      </svg>
+
+      {focus && showSectors ? (
+        <aside
+          className={`absolute z-10 w-56 border border-[#1c1c1c] bg-[#f7f4ee] p-2.5 text-[#1c1c1c] shadow-[0_10px_24px_rgba(0,0,0,0.16)] ${
+            pinned ? 'pointer-events-auto' : 'pointer-events-none'
+          }`}
+          style={{ left: tip.x, top: tip.y }}
+        >
+          <p className="text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
+            {focusPin?.isYou ? 'Your base' : focusPin ? 'Occupied' : 'Open sector'}
+          </p>
+          <p className="mt-1 font-mono text-[12px] tracking-[0.08em]">{focus.id.toUpperCase()}</p>
+          <p className="mt-1 text-[12px] text-[#3c3a36]">
+            {focus.landmassName} · {focus.regionName}
+          </p>
+          {focusPin && card ? (
+            <dl className="mt-2 space-y-1 border-t border-[#1c1c1c]/15 pt-2 text-[12px]">
+              <Row label="Name" value={card.username} />
+              <Row label="Title" value={card.title} />
+              <Row label="Level" value={String(card.level)} />
+              <Row label="Rank" value={card.rank ? `#${card.rank}` : '—'} />
+              <Row label="Wealth" value={card.estimatedWealth} />
+              <Row label="Weapons" value={String(card.weapons)} />
+              <Row label="Properties" value={String(card.properties)} />
+              <Row label="Heists" value={String(card.successfulHeists)} />
+              {card.failedHeists !== undefined ? <Row label="Misses" value={String(card.failedHeists)} /> : null}
+            </dl>
+          ) : null}
+          {pinned && !focusPin && canClaim ? (
+            <button
+              type="button"
+              disabled={busy}
+              className="gloss-gold mt-2 w-full cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              onClick={() => onClaim(focus)}
+            >
+              {busy ? 'Filing…' : 'Establish base'}
+            </button>
+          ) : null}
+          {pinned && !focusPin && !canClaim && claimHint ? (
+            <p className="mt-2 text-[11px] text-[#6d6860]">{claimHint}</p>
+          ) : null}
+        </aside>
+      ) : null}
+    </div>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-[10px] tracking-[0.14em] text-[#8d877c] uppercase">{label}</dt>
+      <dd className="truncate text-right">{value}</dd>
+    </div>
+  )
+}
+
+function ChartButton({ label, onClick, children }: { label: string; onClick: () => void; children: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="h-8 w-8 cursor-pointer border border-[#1c1c1c] bg-[#f7f4ee] text-sm text-[#1c1c1c]"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
+export function claimErrorCopy(err: unknown) {
+  if (err instanceof ApiError && err.code === 'SECTOR_OCCUPIED') return 'That sector is already claimed.'
+  if (err instanceof ApiError && err.code === 'ALREADY_HAS_BASE') return 'You already have a base on the chart.'
+  if (err instanceof ApiError && isQuiet(err)) return 'The chart office has not opened claims.'
+  return err instanceof ApiError ? err.message : 'The claim did not file.'
+}
+
+function isQuiet(err: ApiError) {
+  return err.status === 404 || err.status === 501
+}

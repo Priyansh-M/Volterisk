@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
@@ -12,8 +12,9 @@ export function RegisterPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const filed = useRef(false)
 
-  if (!loading && me) return <Navigate to="/" replace />
+  if (!loading && me && !filed.current) return <Navigate to={me.onboarding.hasBase ? '/' : '/map'} replace />
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -24,8 +25,9 @@ export function RegisterPage() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       })
+      filed.current = true
       await login(result.token)
-      navigate('/')
+      navigate('/map')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not open a ledger.')
     } finally {

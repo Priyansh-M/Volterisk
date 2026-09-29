@@ -23,15 +23,25 @@ export class ApiError extends Error {
   }
 }
 
+export function isMissing(err: unknown) {
+  return err instanceof ApiError && (err.status === 404 || err.status === 501)
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
   if (options.body) headers.set('Content-Type', 'application/json')
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const response = await fetch(path, { ...options, headers })
-  const data = (await response.json().catch(() => ({}))) as { error?: string; code?: string }
+  const data = (await response.json().catch(() => ({}))) as {
+    error?: string | { code?: string; message?: string }
+    code?: string
+  }
   if (!response.ok) {
-    throw new ApiError(data.error || response.statusText, response.status, data.code)
+    const nested = data.error && typeof data.error === 'object' ? data.error : null
+    const message = nested?.message || (typeof data.error === 'string' ? data.error : response.statusText)
+    const code = nested?.code || data.code
+    throw new ApiError(message, response.status, code)
   }
   return data as T
 }
