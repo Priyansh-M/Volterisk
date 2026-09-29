@@ -29,7 +29,36 @@ export function signToken(user: { id: string; tokenVersion: number }): string {
   });
 }
 
+/**
+ * The first five catalog ids used to be Crowbar, Lockpick, Drill, Thermal, Vault Breaker.
+ * Those four later tools now sit further down the line, so existing instances move
+ * before the catalog rows are renamed.
+ */
+const LEGACY_WEAPON_MOVES: [string, string][] = [
+  ["weapon:0005", "weapon:0013"],
+  ["weapon:0004", "weapon:0010"],
+  ["weapon:0003", "weapon:0007"],
+  ["weapon:0002", "weapon:0004"],
+];
+
 export async function ensureWeaponCatalog(): Promise<void> {
+  const legacy = await prisma.weapon.findUnique({ where: { id: "weapon:0002" } });
+  if (legacy?.name === "Lockpick Set") {
+    const parked = await prisma.weapon.findMany();
+    for (const row of parked) {
+      await prisma.weapon.update({ where: { id: row.id }, data: { number: 1_000 + row.number } });
+    }
+    for (const [from, to] of LEGACY_WEAPON_MOVES) {
+      const source = await prisma.weapon.findUnique({ where: { id: from } });
+      if (!source) continue;
+      await prisma.weapon.create({
+        data: { id: to, name: source.name, number: 2_000 + source.number },
+      });
+      await prisma.userWeapon.updateMany({ where: { weaponId: from }, data: { weaponId: to } });
+      await prisma.heist.updateMany({ where: { weaponId: from }, data: { weaponId: to } });
+      await prisma.weapon.delete({ where: { id: from } });
+    }
+  }
   for (const weapon of RULES.WEAPONS) {
     await prisma.weapon.upsert({
       where: { id: weapon.id },

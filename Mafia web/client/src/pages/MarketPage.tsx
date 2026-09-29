@@ -163,9 +163,11 @@ export function MarketPage() {
                     <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">Locked</span>
                   ) : null}
                 </div>
+                <p className="mt-1 font-mono text-[10px] tracking-[0.14em] text-muted uppercase">{item.type}</p>
                 <p className="mt-2 flex-1 text-sm text-muted">{item.flavor}</p>
                 <p className="mt-3 font-semibold text-gold">{item.price > 0 ? money(item.price) : 'Issued at signup'}</p>
-                <div className="mt-3">
+                <p className="mt-1 font-mono text-xs text-primary">Attack {item.attacks[0]}–{item.attacks[3]}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
                   {owned ? (
                     owned.equipped ? (
                       <p className="text-sm text-muted">On your person.</p>
@@ -174,7 +176,17 @@ export function MarketPage() {
                         Equip
                       </Btn>
                     )
-                  ) : canBuy ? (
+                  ) : null}
+                  {owned && item.price > 0 ? (
+                    <Btn
+                      variant="gold"
+                      disabled={busy !== null || (me !== null && me.cash < item.price)}
+                      onClick={() => void buy(item.id)}
+                    >
+                      {busy === item.id ? 'Buying…' : `Another ${money(item.price)}`}
+                    </Btn>
+                  ) : null}
+                  {!owned && canBuy ? (
                     <Btn
                       variant="gold"
                       disabled={busy !== null || (me !== null && me.cash < item.price)}
@@ -182,11 +194,9 @@ export function MarketPage() {
                     >
                       {busy === item.id ? 'Buying…' : `Buy ${money(item.price)}`}
                     </Btn>
-                  ) : item.price === 0 ? (
-                    <p className="text-sm text-muted">Starter tool.</p>
-                  ) : (
-                    <Btn disabled>Buy previous first</Btn>
-                  )}
+                  ) : null}
+                  {!owned && item.price === 0 ? <p className="text-sm text-muted">Starter tool.</p> : null}
+                  {locked ? <Btn disabled>Buy previous first</Btn> : null}
                 </div>
               </div>
             </article>

@@ -1,16 +1,10 @@
 /**
  * Every gameplay number lives on this object. Services must not hardcode them.
  *
- * Effective combat level
- * ----------------------
- * effectiveLevel = (weaponNumber - 1) * 3 + upgradeLevel
- *
- * Upgrade level is an integer from WEAPON_MIN_UPGRADE (1) through
- * WEAPON_MAX_UPGRADE (4). Weapon N at upgrade 1 matches weapon N-1 at
- * upgrade 4, because (N-1)*3+1 === (N-2)*3+4.
- *
- * Attack power is listed per level. Weapon N at level 4 matches weapon N+1
- * at level 1. Heists compare that attack to the target vault's defense.
+ * Each weapon has four upgrade levels. Attack is the listed value for that
+ * level, not a formula. Level 4 of a weapon sits one point under level 1 of
+ * the next weapon in the line. Heists compare that attack to vault defense.
+ * A purchase always creates a level 1 instance with its own durability.
  */
 export const RULES = {
   MIN_VAULT_BALANCE: 10_000,
@@ -33,10 +27,20 @@ export const RULES = {
   WEALTH_FORTUNE_AT: 500_000,
   WEAPONS: [
     { id: "weapon:0001", number: 1, name: "Rusty Crowbar", type: "Breaching Tool", tier: 1, description: "Starter weapon. Cheap and reliable, relatively weak.", attacks: [10, 13, 16, 19], baseUses: 50 },
-    { id: "weapon:0002", number: 2, name: "Lockpick Set", type: "Infiltration Tool", tier: 2, description: "Steadier against low and medium security vaults.", attacks: [19, 23, 27, 31], baseUses: 20 },
-    { id: "weapon:0003", number: 3, name: "Advanced Drill", type: "Mechanical Breach", tier: 3, description: "High attack, and loud enough that the street notices.", attacks: [31, 36, 41, 46], baseUses: 25 },
-    { id: "weapon:0004", number: 4, name: "Thermal Cutter", type: "High-Power Breach", tier: 4, description: "Cuts reinforced vaults that shrug off drills.", attacks: [46, 52, 58, 64], baseUses: 25 },
-    { id: "weapon:0005", number: 5, name: "Vault Breaker", type: "Heavy Breaching System", tier: 5, description: "Built for high-security and rare vaults.", attacks: [64, 72, 80, 88], baseUses: 15 },
+    { id: "weapon:0002", number: 2, name: "Glasswire Saw", type: "Filament Breach Tool", tier: 1.5, description: "A drawn wire that parts thin steel without a loud bite.", attacks: [20, 22, 25, 27], baseUses: 42 },
+    { id: "weapon:0003", number: 3, name: "Pressure Spike", type: "Hydraulic Breach Tool", tier: 1.75, description: "A short hydraulic punch for stubborn door skins.", attacks: [28, 30, 33, 35], baseUses: 38 },
+    { id: "weapon:0004", number: 4, name: "Lockpick Set", type: "Infiltration Tool", tier: 2, description: "Steadier against low and medium security vaults.", attacks: [36, 40, 44, 47], baseUses: 20 },
+    { id: "weapon:0005", number: 5, name: "Ceramic Lance", type: "Precision Penetrator", tier: 2.5, description: "A hard ceramic point that finds the seam and stays there.", attacks: [48, 51, 54, 56], baseUses: 32 },
+    { id: "weapon:0006", number: 6, name: "Pulse Ram", type: "Impact Breach System", tier: 2.75, description: "Timed impacts that walk a crack across the face of a door.", attacks: [57, 60, 63, 66], baseUses: 29 },
+    { id: "weapon:0007", number: 7, name: "Advanced Drill", type: "Mechanical Breach", tier: 3, description: "High attack, and loud enough that the street notices.", attacks: [67, 71, 75, 79], baseUses: 25 },
+    { id: "weapon:0008", number: 8, name: "Magnetic Shear", type: "Magnetic Breach System", tier: 3.5, description: "Opposed magnets that peel a plate instead of cutting it.", attacks: [80, 83, 86, 89], baseUses: 27 },
+    { id: "weapon:0009", number: 9, name: "Resonance Driver", type: "Structural Resonance System", tier: 3.75, description: "Tunes the vault wall until the bolts give up.", attacks: [90, 93, 97, 100], baseUses: 25 },
+    { id: "weapon:0010", number: 10, name: "Thermal Cutter", type: "High-Power Breach", tier: 4, description: "Cuts reinforced vaults that shrug off drills.", attacks: [101, 105, 110, 114], baseUses: 25 },
+    { id: "weapon:0011", number: 11, name: "Induction Wedge", type: "Electromagnetic Breach System", tier: 4.5, description: "An expanding field that forces a gap the door cannot close.", attacks: [115, 118, 122, 126], baseUses: 23 },
+    { id: "weapon:0012", number: 12, name: "Arc Fracture Unit", type: "Electrical Breach System", tier: 4.75, description: "A contained arc that fractures hardened alloys.", attacks: [127, 131, 135, 139], baseUses: 21 },
+    { id: "weapon:0013", number: 13, name: "Vault Breaker", type: "Heavy Breaching System", tier: 5, description: "Built for high-security and rare vaults.", attacks: [140, 145, 150, 155], baseUses: 15 },
+    { id: "weapon:0014", number: 14, name: "Graviton Press", type: "High-Pressure Compression System", tier: 5.5, description: "Crushes a locking stack until the pins no longer meet.", attacks: [156, 161, 166, 171], baseUses: 18 },
+    { id: "weapon:0015", number: 15, name: "Seismic Lance", type: "Directed Seismic System", tier: 5.75, description: "A directed shock that travels through the vault instead of the door.", attacks: [172, 178, 184, 190], baseUses: 16 },
   ],
   /**
    * Cash to buy a weapon the player does not own yet.
@@ -45,10 +49,20 @@ export const RULES = {
    */
   WEAPON_BUY_COSTS: {
     "weapon:0001": 0,
-    "weapon:0002": 12_000,
-    "weapon:0003": 40_000,
-    "weapon:0004": 125_000,
-    "weapon:0005": 350_000,
+    "weapon:0002": 5_000,
+    "weapon:0003": 8_500,
+    "weapon:0004": 12_000,
+    "weapon:0005": 22_000,
+    "weapon:0006": 32_000,
+    "weapon:0007": 40_000,
+    "weapon:0008": 75_000,
+    "weapon:0009": 95_000,
+    "weapon:0010": 125_000,
+    "weapon:0011": 190_000,
+    "weapon:0012": 240_000,
+    "weapon:0013": 350_000,
+    "weapon:0014": 500_000,
+    "weapon:0015": 750_000,
   } as Record<string, number>,
   WEAPON_USES_PER_LEVEL: 5,
   /** Consumable. One use reveals the server chance for a single inspect. */
@@ -93,10 +107,20 @@ export const RULES = {
    */
   WEAPON_UPGRADE_COSTS: {
     "weapon:0001": { 1: 1_500, 2: 3_000, 3: 5_000 },
-    "weapon:0002": { 1: 5_000, 2: 8_000, 3: 12_000 },
-    "weapon:0003": { 1: 12_000, 2: 18_000, 3: 25_000 },
-    "weapon:0004": { 1: 30_000, 2: 45_000, 3: 65_000 },
-    "weapon:0005": { 1: 75_000, 2: 110_000, 3: 160_000 },
+    "weapon:0002": { 1: 2_000, 2: 3_500, 3: 6_000 },
+    "weapon:0003": { 1: 3_000, 2: 5_000, 3: 8_000 },
+    "weapon:0004": { 1: 5_000, 2: 8_000, 3: 12_000 },
+    "weapon:0005": { 1: 7_000, 2: 11_000, 3: 16_000 },
+    "weapon:0006": { 1: 10_000, 2: 15_000, 3: 22_000 },
+    "weapon:0007": { 1: 12_000, 2: 18_000, 3: 25_000 },
+    "weapon:0008": { 1: 22_000, 2: 32_000, 3: 45_000 },
+    "weapon:0009": { 1: 28_000, 2: 40_000, 3: 55_000 },
+    "weapon:0010": { 1: 30_000, 2: 45_000, 3: 65_000 },
+    "weapon:0011": { 1: 50_000, 2: 70_000, 3: 95_000 },
+    "weapon:0012": { 1: 65_000, 2: 90_000, 3: 120_000 },
+    "weapon:0013": { 1: 75_000, 2: 110_000, 3: 160_000 },
+    "weapon:0014": { 1: 125_000, 2: 175_000, 3: 240_000 },
+    "weapon:0015": { 1: 180_000, 2: 250_000, 3: 350_000 },
   } as Record<string, Record<number, number>>,
   /**
    * Cash to raise a vault FROM this level to the next.
@@ -334,7 +358,7 @@ export function attackPower(weaponNumber: number, upgradeLevel: number): number 
   return attacks[index] ?? attacks[0];
 }
 
-/** Combat stat passed into heists. Level 4 of weapon N equals level 1 of weapon N+1. */
+/** Combat stat passed into heists. Same number as attack power for that level. */
 export function effectiveWeaponLevel(weaponNumber: number, upgradeLevel: number): number {
   return attackPower(weaponNumber, upgradeLevel);
 }
