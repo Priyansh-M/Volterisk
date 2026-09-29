@@ -37,12 +37,18 @@ export type Profile = {
 }
 
 export type OwnedWeapon = {
+  instanceId?: string
   id: string
   name: string
   number: number
+  type?: string
   upgradeLevel: number
+  attack?: number
+  nextAttack?: number | null
   effectiveLevel: number
   nextEffectiveLevel: number | null
+  durability?: number
+  maxDurability?: number
   equipped: boolean
   nextUpgradeCost: number | null
 }
@@ -84,6 +90,10 @@ export type HeistResult = {
   vaultLevel: number
   successChance: number
   cooldownEndsAt: string
+  broken?: boolean
+  attack?: number
+  defense?: number
+  advantage?: number
 }
 
 export type HistoryRow = {
@@ -139,6 +149,8 @@ export type WorkOffer = {
   risk: string
   locationLabel: string
   requirement: string
+  difficulty?: string
+  requiresProperty?: string | null
   locked: boolean
   available: boolean
   cooldownEndsAt: string | null
@@ -178,6 +190,22 @@ export type GameNotice = {
 export type VaultView = {
   balance: number
   level: number
+  tier?: string
+  tierLabel?: string
+  defense?: number
+  capacity?: number
+  securedPercent?: number
+  exposed?: number
+  secured?: number
+  insured?: boolean
   maxLevel: number
   upgradeCost: number | null
+  next?: {
+    tier: string
+    tierLabel: string
+    level: number
+    defense: number
+    capacity: number
+    converts: boolean
+  } | null
 }

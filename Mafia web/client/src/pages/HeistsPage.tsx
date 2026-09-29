@@ -14,6 +14,7 @@ export function HeistsPage() {
   const [targetId, setTargetId] = useState<string | null>(null)
   const [weaponId, setWeaponId] = useState<string | null>(null)
   const [chance, setChance] = useState<number | null>(null)
+  const [quote, setQuote] = useState<{ attack: number; defense: number; advantage: number; estimatedChance: number; weaponName: string; weaponLevel: number; vaultTier: string; vaultLevel: number } | null>(null)
   const [predictors, setPredictors] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -30,11 +31,38 @@ export function HeistsPage() {
         setBoard(targetData)
         setPredictors(shop.predictor.quantity)
         setWeapons(weaponData.owned)
-        const equipped = weaponData.owned.find((weapon) => weapon.equipped)
-        setWeaponId(equipped?.id ?? weaponData.owned[0]?.id ?? null)
+        const equipped = weaponData.owned.find((weapon) => weapon.equipped) ?? weaponData.owned[0]
+        setWeaponId(equipped?.instanceId ?? equipped?.id ?? null)
       })
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load targets.'))
   }, [])
+
+  useEffect(() => {
+    if (!targetId || !weaponId) {
+      setQuote(null)
+      return
+    }
+    let cancelled = false
+    const weapon = weapons.find((row) => (row.instanceId ?? row.id) === weaponId)
+    api<NonNullable<typeof quote>>('/api/heists/quote', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetUserId: targetId,
+        weaponId: weapon?.id ?? weaponId,
+        instanceId: weapon?.instanceId,
+        kind,
+      }),
+    })
+      .then((data) => {
+        if (!cancelled) setQuote(data)
+      })
+      .catch(() => {
+        if (!cancelled) setQuote(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [targetId, weaponId, kind, weapons])
 
   async function usePredictor() {
     if (!targetId || !weaponId) return
@@ -63,9 +91,15 @@ export function HeistsPage() {
     setBusy(true)
     setError(null)
     try {
-      const heist = await api<HeistResult>('/api/heists', {
+      const weapon = weapons.find((row) => (row.instanceId ?? row.id) === weaponId)
+      const heist = await api<HeistResult & { broken?: boolean }>('/api/heists', {
         method: 'POST',
-        body: JSON.stringify({ targetUserId: targetId, weaponId, kind }),
+        body: JSON.stringify({
+          targetUserId: targetId,
+          weaponId: weapon?.id ?? weaponId,
+          instanceId: weapon?.instanceId,
+          kind,
+        }),
       })
       setResult(heist)
       setConfirming(false)
@@ -155,12 +189,32 @@ export function HeistsPage() {
                       }}
                     >
                       {weapons.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} · up {item.upgradeLevel} · lv {item.effectiveLevel}
+                        <option key={item.instanceId ?? item.id} value={item.instanceId ?? item.id}>
+                          {item.name} (L.{item.upgradeLevel}) · attack {item.attack ?? item.effectiveLevel}
+                          {item.durability != null ? ` · ${item.durability} uses` : ''}
                         </option>
                       ))}
                     </select>
                   </Field>
+                  {quote ? (
+                    <div className="mt-3 grid gap-3 border border-border p-3 sm:grid-cols-2">
+                      <div>
+                        <p className="font-mono text-[9px] uppercase text-muted-foreground">Your equipment</p>
+                        <p className="font-display text-xl uppercase">{quote.weaponName}</p>
+                        <p className="text-sm">Level {quote.weaponLevel}</p>
+                        <p className="text-sm">Attack power: {quote.attack}</p>
+                      </div>
+                      <div>
+                        <p className="font-mono text-[9px] uppercase text-muted-foreground">Target vault</p>
+                        <p className="font-display text-xl uppercase">{quote.vaultTier} vault</p>
+                        <p className="text-sm">Level {quote.vaultLevel}</p>
+                        <p className="text-sm">Defense: {quote.defense}</p>
+                      </div>
+                      <p className="sm:col-span-2 font-mono text-xs">
+                        Attack advantage: {quote.advantage >= 0 ? `+${quote.advantage}` : quote.advantage} · Estimated success {quote.estimatedChance}%
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Btn disabled={busy || predictors < 1 || !weaponId} onClick={() => void usePredictor()}>
                       Use Estimate Predictor
@@ -213,6 +267,7 @@ export function HeistsPage() {
                 </div>
               ) : null}
             </dl>
+            {result.broken ? <p className="mt-4 font-display text-xl uppercase text-destructive">Broken. Removed from the arsenal.</p> : null}
             <button type="button" className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={() => setResult(null)}>
               Close
             </button>

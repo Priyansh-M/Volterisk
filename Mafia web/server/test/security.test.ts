@@ -1,7 +1,7 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { successChance } from "../src/game/probability.js";
-import { effectiveWeaponLevel } from "../src/game/rules.js";
+import { attackPower, vaultDefense } from "../src/game/rules.js";
 import { prisma } from "../src/prisma.js";
 import { setHeistRng } from "../src/services/heistService.js";
 import { app, auth, registerUser, userState } from "./helpers.js";
@@ -51,7 +51,7 @@ describe("heist security", () => {
       .post("/api/heists/estimate")
       .set(auth(attacker.token))
       .send({ targetUserId: target.id, weaponId: "weapon:0001", successChance: 99 });
-    const expected = successChance(effectiveWeaponLevel(1, 2), 1);
+    const expected = successChance(attackPower(1, 2), vaultDefense("standard", 1));
     expect(preview.status).toBe(400);
     const clean = await request(app)
       .post("/api/heists/estimate")
@@ -59,7 +59,7 @@ describe("heist security", () => {
       .send({ targetUserId: target.id, weaponId: "weapon:0001" });
     expect(clean.status).toBe(200);
     expect(clean.body).toEqual({ estimatedChance: expected });
-    expect(expected).toBe(68);
+    expect(expected).toBe(61);
     expect(await prisma.heist.count()).toBe(0);
 
     const heist = await request(app)

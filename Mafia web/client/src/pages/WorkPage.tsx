@@ -101,7 +101,10 @@ export function WorkPage() {
           <article key={contract.id} className="grid gap-3 border-b border-line bg-panel p-4 last:border-b-0 md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))_auto] md:items-center">
             <div>
               <h2 className="font-serif text-lg">{contract.name}</h2>
-              <p className="text-[12px] text-muted">{contract.requirement}</p>
+              <p className="text-[12px] text-muted">
+                {contract.difficulty ?? contract.risk} · {contract.requirement}
+                {contract.requiresProperty ? ` · ${contract.requiresProperty} required` : ''}
+              </p>
             </div>
             <p className="text-sm text-muted">{contract.locationLabel}</p>
             <p className="text-sm">{contract.durationMinutes}m</p>

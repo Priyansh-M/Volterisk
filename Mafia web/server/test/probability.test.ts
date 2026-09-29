@@ -1,35 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { successChance } from "../src/game/probability.js";
-import { effectiveWeaponLevel } from "../src/game/rules.js";
+import { attackPower, vaultDefense } from "../src/game/rules.js";
 
 describe("success chance", () => {
-  it("matches the worked examples", () => {
-    expect(successChance(1, 1)).toBe(60);
-    expect(successChance(2, 1)).toBe(68);
-    expect(successChance(1, 2)).toBe(52);
-    expect(successChance(1, 4)).toBe(36);
+  it("matches attack versus defense", () => {
+    expect(successChance(10, 10)).toBe(55);
+    expect(successChance(13, 10)).toBe(61);
+    expect(successChance(10, 15)).toBe(45);
+    expect(successChance(19, 10)).toBe(73);
   });
 
-  it("handles weapon above, equal to, and below the vault", () => {
-    expect(successChance(5, 2)).toBe(84);
-    expect(successChance(4, 4)).toBe(60);
-    expect(successChance(2, 6)).toBe(28);
+  it("subtracts camera level before the clamp", () => {
+    expect(successChance(10, 10, 3)).toBe(52);
+    expect(successChance(10, 10, 100)).toBe(8);
   });
 
-  it("clamps a large gap at 10 and 95", () => {
-    expect(successChance(1, 30)).toBe(10);
-    expect(successChance(40, 1)).toBe(95);
-    expect(successChance(1, 8)).toBe(10);
-    expect(successChance(6, 1)).toBe(95);
+  it("clamps a large gap", () => {
+    expect(successChance(10, 200)).toBe(8);
+    expect(successChance(200, 10)).toBe(92);
   });
 });
 
-describe("effective weapon level", () => {
-  it("treats weapon N at upgrade 1 as weapon N-1 at upgrade 4", () => {
-    for (let number = 2; number <= 5; number += 1) {
-      expect(effectiveWeaponLevel(number, 1)).toBe(effectiveWeaponLevel(number - 1, 4));
-    }
-    expect(effectiveWeaponLevel(1, 1)).toBe(1);
-    expect(effectiveWeaponLevel(5, 4)).toBe(16);
+describe("attack power", () => {
+  it("overlaps the next weapon's first level", () => {
+    expect(attackPower(1, 4)).toBe(attackPower(2, 1));
+    expect(attackPower(2, 4)).toBe(attackPower(3, 1));
+    expect(attackPower(3, 4)).toBe(attackPower(4, 1));
+    expect(attackPower(4, 4)).toBe(attackPower(5, 1));
+    expect(attackPower(1, 1)).toBe(10);
+    expect(attackPower(5, 4)).toBe(88);
+    expect(vaultDefense("standard", 1)).toBe(10);
+    expect(vaultDefense("silver", 1)).toBe(32);
+    expect(vaultDefense("diamond", 5)).toBe(165);
   });
 });

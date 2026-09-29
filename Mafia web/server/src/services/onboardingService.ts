@@ -56,8 +56,8 @@ export async function claimStarter(userId: string) {
       await recordStarterGrant(tx, userId, RULES.STARTING_CASH);
     }
 
-    let owned = await tx.userWeapon.findUnique({
-      where: { userId_weaponId: { userId, weaponId: starter.id } },
+    let owned = await tx.userWeapon.findFirst({
+      where: { userId, weaponId: starter.id },
     });
     if (!owned) {
       const equippedCount = await tx.userWeapon.count({ where: { userId, equipped: true } });

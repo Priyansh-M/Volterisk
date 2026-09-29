@@ -9,13 +9,8 @@
  * WEAPON_MAX_UPGRADE (4). Weapon N at upgrade 1 matches weapon N-1 at
  * upgrade 4, because (N-1)*3+1 === (N-2)*3+4.
  *
- *   Rusty Crowbar (1) upgrade 1 → 1
- *   Rusty Crowbar (1) upgrade 4 → 4
- *   Gun           (2) upgrade 1 → 4
- *   Thermal Cutter (5) upgrade 4 → 16
- *
- * That effective level is the weaponLevel passed into the success formula
- * in probability.ts. Vault level is the integer on the target vault (1–10).
+ * Attack power is listed per level. Weapon N at level 4 matches weapon N+1
+ * at level 1. Heists compare that attack to the target vault's defense.
  */
 export const RULES = {
   MIN_VAULT_BALANCE: 10_000,
@@ -28,7 +23,7 @@ export const RULES = {
   STARTING_VAULT_BALANCE: 25_000,
   STARTING_VAULT_LEVEL: 1,
   VAULT_MIN_LEVEL: 1,
-  VAULT_MAX_LEVEL: 10,
+  VAULT_MAX_LEVEL: 5,
   WEAPON_MIN_UPGRADE: 1,
   WEAPON_MAX_UPGRADE: 4,
   /** Player level = 1 + floor(successfulHeists / this). */
@@ -37,11 +32,11 @@ export const RULES = {
   WEALTH_HEAVY_AT: 100_000,
   WEALTH_FORTUNE_AT: 500_000,
   WEAPONS: [
-    { id: "weapon:0001", number: 1, name: "Rusty Crowbar" },
-    { id: "weapon:0002", number: 2, name: "Gun" },
-    { id: "weapon:0003", number: 3, name: "Drill" },
-    { id: "weapon:0004", number: 4, name: "Lockpick Set" },
-    { id: "weapon:0005", number: 5, name: "Thermal Cutter" },
+    { id: "weapon:0001", number: 1, name: "Rusty Crowbar", type: "Breaching Tool", tier: 1, description: "Starter weapon. Cheap and reliable, relatively weak.", attacks: [10, 13, 16, 19], baseUses: 50 },
+    { id: "weapon:0002", number: 2, name: "Lockpick Set", type: "Infiltration Tool", tier: 2, description: "Steadier against low and medium security vaults.", attacks: [19, 23, 27, 31], baseUses: 20 },
+    { id: "weapon:0003", number: 3, name: "Advanced Drill", type: "Mechanical Breach", tier: 3, description: "High attack, and loud enough that the street notices.", attacks: [31, 36, 41, 46], baseUses: 25 },
+    { id: "weapon:0004", number: 4, name: "Thermal Cutter", type: "High-Power Breach", tier: 4, description: "Cuts reinforced vaults that shrug off drills.", attacks: [46, 52, 58, 64], baseUses: 25 },
+    { id: "weapon:0005", number: 5, name: "Vault Breaker", type: "Heavy Breaching System", tier: 5, description: "Built for high-security and rare vaults.", attacks: [64, 72, 80, 88], baseUses: 15 },
   ],
   /**
    * Cash to buy a weapon the player does not own yet.
@@ -50,11 +45,12 @@ export const RULES = {
    */
   WEAPON_BUY_COSTS: {
     "weapon:0001": 0,
-    "weapon:0002": 20_000,
+    "weapon:0002": 12_000,
     "weapon:0003": 40_000,
-    "weapon:0004": 60_000,
-    "weapon:0005": 80_000,
+    "weapon:0004": 125_000,
+    "weapon:0005": 350_000,
   } as Record<string, number>,
+  WEAPON_USES_PER_LEVEL: 5,
   /** Consumable. One use reveals the server chance for a single inspect. */
   ESTIMATE_PREDICTOR_COST: 1_000,
   ESTIMATE_PREDICTOR_ID: "estimate-predictor",
@@ -96,27 +92,58 @@ export const RULES = {
    * Keys are the current upgrade level (1, 2, or 3). Level 4 is the cap.
    */
   WEAPON_UPGRADE_COSTS: {
-    "weapon:0001": { 1: 4_000, 2: 9_000, 3: 18_000 },
-    "weapon:0002": { 1: 12_000, 2: 28_000, 3: 55_000 },
-    "weapon:0003": { 1: 30_000, 2: 70_000, 3: 140_000 },
-    "weapon:0004": { 1: 80_000, 2: 180_000, 3: 360_000 },
-    "weapon:0005": { 1: 200_000, 2: 450_000, 3: 900_000 },
+    "weapon:0001": { 1: 1_500, 2: 3_000, 3: 5_000 },
+    "weapon:0002": { 1: 5_000, 2: 8_000, 3: 12_000 },
+    "weapon:0003": { 1: 12_000, 2: 18_000, 3: 25_000 },
+    "weapon:0004": { 1: 30_000, 2: 45_000, 3: 65_000 },
+    "weapon:0005": { 1: 75_000, 2: 110_000, 3: 160_000 },
   } as Record<string, Record<number, number>>,
   /**
    * Cash to raise a vault FROM this level to the next.
    * 1→2 $25,000, 2→3 $75,000, 3→4 $200,000, then the same steep climb through level 10.
    */
-  VAULT_UPGRADE_COSTS: {
-    1: 25_000,
-    2: 75_000,
-    3: 200_000,
-    4: 500_000,
-    5: 1_250_000,
-    6: 3_000_000,
-    7: 7_500_000,
-    8: 18_000_000,
-    9: 45_000_000,
-  } as Record<number, number>,
+  VAULT_TIERS: ["standard", "silver", "gold", "diamond"] as const,
+  VAULT_TIER_LABEL: {
+    standard: "Standard Vault",
+    silver: "Silver Vault",
+    gold: "Gold Vault",
+    diamond: "Diamond Vault",
+  } as Record<string, string>,
+  /** Defense by tier, index 0 is level 1. */
+  VAULT_DEFENSE: {
+    standard: [10, 15, 20, 22, 24],
+    silver: [32, 37, 42, 47, 52],
+    gold: [60, 68, 76, 84, 85],
+    diamond: [105, 109, 110, 111, 165],
+  } as Record<string, number[]>,
+  VAULT_CAPACITY: {
+    standard: [50_000, 100_000, 250_000, 500_000, 1_000_000],
+    silver: [1_500_000, 2_000_000, 3_000_000, 4_000_000, 5_000_000],
+    gold: [7_500_000, 10_000_000, 15_000_000, 20_000_000, 30_000_000],
+    diamond: [40_000_000, 55_000_000, 60_000_000, 65_000_000, 70_000_000],
+  } as Record<string, number[]>,
+  /** Percent of the balance a heist cannot touch. Level 1 standard is 0 so a fresh vault is fully exposed. */
+  VAULT_SECURED_PERCENT: {
+    standard: [0, 15, 25, 35, 45],
+    silver: [50, 55, 60, 65, 70],
+    gold: [72, 76, 80, 84, 88],
+    diamond: [90, 92, 94, 96, 98],
+  } as Record<string, number[]>,
+  /** Cash to raise a vault one level inside the current tier. */
+  VAULT_LEVEL_COSTS: {
+    standard: { 1: 8_000, 2: 18_000, 3: 40_000, 4: 90_000 },
+    silver: { 1: 120_000, 2: 200_000, 3: 320_000, 4: 480_000 },
+    gold: { 1: 700_000, 2: 1_100_000, 3: 1_600_000, 4: 2_200_000 },
+    diamond: { 1: 3_000_000, 2: 4_500_000, 3: 6_000_000, 4: 8_000_000 },
+  } as Record<string, Record<number, number>>,
+  VAULT_CONVERSION_COSTS: {
+    standard: 250_000,
+    silver: 1_500_000,
+    gold: 10_000_000,
+  } as Record<string, number>,
+  INSURANCE_COVERAGE_PERCENT: 60,
+  INSURANCE_PREMIUM: 4_000,
+  INSURANCE_HOURS: 24,
   /** Reputation titles. The highest entry a player's level reaches wins. */
   TITLES: [
     { minLevel: 1, title: "Street Operator" },
@@ -248,6 +275,8 @@ export const RULES = {
       reward: 165_000,
       risk: "HIGH",
       locationLabel: "Iron Hour Depository",
+      difficulty: "ELITE",
+      requiresProperty: "garage",
     },
   ] as {
     id: string;
@@ -257,13 +286,69 @@ export const RULES = {
     reward: number;
     risk: "LOW" | "MEDIUM" | "HIGH";
     locationLabel: string;
+    difficulty?: "EASY" | "MODERATE" | "HARD" | "VERY HARD" | "ELITE";
+    requiresProperty?: string;
   }[],
 };
 
 export type WealthBucket = "modest" | "heavy" | "fortune";
 
+export type VaultTierName = (typeof RULES.VAULT_TIERS)[number];
+
+export function attackPower(weaponNumber: number, upgradeLevel: number): number {
+  const weapon = RULES.WEAPONS.find((entry) => entry.number === weaponNumber);
+  const attacks = weapon?.attacks ?? [10];
+  const index = Math.min(Math.max(upgradeLevel, 1), attacks.length) - 1;
+  return attacks[index] ?? attacks[0];
+}
+
+/** Combat stat passed into heists. Level 4 of weapon N equals level 1 of weapon N+1. */
 export function effectiveWeaponLevel(weaponNumber: number, upgradeLevel: number): number {
-  return (weaponNumber - 1) * 3 + upgradeLevel;
+  return attackPower(weaponNumber, upgradeLevel);
+}
+
+export function maxDurability(weaponId: string, upgradeLevel: number): number {
+  const weapon = weaponById(weaponId);
+  const base = weapon?.baseUses ?? 20;
+  const steps = Math.max(0, upgradeLevel - 1);
+  return base + steps * RULES.WEAPON_USES_PER_LEVEL;
+}
+
+function vaultIndex(level: number): number {
+  return Math.min(Math.max(level, 1), RULES.VAULT_MAX_LEVEL) - 1;
+}
+
+export function vaultDefense(tier: string, level: number): number {
+  const row = RULES.VAULT_DEFENSE[tier] ?? RULES.VAULT_DEFENSE.standard;
+  return row[vaultIndex(level)] ?? row[0];
+}
+
+export function vaultCapacity(tier: string, level: number): number {
+  const row = RULES.VAULT_CAPACITY[tier] ?? RULES.VAULT_CAPACITY.standard;
+  return row[vaultIndex(level)] ?? row[0];
+}
+
+export function vaultSecuredPercent(tier: string, level: number): number {
+  const row = RULES.VAULT_SECURED_PERCENT[tier] ?? RULES.VAULT_SECURED_PERCENT.standard;
+  return row[vaultIndex(level)] ?? 0;
+}
+
+export function exposedBalance(balance: number, tier: string, level: number): number {
+  const secured = Math.floor((Math.max(0, balance) * vaultSecuredPercent(tier, level)) / 100);
+  return Math.max(0, balance - secured);
+}
+
+export function nextVaultTier(tier: string): VaultTierName | null {
+  const index = RULES.VAULT_TIERS.indexOf(tier as VaultTierName);
+  if (index < 0 || index >= RULES.VAULT_TIERS.length - 1) return null;
+  return RULES.VAULT_TIERS[index + 1];
+}
+
+export function workDifficulty(contract: { risk: string; difficulty?: string }): string {
+  if (contract.difficulty) return contract.difficulty;
+  if (contract.risk === "LOW") return "EASY";
+  if (contract.risk === "MEDIUM") return "MODERATE";
+  return "HARD";
 }
 
 export function playerLevelFromHeists(successfulHeists: number): number {

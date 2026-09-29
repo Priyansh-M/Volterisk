@@ -4,16 +4,18 @@ import { successChance } from "../game/probability.js";
 import { heistStealAmount } from "../game/rewards.js";
 import {
   RULES,
-  effectiveWeaponLevel,
+  attackPower,
+  exposedBalance,
   hoursAgo,
   hoursFromNow,
   minutesAgo,
   minutesFromNow,
+  vaultDefense,
   wealthBucket,
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
-import { creditCash, debitVault } from "./economyService.js";
+import { creditCash, debitVault, type Tx } from "./economyService.js";
 import { isStationedNpc, npcWindowStart, NPC_STATIONS, stationForUsername } from "./nightCrew.js";
 import { writeNotification } from "./notificationService.js";
 
@@ -167,7 +169,8 @@ export async function consumeEstimate(
   weaponId: string,
   kind: HeistKind,
 ) {
-  const estimatedChance = await previewChance(attackerId, targetUserId, weaponId, kind);
+  const quote = await previewChance(attackerId, targetUserId, weaponId, kind);
+  const estimatedChance = quote.estimatedChance;
   const spent = await prisma.inventoryItem.updateMany({
     where: { userId: attackerId, itemId: RULES.ESTIMATE_PREDICTOR_ID, quantity: { gte: 1 } },
     data: { quantity: { decrement: 1 } },
@@ -187,10 +190,7 @@ async function previewChance(
   if (attackerId === targetUserId) {
     throw new GameError(400, "SELF_TARGET", "You cannot rob your own vault.");
   }
-  const owned = await prisma.userWeapon.findUnique({
-    where: { userId_weaponId: { userId: attackerId, weaponId } },
-    include: { weapon: true },
-  });
+  const owned = await pickWeapon(attackerId, weaponId);
   if (!owned) {
     throw new GameError(400, "WEAPON_NOT_OWNED", "That weapon is not in your arsenal.");
   }
@@ -202,8 +202,53 @@ async function previewChance(
     throw new GameError(404, "INVALID_TARGET", "No such target.");
   }
   assertTargetKind(target, kind);
-  const weaponLevel = effectiveWeaponLevel(owned.weapon.number, owned.upgradeLevel);
-  return successChance(weaponLevel, target.vault.level, target.cameraLevel);
+  const attack = attackPower(owned.weapon.number, owned.upgradeLevel);
+  const defense = vaultDefense(target.vault.tier, target.vault.level);
+  return {
+    estimatedChance: successChance(attack, defense, target.cameraLevel),
+    attack,
+    defense,
+    advantage: attack - defense,
+    weaponName: owned.weapon.name,
+    weaponLevel: owned.upgradeLevel,
+    vaultTier: target.vault.tier,
+    vaultLevel: target.vault.level,
+  };
+}
+
+async function wearWeapon(tx: Tx, instanceId: string): Promise<boolean> {
+  const row = await tx.userWeapon.update({
+    where: { id: instanceId },
+    data: { durability: { decrement: 1 } },
+  });
+  if (row.durability <= 0) {
+    await tx.userWeapon.delete({ where: { id: row.id } });
+    return true;
+  }
+  return false;
+}
+
+async function pickWeapon(attackerId: string, weaponId: string, instanceId?: string) {
+  if (instanceId) {
+    return prisma.userWeapon.findFirst({
+      where: { id: instanceId, userId: attackerId, durability: { gt: 0 } },
+      include: { weapon: true },
+    });
+  }
+  return prisma.userWeapon.findFirst({
+    where: { userId: attackerId, weaponId, durability: { gt: 0 } },
+    include: { weapon: true },
+    orderBy: [{ equipped: "desc" }, { upgradeLevel: "desc" }],
+  });
+}
+
+export async function quoteHeist(
+  attackerId: string,
+  targetUserId: string,
+  weaponId: string,
+  kind: HeistKind,
+) {
+  return previewChance(attackerId, targetUserId, weaponId, kind);
 }
 
 export async function attemptHeist(
@@ -211,19 +256,18 @@ export async function attemptHeist(
   targetUserId: string,
   weaponId: string,
   kind: HeistKind,
+  instanceId?: string,
 ) {
   if (attackerId === targetUserId) {
     throw new GameError(400, "SELF_TARGET", "You cannot rob your own vault.");
   }
 
-  const owned = await prisma.userWeapon.findUnique({
-    where: { userId_weaponId: { userId: attackerId, weaponId } },
-    include: { weapon: true },
-  });
+  const owned = await pickWeapon(attackerId, weaponId, instanceId);
   if (!owned) {
     throw new GameError(400, "WEAPON_NOT_OWNED", "That weapon is not in your arsenal.");
   }
-  const weaponLevel = effectiveWeaponLevel(owned.weapon.number, owned.upgradeLevel);
+  const weaponLevel = owned.upgradeLevel;
+  const attack = attackPower(owned.weapon.number, owned.upgradeLevel);
 
   const heist = await withSqliteRetry(() =>
     prisma.$transaction(
@@ -286,8 +330,10 @@ export async function attemptHeist(
         }
 
         const vaultLevel = target.vault.level;
-        const chance = successChance(weaponLevel, vaultLevel, target.cameraLevel);
+        const defense = vaultDefense(target.vault.tier, vaultLevel);
+        const chance = successChance(attack, defense, target.cameraLevel);
         const success = rollPercent() <= chance;
+        const broken = await wearWeapon(tx, owned.id);
 
         if (!success) {
           const heist = await tx.heist.create({
@@ -311,10 +357,18 @@ export async function attemptHeist(
               severity: "WARNING",
             });
           }
-          return presentHeist(heist, target.username, owned.weapon.name);
+          return {
+            ...presentHeist(heist, target.username, owned.weapon.name),
+            attack,
+            defense,
+            advantage: attack - defense,
+            vaultTier: target.vault.tier,
+            broken,
+          };
         }
 
-        const amount = heistStealAmount(target.vault.balance);
+        const exposed = exposedBalance(target.vault.balance, target.vault.tier, vaultLevel);
+        const amount = heistStealAmount(exposed);
         const debited = await debitVault(tx, targetUserId, amount);
         if (!debited) {
           throw new GameError(409, "VAULT_CHANGED", "The vault shifted before the take landed.");
@@ -351,7 +405,30 @@ export async function attemptHeist(
             severity: "CRITICAL",
           });
         }
-        return presentHeist(heist, target.username, owned.weapon.name);
+        if (
+          target.vault.insured &&
+          target.vault.insuredUntil &&
+          target.vault.insuredUntil.getTime() > now.getTime()
+        ) {
+          const cover = Math.floor((amount * RULES.INSURANCE_COVERAGE_PERCENT) / 100);
+          if (cover > 0) {
+            await tx.vault.update({
+              where: { userId: targetUserId },
+              data: { balance: { increment: cover } },
+            });
+            await tx.transaction.create({
+              data: { type: "insurance_payout", amount: cover, toUserId: targetUserId },
+            });
+          }
+        }
+        return {
+          ...presentHeist(heist, target.username, owned.weapon.name),
+          attack,
+          defense,
+          advantage: attack - defense,
+          vaultTier: target.vault.tier,
+          broken,
+        };
       },
       { timeout: 15_000 },
     ),

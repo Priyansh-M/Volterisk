@@ -9,6 +9,7 @@ import {
   unannouncedAchievements,
 } from "../services/achievementService.js";
 import { listNotifications, markNotificationRead } from "../services/notificationService.js";
+import { buyProperty, listProperties } from "../services/propertyService.js";
 import { buyShopItem, shopView, upgradeCamera } from "../services/shopService.js";
 import { getLeaderboard } from "../services/userService.js";
 
@@ -55,6 +56,15 @@ export async function shop(req: Request, res: Response): Promise<void> {
 export async function buyShop(req: Request, res: Response): Promise<void> {
   const body = shopSchema.parse(req.body ?? {});
   res.status(201).json(await buyShopItem(currentUserId(req), body.itemId));
+}
+
+export async function properties(req: Request, res: Response): Promise<void> {
+  res.json(await listProperties(currentUserId(req)));
+}
+
+export async function buyPropertyHandler(req: Request, res: Response): Promise<void> {
+  const body = z.object({ catalogId: z.string().min(1).max(40) }).strict().parse(req.body ?? {});
+  res.status(201).json(await buyProperty(currentUserId(req), body.catalogId));
 }
 
 export async function cameraUpgrade(req: Request, res: Response): Promise<void> {

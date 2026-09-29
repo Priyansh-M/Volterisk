@@ -6,6 +6,7 @@ import {
   minutesFromNow,
   playerLevelFromHeists,
   workContractById,
+  workDifficulty,
   workRequirementLabel,
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
@@ -102,6 +103,8 @@ export async function listContracts(userId: string) {
         durationMinutes: contract.durationMinutes,
         reward: contract.reward,
         risk: contract.risk,
+        difficulty: workDifficulty(contract),
+        requiresProperty: contract.requiresProperty ?? null,
         locationLabel: contract.locationLabel,
         requirement: workRequirementLabel(contract),
         locked,
@@ -123,6 +126,14 @@ export async function acceptContract(userId: string, contractId: string) {
       const level = playerLevelFromHeists(wins);
       if (level < definition.minLevel) {
         throw new GameError(403, "LEVEL_LOCKED", `That job needs level ${definition.minLevel}.`);
+      }
+      if (definition.requiresProperty) {
+        const property = await tx.property.findFirst({
+          where: { userId, catalogId: definition.requiresProperty },
+        });
+        if (!property) {
+          throw new GameError(403, "PROPERTY_REQUIRED", `That job needs a ${definition.requiresProperty}.`);
+        }
       }
       const onBoard = offeredContracts(now).some((contract) => contract.id === definition.id);
       if (!onBoard) {

@@ -19,6 +19,7 @@ export function MarketPage() {
   const [counter, setCounter] = useState<Counter | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [stall, setStall] = useState<'tools' | 'luxury'>('tools')
 
   async function load() {
     const [weapons, shop] = await Promise.all([api<Arsenal>('/api/me/weapons'), api<Counter>('/api/shop')])
@@ -82,8 +83,21 @@ export function MarketPage() {
   return (
     <div>
       <PageTitle kicker="Night market">Market</PageTitle>
+      <div className="mb-4 flex gap-2">
+        <Btn variant={stall === 'tools' ? 'gold' : 'ghost'} onClick={() => setStall('tools')}>Tools</Btn>
+        <Btn variant={stall === 'luxury' ? 'gold' : 'ghost'} onClick={() => setStall('luxury')}>Luxury</Btn>
+      </div>
+      {stall === 'luxury' ? (
+        <section className="border border-border bg-card p-8">
+          <p className="font-mono text-[9px] uppercase text-primary">Sealed case</p>
+          <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Luxury</h2>
+          <p className="mt-3 max-w-lg text-sm text-muted-foreground">The luxury counter is reserved. Stock for that case has not been filed yet.</p>
+        </section>
+      ) : null}
+      {stall === 'tools' ? (
+      <>
       <p className="mb-4 max-w-2xl text-sm text-muted">
-        Cash only. The stall sells the next tool in the line — the server will not skip a number.
+        Cash only. The stall sells the next tool in the line, and another copy of a tool you already own. Each copy keeps its own level and durability.
       </p>
       {counter ? (
         <div className="mb-6 grid gap-4 md:grid-cols-2">
@@ -170,6 +184,8 @@ export function MarketPage() {
           )
         })}
       </div>
+      </>
+      ) : null}
     </div>
   )
 }

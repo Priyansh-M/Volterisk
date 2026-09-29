@@ -23,11 +23,11 @@ export function ArsenalPage() {
     load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the arsenal.'))
   }, [])
 
-  async function act(path: string, weaponId: string) {
-    setBusy(weaponId)
+  async function act(path: string, weaponId: string, instanceId?: string) {
+    setBusy(instanceId ?? weaponId)
     setError(null)
     try {
-      await api(path, { method: 'POST', body: JSON.stringify({ weaponId }) })
+      await api(path, { method: 'POST', body: JSON.stringify({ weaponId, instanceId }) })
       await load()
       await refresh()
     } catch (err) {
@@ -37,8 +37,15 @@ export function ArsenalPage() {
     }
   }
 
-  const ownedById = new Map(arsenal?.owned.map((row) => [row.id, row]) ?? [])
-  const nextId = arsenal?.shop?.id ?? null
+  const ownedRows = arsenal?.owned ?? []
+  const ownedIds = new Set(ownedRows.map((row) => row.id))
+  const cards = [
+    ...ownedRows.map((row) => ({
+      item: WEAPON_CATALOG.find((entry) => entry.id === row.id) ?? WEAPON_CATALOG[0],
+      owned: row,
+    })),
+    ...WEAPON_CATALOG.filter((item) => !ownedIds.has(item.id)).map((item) => ({ item, owned: undefined })),
+  ]
 
   return (
     <div className="space-y-4">
@@ -46,12 +53,10 @@ export function ArsenalPage() {
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {!arsenal && !error ? <Notice tone="muted">Unlocking the case…</Notice> : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {WEAPON_CATALOG.map((item) => {
-          const owned = ownedById.get(item.id)
-          const canBuy = nextId === item.id && item.price > 0
-          const locked = !owned && !canBuy && item.price > 0
+        {cards.map(({ item, owned }) => {
+          const locked = !owned && item.price > 0
           return (
-            <article key={item.id} className="flex flex-col border border-line bg-panel">
+            <article key={owned?.instanceId ?? item.id} className="flex flex-col border border-line bg-panel">
               <div className="aspect-[11/7] border-b border-line">
                 <WeaponArt id={item.id} />
               </div>
@@ -66,28 +71,45 @@ export function ArsenalPage() {
                     <span className="text-[10px] tracking-[0.16em] text-muted uppercase">Locked</span>
                   )}
                 </div>
-                <p className="mt-2 text-sm text-muted">
+                <p className="mt-2 font-display text-xl uppercase">
+                  {item.name} {owned ? `(L.${owned.upgradeLevel})` : ''}
+                </p>
+                <p className="mt-1 text-sm text-muted">
                   {owned
-                    ? `Damage ${owned.effectiveLevel}${owned.nextEffectiveLevel != null ? ` · after upgrade ${owned.nextEffectiveLevel}` : ''}`
+                    ? `Attack ${owned.attack ?? owned.effectiveLevel}${owned.nextAttack != null ? ` · after upgrade ${owned.nextAttack}` : ''}`
                     : 'Not in the case'}
                 </p>
+                {owned && owned.maxDurability ? (
+                  <div className="mt-3">
+                    <div className="h-1.5 bg-muted">
+                      <div
+                        className="h-full bg-primary"
+                        style={{ width: `${Math.max(4, Math.round(((owned.durability ?? 0) / owned.maxDurability) * 100))}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 flex justify-between font-mono text-[10px] text-muted-foreground">
+                      <span>{owned.maxDurability}</span>
+                      <span>{owned.durability} left</span>
+                    </p>
+                  </div>
+                ) : null}
                 <p className="mt-2 flex-1 text-sm text-muted">{item.flavor}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {owned ? (
                     <>
-                      <Btn disabled={busy !== null || owned.equipped} onClick={() => void act('/api/weapons/equip', item.id)}>
+                      <Btn disabled={busy !== null || owned.equipped} onClick={() => void act('/api/weapons/equip', item.id, owned.instanceId)}>
                         {owned.equipped ? 'Equipped' : 'Equip'}
                       </Btn>
                       {owned.nextUpgradeCost === null ? (
                         <span className="self-center text-sm text-muted">Capped</span>
                       ) : (
-                        <Btn variant="gold" disabled={busy !== null} onClick={() => void act('/api/weapons/upgrade', item.id)}>
-                          Upgrade · damage {owned.nextEffectiveLevel} · {money(owned.nextUpgradeCost)}
+                        <Btn variant="gold" disabled={busy !== null} onClick={() => void act('/api/weapons/upgrade', item.id, owned.instanceId)}>
+                          Upgrade · attack {owned.nextAttack ?? owned.nextEffectiveLevel} · {money(owned.nextUpgradeCost)}
                         </Btn>
                       )}
                     </>
                   ) : (
-                    <p className="text-sm text-muted">{locked || canBuy ? 'Buy it on the marketplace.' : 'Issued with the kit.'}</p>
+                    <p className="text-sm text-muted">{locked ? 'Buy it on the marketplace.' : 'Issued with the kit.'}</p>
                   )}
                 </div>
               </div>

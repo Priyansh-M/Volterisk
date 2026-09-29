@@ -1,23 +1,25 @@
 import { Router } from "express";
 import { login, logout, register } from "../controllers/authController.js";
-import { createHeist, estimate, history, targets } from "../controllers/heistController.js";
+import { createHeist, estimate, history, quote, targets } from "../controllers/heistController.js";
 import { bases, claim as claimBase } from "../controllers/mapController.js";
 import { me, myVault, myWeapons } from "../controllers/meController.js";
 import {
   achievementAlerts,
   achievements,
   ackAchievement,
+  buyPropertyHandler,
   buyShop,
   cameraUpgrade,
   claimAchievementReward,
   leaderboard,
   notifications,
+  properties,
   readNotification,
   shop,
 } from "../controllers/metaController.js";
 import { claim as claimStarter } from "../controllers/onboardingController.js";
 import { publicPlayer } from "../controllers/playerController.js";
-import { upgrade as upgradeVault, withdraw } from "../controllers/vaultController.js";
+import { insurance, upgrade as upgradeVault, withdraw } from "../controllers/vaultController.js";
 import { buy, equip, upgrade as upgradeWeapon } from "../controllers/weaponController.js";
 import { accept, collect, contracts } from "../controllers/workController.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -35,10 +37,12 @@ api.get("/me/weapons", requireAuth, asyncHandler(myWeapons));
 
 api.get("/heists/targets", requireAuth, asyncHandler(targets));
 api.post("/heists/estimate", requireAuth, asyncHandler(estimate));
+api.post("/heists/quote", requireAuth, asyncHandler(quote));
 api.post("/heists", requireAuth, asyncHandler(createHeist));
 api.get("/heists/history", requireAuth, asyncHandler(history));
 
 api.post("/vault/upgrade", requireAuth, asyncHandler(upgradeVault));
+api.post("/vault/insurance", requireAuth, asyncHandler(insurance));
 api.post("/vault/withdraw", requireAuth, asyncHandler(withdraw));
 
 api.post("/weapons/buy", requireAuth, asyncHandler(buy));
@@ -64,6 +68,9 @@ api.get("/achievements", requireAuth, asyncHandler(achievements));
 api.get("/achievements/unannounced", requireAuth, asyncHandler(achievementAlerts));
 api.post("/achievements/ack", requireAuth, asyncHandler(ackAchievement));
 api.post("/achievements/claim", requireAuth, asyncHandler(claimAchievementReward));
+
+api.get("/properties", requireAuth, asyncHandler(properties));
+api.post("/properties/buy", requireAuth, asyncHandler(buyPropertyHandler));
 
 api.get("/shop", requireAuth, asyncHandler(shop));
 api.post("/shop/buy", requireAuth, asyncHandler(buyShop));

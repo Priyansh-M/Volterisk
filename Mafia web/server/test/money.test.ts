@@ -1,7 +1,8 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { heistStealAmount } from "../src/game/rewards.js";
-import { RULES } from "../src/game/rules.js";
+import { successChance } from "../src/game/probability.js";
+import { RULES, attackPower, vaultDefense } from "../src/game/rules.js";
 import { prisma } from "../src/prisma.js";
 import { debitCash, debitVault } from "../src/services/economyService.js";
 import { setHeistRng } from "../src/services/heistService.js";
@@ -41,7 +42,7 @@ describe("heist money", () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.amountStolen).toBe(10_000);
-    expect(res.body.successChance).toBe(60);
+    expect(res.body.successChance).toBe(successChance(attackPower(1, 1), vaultDefense("standard", 1)));
 
     const attackerAfter = await userState(attacker.id);
     const targetAfter = await userState(target.id);

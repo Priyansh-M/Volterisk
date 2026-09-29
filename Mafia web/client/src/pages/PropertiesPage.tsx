@@ -1,36 +1,61 @@
-import { PageTitle } from '../components/ui.tsx'
+import { useEffect, useState } from 'react'
+import { Btn, Notice } from '../components/ui.tsx'
+import { ApiError, api } from '../lib/api.ts'
+import { useAuth } from '../lib/auth.tsx'
+import { money } from '../lib/format.ts'
 
-const LOTS = [
-  { name: 'Safehouse', note: 'A room with a second exit.' },
-  { name: 'Warehouse', note: 'Floor space and a quiet dock.' },
-  { name: 'Front', note: 'A counter that faces the street.' },
-  { name: 'Mooring', note: 'Water access, no ledger.' },
-  { name: 'Club', note: 'A door that stays unmarked.' },
-]
+type CatalogItem = { id: string; name: string; price: number; note: string; owned: boolean }
 
 export function PropertiesPage() {
+  const { me, refresh } = useAuth()
+  const [catalog, setCatalog] = useState<CatalogItem[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  async function load() {
+    const data = await api<{ catalog: CatalogItem[] }>('/api/properties')
+    setCatalog(data.catalog)
+  }
+
+  useEffect(() => {
+    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The property desk is shut.'))
+  }, [])
+
+  async function buy(catalogId: string) {
+    setBusy(catalogId)
+    setError(null)
+    try {
+      await api('/api/properties/buy', { method: 'POST', body: JSON.stringify({ catalogId }) })
+      await load()
+      await refresh()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The sale did not file.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <PageTitle kicker="Holdings">Property network</PageTitle>
-      <p className="max-w-xl text-sm text-muted">No property market is open. Nothing here is owned, and nothing here pays.</p>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {LOTS.map((lot) => (
-          <article key={lot.name} className="border border-line bg-panel p-4">
-            <div className="flex items-start justify-between gap-2">
-              <h2 className="font-serif text-xl">{lot.name}</h2>
-              <span className="text-[10px] tracking-[0.16em] text-muted uppercase">Locked</span>
-            </div>
-            <p className="mt-2 text-sm text-muted">{lot.note}</p>
-            <dl className="mt-4 space-y-1 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted">Owned</dt>
-                <dd>—</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted">Income</dt>
-                <dd>—</dd>
-              </div>
-            </dl>
+      <p className="max-w-xl text-sm text-muted-foreground">
+        A garage qualifies you for the elite vault survey. Other lots stay off the book until they are priced.
+      </p>
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      {!catalog && !error ? <Notice tone="muted">Reading the deeds…</Notice> : null}
+      <div className="grid gap-4 md:grid-cols-2">
+        {catalog?.map((lot) => (
+          <article key={lot.id} className="border border-border bg-card p-5">
+            <p className="font-mono text-[9px] uppercase text-muted-foreground">{lot.owned ? 'Held' : 'For sale'}</p>
+            <h2 className="font-display text-3xl font-semibold uppercase">{lot.name}</h2>
+            <p className="mt-2 text-sm text-muted-foreground">{lot.note}</p>
+            <p className="mt-4 font-mono text-sm text-primary">{money(lot.price)}</p>
+            {lot.owned ? (
+              <p className="mt-4 text-sm text-success">On your ledger.</p>
+            ) : (
+              <Btn className="mt-4" variant="gold" disabled={busy !== null || (me !== null && me.cash < lot.price)} onClick={() => void buy(lot.id)}>
+                {busy === lot.id ? 'Buying…' : 'Buy'}
+              </Btn>
+            )}
           </article>
         ))}
       </div>

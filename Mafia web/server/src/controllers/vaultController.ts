@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentUserId } from "../middleware/auth.js";
 import { syncAchievements } from "../services/achievementService.js";
-import { upgradeVault, withdrawVault } from "../services/vaultService.js";
+import { setInsurance, upgradeVault, withdrawVault } from "../services/vaultService.js";
 
 const withdrawSchema = z
   .object({
@@ -18,6 +18,13 @@ export async function upgrade(req: Request, res: Response): Promise<void> {
   const vault = await upgradeVault(userId);
   const unlocked = await syncAchievements(userId);
   res.json({ ...vault, unlocked });
+}
+
+const insuranceSchema = z.object({ enabled: z.boolean() }).strict();
+
+export async function insurance(req: Request, res: Response): Promise<void> {
+  const body = insuranceSchema.parse(req.body ?? {});
+  res.json(await setInsurance(currentUserId(req), body.enabled));
 }
 
 export async function withdraw(req: Request, res: Response): Promise<void> {

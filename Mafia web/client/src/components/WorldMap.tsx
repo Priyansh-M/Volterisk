@@ -22,6 +22,8 @@ type Props = {
   busy: boolean
   onClaim: (sector: Sector) => void
   className?: string
+  /** Onboarding only. The live map does not nag after login. */
+  showHint?: boolean
 }
 
 function fitCamera(width: number, height: number): Cam {
@@ -31,7 +33,7 @@ function fitCamera(width: number, height: number): Cam {
   return { k, x: (WORLD.width - viewW) / 2, y: (WORLD.height - viewH) / 2 }
 }
 
-export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, className = '' }: Props) {
+export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, className = '', showHint = false }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const camRef = useRef<Cam>({ x: 0, y: 0, k: 0.4 })
@@ -97,6 +99,10 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
   }, [size.w])
 
   useEffect(() => {
+    if (!pinned) {
+      setDossier(null)
+      return
+    }
     const name = focusPin?.player.username
     if (!name || name === 'Unknown') {
       setDossier(null)
@@ -114,7 +120,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
     return () => {
       cancelled = true
     }
-  }, [focusPin?.player.username])
+  }, [pinned, focusPin?.player.username])
 
   const visible = useMemo(() => {
     if (!showSectors || cam.k <= 0) return []
@@ -195,10 +201,11 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
             }
             return
           }
+          if (pinned) return
           const world = worldFromEvent(event)
           const sector = sectorAt(world.x, world.y)
-          setHover(sector)
-          if (sector || pinned) placeTip(event)
+          setHover((current) => (current?.id === sector?.id ? current : sector))
+          if (sector) placeTip(event)
         }}
         onPointerUp={(event) => {
           const active = drag.current
@@ -334,9 +341,11 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
         <div className="mb-1 h-px w-16 bg-[#1c1c1c]" />
         1 square
       </div>
-      <div className="pointer-events-none absolute top-3 left-3 text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
-        Click a square
-      </div>
+      {showHint ? (
+        <div className="pointer-events-none absolute top-3 left-3 text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
+          Click a square
+        </div>
+      ) : null}
 
       <div className="absolute right-3 bottom-14 flex flex-col gap-1.5">
         <ChartButton label="Zoom in" onClick={() => zoomBy(1.25)}>

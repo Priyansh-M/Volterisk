@@ -75,6 +75,40 @@ export function VaultPage() {
   return (
     <div className="space-y-4">
       <PageTitle kicker="Facility">Vault facility</PageTitle>
+      {vault.tierLabel ? (
+        <section className="border border-border bg-card p-5">
+          <p className="font-mono text-[9px] uppercase text-primary">{vault.tierLabel}</p>
+          <p className="font-display text-4xl font-semibold uppercase">Level {vault.level}</p>
+          <p className="mt-2 text-sm text-muted-foreground">Defense {vault.defense} · Capacity {vault.capacity ? money(vault.capacity) : '—'}</p>
+          <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono uppercase">
+            {['standard', 'silver', 'gold', 'diamond'].map((tier) => (
+              <span key={tier} className={`border px-2 py-1 ${vault.tier === tier ? 'border-primary text-primary' : 'border-border text-muted-foreground'}`}>{tier}</span>
+            ))}
+          </div>
+          <p className="mt-4 text-sm">Secured {vault.secured != null ? money(vault.secured) : '—'} · Exposed {vault.exposed != null ? money(vault.exposed) : '—'}</p>
+          {vault.next ? (
+            <p className="mt-3 text-sm">
+              Next upgrade: {vault.next.tierLabel} level {vault.next.level} · defense {vault.next.defense}
+              {vault.upgradeCost ? ` · ${money(vault.upgradeCost)}` : ''}
+            </p>
+          ) : null}
+          <div className="mt-4">
+            <Btn
+              variant={vault.insured ? 'ghost' : 'gold'}
+              disabled={busy}
+              onClick={() => {
+                setBusy(true)
+                api('/api/vault/insurance', { method: 'POST', body: JSON.stringify({ enabled: !vault.insured }) })
+                  .then(() => load())
+                  .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Insurance did not file.'))
+                  .finally(() => setBusy(false))
+              }}
+            >
+              {vault.insured ? 'Drop insurance' : 'Vault insurance · $4,000 / day · 60% cover'}
+            </Btn>
+          </div>
+        </section>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="border border-line bg-panel p-4">
           <div className="grid min-h-[280px] place-items-center border border-line/80 bg-ink">

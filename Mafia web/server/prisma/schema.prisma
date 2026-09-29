@@ -115,11 +115,14 @@ model InventoryItem {
 }
 
 model Vault {
-  id      String @id @default(cuid())
-  userId  String @unique
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balance Int
-  level   Int
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance       Int
+  level         Int
+  tier          String    @default("standard")
+  insured       Boolean   @default(false)
+  insuredUntil  DateTime?
 }
 
 model Weapon {
@@ -131,15 +134,17 @@ model Weapon {
 }
 
 model UserWeapon {
-  id           String  @id @default(cuid())
-  userId       String
-  weaponId     String
-  upgradeLevel Int
-  equipped     Boolean @default(false)
-  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  weapon       Weapon  @relation(fields: [weaponId], references: [id])
+  id             String  @id @default(cuid())
+  userId         String
+  weaponId       String
+  upgradeLevel   Int
+  durability     Int     @default(50)
+  maxDurability  Int     @default(50)
+  equipped       Boolean @default(false)
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weapon         Weapon  @relation(fields: [weaponId], references: [id])
 
-  @@unique([userId, weaponId])
+  @@index([userId, weaponId])
   @@index([userId, equipped])
 }
 

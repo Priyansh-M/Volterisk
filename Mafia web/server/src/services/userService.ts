@@ -4,7 +4,8 @@ import { Prisma } from "@prisma/client";
 import { GameError } from "../game/errors.js";
 import {
   RULES,
-  effectiveWeaponLevel,
+  attackPower,
+  maxDurability,
   minutesAgo,
   minutesFromNow,
   playerLevelFromHeists,
@@ -74,6 +75,8 @@ export async function createPlayer(input: {
             create: {
               weaponId: starter.id,
               upgradeLevel: RULES.WEAPON_MIN_UPGRADE,
+              durability: maxDurability(starter.id, RULES.WEAPON_MIN_UPGRADE),
+              maxDurability: maxDurability(starter.id, RULES.WEAPON_MIN_UPGRADE),
               equipped: true,
             },
           },
@@ -173,7 +176,8 @@ export async function getProfile(userId: string) {
           name: equipped.weapon.name,
           number: equipped.weapon.number,
           upgradeLevel: equipped.upgradeLevel,
-          effectiveLevel: effectiveWeaponLevel(equipped.weapon.number, equipped.upgradeLevel),
+          effectiveLevel: attackPower(equipped.weapon.number, equipped.upgradeLevel),
+          attack: attackPower(equipped.weapon.number, equipped.upgradeLevel),
         }
       : null,
     cooldownEndsAt: await cooldownEndsAt(userId),

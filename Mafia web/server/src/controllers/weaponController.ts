@@ -6,6 +6,7 @@ import { buyWeapon, equipWeapon, upgradeWeapon } from "../services/weaponService
 const weaponBodySchema = z
   .object({
     weaponId: z.string().regex(/^weapon:\d{4}$/),
+    instanceId: z.string().min(1).max(40).optional(),
   })
   .strict();
 
@@ -16,10 +17,10 @@ export async function buy(req: Request, res: Response): Promise<void> {
 
 export async function upgrade(req: Request, res: Response): Promise<void> {
   const body = weaponBodySchema.parse(req.body ?? {});
-  res.json(await upgradeWeapon(currentUserId(req), body.weaponId));
+  res.json(await upgradeWeapon(currentUserId(req), body.weaponId, body.instanceId));
 }
 
 export async function equip(req: Request, res: Response): Promise<void> {
   const body = weaponBodySchema.parse(req.body ?? {});
-  res.json(await equipWeapon(currentUserId(req), body.weaponId));
+  res.json(await equipWeapon(currentUserId(req), body.weaponId, body.instanceId));
 }

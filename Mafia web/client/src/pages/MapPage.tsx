@@ -115,10 +115,10 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
       ) : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {pinNote ? <Notice tone="muted">{pinNote}</Notice> : null}
-      {pins === null ? <Notice tone="muted">Pulling the chart…</Notice> : null}
       <div className={onboarding ? '' : 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]'}>
         <WorldMap
           className={onboarding ? 'h-[calc(100vh-9rem)] min-h-[480px]' : ''}
+          showHint={onboarding}
           pins={pins ?? []}
           canClaim={!needsKit && needsBase}
           claimHint={needsKit ? 'Take the kit before you plant a flag.' : needsBase ? null : 'This square is for reading. Your base is already filed.'}

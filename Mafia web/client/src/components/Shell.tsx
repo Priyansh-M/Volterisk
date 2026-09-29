@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { api } from '../lib/api.ts'
@@ -54,6 +54,13 @@ export function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notices, setNotices] = useState(0)
+  const [routing, setRouting] = useState(false)
+
+  useEffect(() => {
+    setRouting(true)
+    const timer = window.setTimeout(() => setRouting(false), 280)
+    return () => window.clearTimeout(timer)
+  }, [location.pathname])
 
   function recount() {
     api<{ notifications: GameNotice[] }>('/api/notifications')
@@ -171,6 +178,7 @@ export function Shell() {
         </button>
       </aside>
       <main className={`min-h-screen transition-[margin] ${collapsed ? 'lg:ml-[76px]' : 'lg:ml-64'}`}>
+        <div className={`pointer-events-none fixed top-0 right-0 left-0 z-[60] h-0.5 origin-left bg-primary transition-transform duration-300 ${routing ? 'scale-x-100' : 'scale-x-0'}`} />
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur md:px-6">
           <div className="flex items-center gap-3">
             <button type="button" className="border border-border px-2 py-1 font-mono text-[10px] uppercase lg:hidden" onClick={() => setMobileOpen(true)}>
