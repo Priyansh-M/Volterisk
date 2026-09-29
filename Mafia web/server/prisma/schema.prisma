@@ -67,6 +67,8 @@ model Property {
 
 /**
  * One accepted work-board contract. Reward is stamped from rules.ts at accept time.
+ * activeSlot is the user id while the job is uncollected, and null after payout.
+ * The unique index is what keeps a player to a single active contract.
  */
 model ContractRun {
   id              String    @id @default(cuid())
@@ -77,6 +79,7 @@ model ContractRun {
   completesAt     DateTime
   collectedAt     DateTime?
   readyNotifiedAt DateTime?
+  activeSlot      String?   @unique
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

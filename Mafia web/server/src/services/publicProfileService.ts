@@ -83,3 +83,25 @@ export function toPublicCard(profile: PublicProfile) {
     successfulHeists: profile.successfulHeists,
   };
 }
+
+/** Public dossier. Exact cash, vault, and net worth stay off this object. */
+export async function publicDossier(username: string) {
+  const user = await prisma.user.findUnique({
+    where: { usernameKey: username.trim().toLowerCase() },
+    include: { base: true },
+  });
+  if (!user) return null;
+  const profile = await publicProfileFor(user.id);
+  if (!profile) return null;
+  return {
+    ...toPublicCard(profile),
+    failedHeists: profile.failedHeists,
+    base: user.base
+      ? {
+          sectorId: user.base.sectorId,
+          landmassId: user.base.landmassId,
+          regionName: user.base.regionName,
+        }
+      : null,
+  };
+}

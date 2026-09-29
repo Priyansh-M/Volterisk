@@ -221,71 +221,6 @@ export const RULES = {
     risk: "LOW" | "MEDIUM" | "HIGH";
     locationLabel: string;
   }[],
-  /**
-   * Properties are owned assets with a level and a storage capacity.
-   * No passive income, no crews, no heat.
-   */
-  PROPERTY_MAX_LEVEL: 5,
-  /** Capacity of a property = catalog capacity * level. */
-  PROPERTY_CATALOG: [
-    {
-      catalogId: "property:safehouse",
-      name: "Safehouse",
-      kind: "SAFEHOUSE",
-      price: 30_000,
-      capacity: 2,
-      description: "A rented flat with a reinforced door. Somewhere to keep the tools dry.",
-    },
-    {
-      catalogId: "property:garage",
-      name: "Lock-Up Garage",
-      kind: "GARAGE",
-      price: 75_000,
-      capacity: 4,
-      description: "Roll-down shutter on a quiet lane. Fits the heavy kit nobody should see.",
-    },
-    {
-      catalogId: "property:warehouse",
-      name: "Dock Warehouse",
-      kind: "WAREHOUSE",
-      price: 220_000,
-      capacity: 8,
-      description: "Cold, loud, and no questions asked past midnight.",
-    },
-    {
-      catalogId: "property:workshop",
-      name: "Machine Workshop",
-      kind: "WORKSHOP",
-      price: 480_000,
-      capacity: 10,
-      description: "Lathes, torches, and a night foreman who forgets faces.",
-    },
-    {
-      catalogId: "property:penthouse",
-      name: "River Penthouse",
-      kind: "PENTHOUSE",
-      price: 900_000,
-      capacity: 12,
-      description: "Above the smog, with a view of every bridge into the quarter.",
-    },
-  ] as {
-    catalogId: string;
-    name: string;
-    kind: string;
-    price: number;
-    capacity: number;
-    description: string;
-  }[],
-  /**
-   * Cash to raise a property FROM this level to the next, as a multiple of the
-   * catalog price. Level PROPERTY_MAX_LEVEL is the cap.
-   */
-  PROPERTY_UPGRADE_PRICE_MULTIPLIERS: {
-    1: 0.6,
-    2: 1.1,
-    3: 1.9,
-    4: 3.2,
-  } as Record<number, number>,
 };
 
 export type WealthBucket = "modest" | "heavy" | "fortune";
@@ -333,21 +268,6 @@ export function workContractById(id: string) {
 
 export function workRequirementLabel(contract: { minLevel: number }): string {
   return contract.minLevel <= 1 ? "Open to all crews" : `Level ${contract.minLevel}+`;
-}
-
-export function propertyByCatalogId(catalogId: string) {
-  return RULES.PROPERTY_CATALOG.find((entry) => entry.catalogId === catalogId) ?? null;
-}
-
-export function propertyCapacity(catalogCapacity: number, level: number): number {
-  return catalogCapacity * level;
-}
-
-export function propertyUpgradeCost(price: number, level: number): number | null {
-  if (level >= RULES.PROPERTY_MAX_LEVEL) return null;
-  const multiplier = RULES.PROPERTY_UPGRADE_PRICE_MULTIPLIERS[level];
-  if (multiplier === undefined) return null;
-  return Math.round((price * multiplier) / 100) * 100;
 }
 
 export function minutesFromNow(minutes: number, from = new Date()): Date {
