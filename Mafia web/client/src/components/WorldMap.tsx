@@ -358,12 +358,12 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
         <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">{LANDMASSES[0]?.regions.length ?? 0} regions</p>
         <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">Continent</p>
       </div>
-      <div className="pointer-events-none absolute bottom-3 left-36 text-[10px] tracking-[0.14em] text-[#6d6860] uppercase">
+      <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[10px] tracking-[0.14em] text-[#6d6860] uppercase">
         <div className="mb-1 h-px w-16 bg-[#1c1c1c]" />
         1 square
       </div>
       <div className="pointer-events-none absolute top-3 left-3 text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
-        {showSectors ? 'Every square is a sector' : 'Zoom to claim a square'}
+        {showSectors ? 'Every square is a sector' : 'Zoom to read the grid'}
       </div>
 
       <div className="absolute right-3 bottom-14 flex flex-col gap-1.5">
