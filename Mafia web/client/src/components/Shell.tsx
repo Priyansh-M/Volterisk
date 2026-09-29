@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
-import { api } from '../lib/api.ts'
+import { api, prefetch } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { heatFromJobs, money } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
@@ -18,6 +18,18 @@ import {
   IconVault,
   IconContract,
 } from './Icons.tsx'
+
+const warm: Record<string, string[]> = {
+  '/': ['/api/me'],
+  '/heists': ['/api/heists/targets', '/api/me/weapons', '/api/shop'],
+  '/assets': ['/api/properties'],
+  '/market': ['/api/me/weapons', '/api/shop', '/api/properties'],
+  '/arsenal': ['/api/me/weapons', '/api/shop'],
+  '/vault': ['/api/me/vault'],
+  '/work': ['/api/work/contracts'],
+  '/map': ['/api/map/bases'],
+  '/leaderboard': ['/api/leaderboard'],
+}
 
 const links = [
   { to: '/', label: 'Dashboard', end: true, Icon: IconHome },
@@ -55,6 +67,10 @@ export function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notices, setNotices] = useState(0)
+
+  useEffect(() => {
+    Object.values(warm).flat().forEach(prefetch)
+  }, [])
 
   function recount(count?: number) {
     if (typeof count === 'number') {
@@ -136,6 +152,8 @@ export function Shell() {
               to={link.to}
               end={link.end}
               title={collapsed ? link.label : undefined}
+              onMouseEnter={() => warm[link.to]?.forEach(prefetch)}
+              onFocus={() => warm[link.to]?.forEach(prefetch)}
               onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
                 `mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs no-underline ${

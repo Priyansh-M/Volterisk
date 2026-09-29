@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
-import type { Leaderboard, PublicCard } from '../lib/types.ts'
+import type { Leaderboard } from '../lib/types.ts'
 
 type Row = {
   rank: number
@@ -14,35 +14,30 @@ type Row = {
   base: string | null
 }
 
+function toRows(board: Leaderboard): Row[] {
+  return board.richest.map((row) => ({
+    rank: row.rank,
+    username: row.username,
+    netWorth: row.netWorth,
+    level: row.level ?? null,
+    heists: row.successfulHeists ?? null,
+    base: row.base ?? null,
+  }))
+}
+
 export function LeaderboardPage() {
   const { me } = useAuth()
-  const [rows, setRows] = useState<Row[] | null>(null)
+  const [rows, setRows] = useState<Row[] | null>(() => {
+    const board = peek<Leaderboard>('/api/leaderboard')
+    return board ? toRows(board) : null
+  })
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    api<Leaderboard>('/api/leaderboard')
-      .then(async (board) => {
-        const heists = new Map(board.heisters.map((row) => [row.username, row.successfulHeists]))
-        const cards = await Promise.all(
-          board.richest.map((row) =>
-            api<PublicCard>(`/api/players/${encodeURIComponent(row.username)}/public`).catch(() => null),
-          ),
-        )
-        if (cancelled) return
-        setRows(
-          board.richest.map((row, index) => {
-            const card = cards[index]
-            return {
-              rank: row.rank,
-              username: row.username,
-              netWorth: row.netWorth,
-              level: card?.level ?? null,
-              heists: card?.successfulHeists ?? heists.get(row.username) ?? null,
-              base: card?.base?.regionName ?? null,
-            }
-          }),
-        )
+    load<Leaderboard>('/api/leaderboard')
+      .then((board) => {
+        if (!cancelled) setRows(toRows(board))
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not load the board.')

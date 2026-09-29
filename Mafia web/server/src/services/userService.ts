@@ -201,27 +201,31 @@ export async function getProfile(userId: string) {
 export async function getLeaderboard() {
   const users = await prisma.user.findMany({
     where: { isBot: false },
-    include: { vault: true },
+    include: { vault: true, base: true },
   });
   if (users.length === 0) {
     return { richest: [], heisters: [], largestHeists: [] };
   }
   const realIds = users.map((user) => user.id);
 
-  const richest = users
-    .map((user) => ({
-      username: user.username,
-      netWorth: user.cash + (user.vault?.balance ?? 0),
-    }))
-    .sort((a, b) => b.netWorth - a.netWorth || a.username.localeCompare(b.username))
-    .slice(0, 20)
-    .map((row, index) => ({ rank: index + 1, ...row }));
-
   const grouped = await prisma.heist.groupBy({
     by: ["attackerId"],
     where: { success: true, attackerId: { in: realIds } },
     _count: { _all: true },
   });
+  const wins = new Map(grouped.map((row) => [row.attackerId, row._count._all]));
+  const richest = users
+    .map((user) => ({
+      username: user.username,
+      netWorth: user.cash + (user.vault?.balance ?? 0),
+      level: playerLevelFromHeists(wins.get(user.id) ?? 0),
+      successfulHeists: wins.get(user.id) ?? 0,
+      base: user.base?.regionName ?? null,
+    }))
+    .sort((a, b) => b.netWorth - a.netWorth || a.username.localeCompare(b.username))
+    .slice(0, 20)
+    .map((row, index) => ({ rank: index + 1, ...row }));
+
   const names = new Map(users.map((user) => [user.id, user.username]));
   const heisters = grouped
     .flatMap((row) => {

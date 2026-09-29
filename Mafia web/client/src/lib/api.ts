@@ -27,6 +27,38 @@ export function isMissing(err: unknown) {
   return err instanceof ApiError && (err.status === 404 || err.status === 501)
 }
 
+const memory = new Map<string, unknown>()
+const inflight = new Map<string, Promise<unknown>>()
+
+export function peek<T>(path: string): T | null {
+  return memory.has(path) ? (memory.get(path) as T) : null
+}
+
+function fetchGet<T>(path: string): Promise<T> {
+  const existing = inflight.get(path) as Promise<T> | undefined
+  if (existing) return existing
+  const pending = api<T>(path)
+    .then((data) => {
+      memory.set(path, data)
+      return data
+    })
+    .finally(() => {
+      if (inflight.get(path) === pending) inflight.delete(path)
+    })
+  inflight.set(path, pending)
+  return pending
+}
+
+/** Start a GET before the page opens. Shares one request with the page. */
+export function prefetch(path: string) {
+  if (memory.has(path) || inflight.has(path)) return
+  void fetchGet(path).catch(() => undefined)
+}
+
+export function load<T>(path: string): Promise<T> {
+  return fetchGet<T>(path)
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
   if (options.body) headers.set('Content-Type', 'application/json')

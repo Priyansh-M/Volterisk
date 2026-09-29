@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AssetGlyph } from '../components/AssetGlyph.tsx'
 import { Btn, Notice } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, api, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 
@@ -22,17 +22,17 @@ type Ledger = {
 
 export function PropertiesPage() {
   const { refresh } = useAuth()
-  const [ledger, setLedger] = useState<Ledger | null>(null)
+  const [ledger, setLedger] = useState<Ledger | null>(() => peek<Ledger>('/api/properties'))
   const [tab, setTab] = useState<'properties' | 'vehicles'>('properties')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  async function load() {
-    setLedger(await api<Ledger>('/api/properties'))
+  async function reload() {
+    setLedger(await load<Ledger>('/api/properties'))
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The asset ledger did not open.'))
+    reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The asset ledger did not open.'))
   }, [])
 
   async function upgrade(id: string) {
@@ -40,7 +40,7 @@ export function PropertiesPage() {
     setError(null)
     try {
       await api('/api/properties/upgrade', { method: 'POST', body: JSON.stringify({ id }) })
-      await load()
+      await reload()
       await refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The upgrade did not file.')

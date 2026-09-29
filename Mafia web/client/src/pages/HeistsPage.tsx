@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { Notice, inputClass } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, api, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
 import type { HeistKind, HeistResult, OwnedWeapon, Target, TargetBoard } from '../lib/types.ts'
@@ -20,13 +20,13 @@ type Quote = {
 export function HeistsPage() {
   const { me, refresh } = useAuth()
   const [kind, setKind] = useState<HeistKind>('npc')
-  const [board, setBoard] = useState<TargetBoard | null>(null)
-  const [weapons, setWeapons] = useState<OwnedWeapon[]>([])
+  const [board, setBoard] = useState<TargetBoard | null>(() => peek<TargetBoard>('/api/heists/targets'))
+  const [weapons, setWeapons] = useState<OwnedWeapon[]>(() => peek<{ owned: OwnedWeapon[] }>('/api/me/weapons')?.owned ?? [])
   const [targetId, setTargetId] = useState<string | null>(null)
   const [weaponId, setWeaponId] = useState<string | null>(null)
   const [chance, setChance] = useState<number | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
-  const [predictors, setPredictors] = useState(0)
+  const [predictors, setPredictors] = useState(() => peek<{ predictor: { quantity: number } }>('/api/shop')?.predictor.quantity ?? 0)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -34,19 +34,30 @@ export function HeistsPage() {
   const targetRef = useRef<string | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      api<TargetBoard>('/api/heists/targets'),
-      api<{ owned: OwnedWeapon[] }>('/api/me/weapons'),
-      api<{ predictor: { quantity: number } }>('/api/shop'),
-    ])
-      .then(([targetData, weaponData, shop]) => {
-        setBoard(targetData)
-        setPredictors(shop.predictor.quantity)
+    let cancelled = false
+    load<TargetBoard>('/api/heists/targets')
+      .then((targetData) => {
+        if (!cancelled) setBoard(targetData)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not load targets.')
+      })
+    load<{ owned: OwnedWeapon[] }>('/api/me/weapons')
+      .then((weaponData) => {
+        if (cancelled) return
         setWeapons(weaponData.owned)
         const equipped = weaponData.owned.find((weapon) => weapon.equipped) ?? weaponData.owned[0]
-        setWeaponId(equipped?.instanceId ?? equipped?.id ?? null)
+        setWeaponId((current) => current ?? equipped?.instanceId ?? equipped?.id ?? null)
       })
-      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load targets.'))
+      .catch(() => undefined)
+    load<{ predictor: { quantity: number } }>('/api/shop')
+      .then((shop) => {
+        if (!cancelled) setPredictors(shop.predictor.quantity)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const targets = board ? (kind === 'npc' ? board.npc : board.players) : null
@@ -116,8 +127,8 @@ export function HeistsPage() {
       setConfirming(false)
       await refresh()
       const [nextBoard, weaponData] = await Promise.all([
-        api<TargetBoard>('/api/heists/targets'),
-        api<{ owned: OwnedWeapon[] }>('/api/me/weapons'),
+        load<TargetBoard>('/api/heists/targets'),
+        load<{ owned: OwnedWeapon[] }>('/api/me/weapons'),
       ])
       setBoard(nextBoard)
       setWeapons(weaponData.owned.filter((row) => (row.durability ?? 1) > 0))
