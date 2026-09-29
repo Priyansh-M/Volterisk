@@ -255,15 +255,25 @@ describe("heist boards", () => {
     expect(await userState(other.id)).toMatchObject({ vault: other.vaultBalance });
     expect((await userState(bot.id)).vault).toBe(40_000);
 
-    const hit = await request(app)
+    const stray = await request(app)
       .post("/api/heists")
       .set(auth(player.token))
       .send({ targetUserId: bot.id, weaponId: "weapon:0001", kind: "npc" });
+    expect(stray.status).toBe(400);
+    expect(stray.body.code).toBe("WRONG_TARGET_KIND");
+
+    const { ensureNightCrew } = await import("../src/services/nightCrew.js");
+    await ensureNightCrew();
+    const crew = await prisma.user.findUnique({ where: { usernameKey: "mara voss" }, include: { vault: true } });
+    expect(crew?.vault).toBeTruthy();
+    const hit = await request(app)
+      .post("/api/heists")
+      .set(auth(player.token))
+      .send({ targetUserId: crew!.id, weaponId: "weapon:0001", kind: "npc" });
     expect(hit.status).toBe(201);
     expect(hit.body.success).toBe(true);
-    expect(hit.body.amountStolen).toBe(4_000);
-    expect((await userState(bot.id)).vault).toBe(36_000);
-    expect((await userState(player.id)).cash).toBe(player.cash + 4_000);
+    expect(hit.body.amountStolen).toBe(Math.floor((crew!.vault!.balance * 10) / 100));
+    expect((await userState(player.id)).cash).toBe(player.cash + hit.body.amountStolen);
   });
 });
 

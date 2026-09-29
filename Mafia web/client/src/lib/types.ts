@@ -42,6 +42,7 @@ export type OwnedWeapon = {
   number: number
   upgradeLevel: number
   effectiveLevel: number
+  nextEffectiveLevel: number | null
   equipped: boolean
   nextUpgradeCost: number | null
 }
@@ -62,6 +63,7 @@ export type Target = {
   vulnerable: boolean
   sectorId?: string | null
   regionName?: string | null
+  cadence?: 'day' | 'week' | null
 }
 
 /** `player` is the heist kind. The targets payload names that list `players`. */

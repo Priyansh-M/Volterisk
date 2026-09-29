@@ -7,11 +7,14 @@ import {
   effectiveWeaponLevel,
   hoursAgo,
   hoursFromNow,
+  minutesAgo,
+  minutesFromNow,
   wealthBucket,
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
+import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { creditCash, debitVault } from "./economyService.js";
-import { NIGHT_CREW, NPC_STATIONS } from "./nightCrew.js";
+import { isStationedNpc, npcWindowStart, NPC_STATIONS, stationForUsername } from "./nightCrew.js";
 import { writeNotification } from "./notificationService.js";
 
 // Future: crew shares would split the take after a successful debit.
@@ -77,7 +80,7 @@ function presentHeist(
     weaponLevel: heist.weaponLevel,
     vaultLevel: heist.vaultLevel,
     successChance: heist.successChance,
-    cooldownEndsAt: hoursFromNow(RULES.HEIST_COOLDOWN_HOURS, heist.createdAt).toISOString(),
+    cooldownEndsAt: minutesFromNow(RULES.HEIST_COOLDOWN_MINUTES, heist.createdAt).toISOString(),
   };
 }
 
@@ -91,14 +94,16 @@ type TargetCard = {
   vulnerable: boolean;
   sectorId: string | null;
   regionName: string | null;
+  cadence: "day" | "week" | null;
 };
 
-function assertTargetKind(target: { isBot: boolean }, kind: HeistKind): void {
-  if (kind === "npc" && !target.isBot) {
-    throw new GameError(400, "WRONG_TARGET_KIND", "Real accounts are not on the NPC board.");
+function assertTargetKind(target: { isBot: boolean; username: string }, kind: HeistKind): void {
+  const stationed = target.isBot && isStationedNpc(target.username);
+  if (kind === "npc" && !stationed) {
+    throw new GameError(400, "WRONG_TARGET_KIND", "Only the stationed crews are NPC targets.");
   }
   if (kind === "player" && target.isBot) {
-    throw new GameError(400, "WRONG_TARGET_KIND", "Seeded crews are not player targets.");
+    throw new GameError(400, "WRONG_TARGET_KIND", "Night crews are not player targets.");
   }
 }
 
@@ -113,38 +118,67 @@ export async function listTargets(attackerId: string) {
       success: true,
       createdAt: { gt: hoursAgo(RULES.TARGET_PROTECTION_HOURS) },
     },
-    select: { targetId: true },
+    select: { targetId: true, createdAt: true },
   });
   const protectedIds = new Set(recentHits.map((row) => row.targetId));
+  const weekStart = npcWindowStart("week");
+  const npcHits = await prisma.heist.findMany({
+    where: { success: true, createdAt: { gt: weekStart } },
+    select: { targetId: true, createdAt: true },
+  });
 
   const cards = users
     .filter((user) => user.vault && user.vault.balance >= RULES.MIN_VAULT_BALANCE)
-    .map((user) => ({
-      isBot: user.isBot,
-      card: {
-        userId: user.id,
-        username: user.username,
-        vaultLevel: user.vault!.level,
-        wealthBucket: wealthBucket(user.vault!.balance),
-        vulnerable: !protectedIds.has(user.id),
-        sectorId: user.base?.sectorId ?? null,
-        regionName: user.base?.regionName ?? null,
-      } satisfies TargetCard,
-    }));
+    .map((user) => {
+      const station = stationForUsername(user.username);
+      const npcLocked =
+        station !== null &&
+        npcHits.some(
+          (hit) => hit.targetId === user.id && hit.createdAt.getTime() > npcWindowStart(station.cadence).getTime(),
+        );
+      return {
+        isBot: user.isBot,
+        card: {
+          userId: user.id,
+          username: user.username,
+          vaultLevel: user.vault!.level,
+          wealthBucket: wealthBucket(user.vault!.balance),
+          vulnerable: station ? !npcLocked : !protectedIds.has(user.id),
+          sectorId: user.base?.sectorId ?? null,
+          regionName: user.base?.regionName ?? null,
+          cadence: station?.cadence ?? null,
+        } satisfies TargetCard,
+      };
+    });
 
   const stationed = new Set(NPC_STATIONS.map((station) => station.username.toLowerCase()));
-  const crew = new Set(NIGHT_CREW.map((bot) => bot.username.toLowerCase()));
   return {
     npc: cards
       .filter((row) => stationed.has(row.card.username.toLowerCase()))
       .map((row) => row.card),
-    players: cards
-      .filter((row) => !row.isBot && !crew.has(row.card.username.toLowerCase()))
-      .map((row) => row.card),
+    players: cards.filter((row) => !row.isBot).map((row) => row.card),
   };
 }
 
-export async function previewHeist(
+/** Spends one Estimate Predictor and returns the chance. Does not roll. */
+export async function consumeEstimate(
+  attackerId: string,
+  targetUserId: string,
+  weaponId: string,
+  kind: HeistKind,
+) {
+  const estimatedChance = await previewChance(attackerId, targetUserId, weaponId, kind);
+  const spent = await prisma.inventoryItem.updateMany({
+    where: { userId: attackerId, itemId: RULES.ESTIMATE_PREDICTOR_ID, quantity: { gte: 1 } },
+    data: { quantity: { decrement: 1 } },
+  });
+  if (spent.count !== 1) {
+    throw new GameError(400, "NO_PREDICTOR", "You do not have an Estimate Predictor.");
+  }
+  return { estimatedChance };
+}
+
+async function previewChance(
   attackerId: string,
   targetUserId: string,
   weaponId: string,
@@ -169,7 +203,7 @@ export async function previewHeist(
   }
   assertTargetKind(target, kind);
   const weaponLevel = effectiveWeaponLevel(owned.weapon.number, owned.upgradeLevel);
-  return { estimatedChance: successChance(weaponLevel, target.vault.level) };
+  return successChance(weaponLevel, target.vault.level, target.cameraLevel);
 }
 
 export async function attemptHeist(
@@ -191,7 +225,7 @@ export async function attemptHeist(
   }
   const weaponLevel = effectiveWeaponLevel(owned.weapon.number, owned.upgradeLevel);
 
-  return withSqliteRetry(() =>
+  const heist = await withSqliteRetry(() =>
     prisma.$transaction(
       async (tx) => {
         const attacker = await tx.user.findUnique({ where: { id: attackerId } });
@@ -209,12 +243,12 @@ export async function attemptHeist(
 
         const now = new Date();
         const recentAttempt = await tx.heist.findFirst({
-          where: { attackerId, createdAt: { gt: hoursAgo(RULES.HEIST_COOLDOWN_HOURS, now) } },
+          where: { attackerId, createdAt: { gt: minutesAgo(RULES.HEIST_COOLDOWN_MINUTES, now) } },
           orderBy: { createdAt: "desc" },
         });
         if (recentAttempt) {
           throw new GameError(409, "COOLDOWN", "You are still cooling off from the last job.", {
-            cooldownEndsAt: hoursFromNow(RULES.HEIST_COOLDOWN_HOURS, recentAttempt.createdAt).toISOString(),
+            cooldownEndsAt: minutesFromNow(RULES.HEIST_COOLDOWN_MINUTES, recentAttempt.createdAt).toISOString(),
           });
         }
 
@@ -222,21 +256,37 @@ export async function attemptHeist(
           throw new GameError(409, "NOT_VULNERABLE", "That vault is too thin to hit.");
         }
 
-        const recentSuccess = await tx.heist.findFirst({
-          where: {
-            targetId: targetUserId,
-            success: true,
-            createdAt: { gt: hoursAgo(RULES.TARGET_PROTECTION_HOURS, now) },
-          },
-        });
-        if (recentSuccess) {
-          throw new GameError(409, "TARGET_PROTECTED", "That vault was hit recently and is still shut.", {
-            protectionEndsAt: hoursFromNow(RULES.TARGET_PROTECTION_HOURS, recentSuccess.createdAt).toISOString(),
+        if (kind === "npc") {
+          const station = stationForUsername(target.username);
+          if (!station) {
+            throw new GameError(400, "WRONG_TARGET_KIND", "Only the stationed crews are NPC targets.");
+          }
+          const since = npcWindowStart(station.cadence, now);
+          const already = await tx.heist.findFirst({
+            where: { targetId: targetUserId, success: true, createdAt: { gt: since } },
           });
+          if (already) {
+            throw new GameError(409, "TARGET_PROTECTED", "That crew has already been robbed this window.", {
+              protectionEndsAt: null,
+            });
+          }
+        } else {
+          const recentSuccess = await tx.heist.findFirst({
+            where: {
+              targetId: targetUserId,
+              success: true,
+              createdAt: { gt: hoursAgo(RULES.TARGET_PROTECTION_HOURS, now) },
+            },
+          });
+          if (recentSuccess) {
+            throw new GameError(409, "TARGET_PROTECTED", "That vault was hit recently and is still shut.", {
+              protectionEndsAt: hoursFromNow(RULES.TARGET_PROTECTION_HOURS, recentSuccess.createdAt).toISOString(),
+            });
+          }
         }
 
         const vaultLevel = target.vault.level;
-        const chance = successChance(weaponLevel, vaultLevel);
+        const chance = successChance(weaponLevel, vaultLevel, target.cameraLevel);
         const success = rollPercent() <= chance;
 
         if (!success) {
@@ -252,13 +302,15 @@ export async function attemptHeist(
               amountStolen: 0,
             },
           });
-          await writeNotification(tx, {
-            userId: targetUserId,
-            heistId: heist.id,
-            title: "Someone tried your vault",
-            body: `${attacker.username} tested the door with a ${owned.weapon.name} and left with nothing.`,
-            severity: "WARNING",
-          });
+          if (!target.isBot) {
+            await writeNotification(tx, {
+              userId: targetUserId,
+              heistId: heist.id,
+              title: "Heist Attempted",
+              body: JSON.stringify({ by: attacker.username, success: false, amountStolen: null }),
+              severity: "WARNING",
+            });
+          }
           return presentHeist(heist, target.username, owned.weapon.name);
         }
 
@@ -290,18 +342,22 @@ export async function attemptHeist(
             heistId: heist.id,
           },
         });
-        await writeNotification(tx, {
-          userId: targetUserId,
-          heistId: heist.id,
-          title: "Your vault was hit",
-          body: `${attacker.username} took $${amount.toLocaleString("en-US")} with a ${owned.weapon.name}.`,
-          severity: "CRITICAL",
-        });
+        if (!target.isBot) {
+          await writeNotification(tx, {
+            userId: targetUserId,
+            heistId: heist.id,
+            title: "Heist Attempted",
+            body: JSON.stringify({ by: attacker.username, success: true, amountStolen: amount }),
+            severity: "CRITICAL",
+          });
+        }
         return presentHeist(heist, target.username, owned.weapon.name);
       },
       { timeout: 15_000 },
     ),
   );
+  const unlocked: UnlockedAchievement[] = await syncAchievements(attackerId);
+  return { ...heist, unlocked };
 }
 
 export async function heistHistory(userId: string) {

@@ -1,12 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
-export function PageTitle({ kicker, children }: { kicker?: string; children: ReactNode }) {
-  return (
-    <header className="mb-5">
-      {kicker ? <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-muted">{kicker}</p> : null}
-      <h1 className="font-serif text-3xl tracking-[0.14em] text-paper uppercase">{children}</h1>
-    </header>
-  )
+export function PageTitle(_props: { kicker?: string; children: ReactNode }) {
+  return null
 }
 
 export function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {

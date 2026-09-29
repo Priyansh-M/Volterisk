@@ -14,6 +14,7 @@ export function HeistsPage() {
   const [targetId, setTargetId] = useState<string | null>(null)
   const [weaponId, setWeaponId] = useState<string | null>(null)
   const [chance, setChance] = useState<number | null>(null)
+  const [predictors, setPredictors] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -23,9 +24,11 @@ export function HeistsPage() {
     Promise.all([
       api<TargetBoard>('/api/heists/targets'),
       api<{ owned: OwnedWeapon[] }>('/api/me/weapons'),
+      api<{ predictor: { quantity: number } }>('/api/shop'),
     ])
-      .then(([targetData, weaponData]) => {
+      .then(([targetData, weaponData, shop]) => {
         setBoard(targetData)
+        setPredictors(shop.predictor.quantity)
         setWeapons(weaponData.owned)
         const equipped = weaponData.owned.find((weapon) => weapon.equipped)
         setWeaponId(equipped?.id ?? weaponData.owned[0]?.id ?? null)
@@ -33,27 +36,23 @@ export function HeistsPage() {
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load targets.'))
   }, [])
 
-  useEffect(() => {
-    if (!targetId || !weaponId) {
-      setChance(null)
-      return
-    }
-    let cancelled = false
-    const query = new URLSearchParams({ targetUserId: targetId, weaponId, kind })
-    api<{ estimatedChance: number }>(`/api/heists/preview?${query.toString()}`)
-      .then((data) => {
-        if (!cancelled) setChance(data.estimatedChance)
+  async function usePredictor() {
+    if (!targetId || !weaponId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const data = await api<{ estimatedChance: number }>('/api/heists/estimate', {
+        method: 'POST',
+        body: JSON.stringify({ targetUserId: targetId, weaponId, kind }),
       })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setChance(null)
-          setError(err instanceof ApiError ? err.message : 'No estimate.')
-        }
-      })
-    return () => {
-      cancelled = true
+      setChance(data.estimatedChance)
+      setPredictors((count) => Math.max(0, count - 1))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The predictor did not fire.')
+    } finally {
+      setBusy(false)
     }
-  }, [targetId, weaponId, kind])
+  }
 
   const targets = board ? (kind === 'npc' ? board.npc : board.players) : null
   const weapon = weapons.find((row) => row.id === weaponId) ?? null
@@ -120,9 +119,10 @@ export function HeistsPage() {
                 </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Btn
+                  <Btn
                   onClick={() => {
                     setTargetId(row.userId)
+                    setChance(null)
                     setConfirming(false)
                     setResult(null)
                   }}
@@ -134,6 +134,7 @@ export function HeistsPage() {
                   disabled={!row.vulnerable || cooling || busy}
                   onClick={() => {
                     setTargetId(row.userId)
+                    setChance(null)
                     setConfirming(true)
                     setResult(null)
                   }}
@@ -149,6 +150,7 @@ export function HeistsPage() {
                       value={weaponId ?? ''}
                       onChange={(event) => {
                         setWeaponId(event.target.value)
+                        setChance(null)
                         setConfirming(false)
                       }}
                     >
@@ -159,13 +161,21 @@ export function HeistsPage() {
                       ))}
                     </select>
                   </Field>
-                  <p className="mt-3 text-sm">
-                    Server estimate: <span className="text-gold">{chance === null ? '—' : `${chance}%`}</span>
-                    {weapon ? ` with ${weapon.name}` : ''}
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Btn disabled={busy || predictors < 1 || !weaponId} onClick={() => void usePredictor()}>
+                      Use Estimate Predictor
+                    </Btn>
+                    <span className="font-mono text-[10px] uppercase text-muted">{predictors} in the case</span>
+                  </div>
+                  {chance !== null ? (
+                    <p className="mt-3 text-sm">
+                      Server chance: <span className="text-primary">{chance}%</span>
+                      {weapon ? ` with ${weapon.name}` : ''}
+                    </p>
+                  ) : null}
                   {confirming ? (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Btn variant="gold" disabled={busy || chance === null || !row.vulnerable || cooling} onClick={() => void commit()}>
+                      <Btn variant="gold" disabled={busy || !row.vulnerable || cooling} onClick={() => void commit()}>
                         {busy ? 'Working…' : 'Confirm job'}
                       </Btn>
                       <button type="button" className="cursor-pointer text-[12px] text-muted" onClick={() => setConfirming(false)}>
@@ -181,29 +191,33 @@ export function HeistsPage() {
       </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {result ? (
-        <section className={`border p-4 ${result.success ? 'border-ok' : 'border-danger'}`}>
-          <h2 className={`font-serif text-2xl ${result.success ? 'text-ok' : 'text-danger'}`}>
-            {result.success ? `Took ${money(result.amountStolen)}` : 'The door held'}
-          </h2>
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted">Target</dt>
-              <dd>{result.targetUsername}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Weapon</dt>
-              <dd>{result.weaponName}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Vault level</dt>
-              <dd>{result.vaultLevel}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Chance</dt>
-              <dd>{result.successChance}%</dd>
-            </div>
-          </dl>
-        </section>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/75 p-4">
+          <section className={`animate-heist w-full max-w-md border bg-card p-8 text-center shadow-2xl ${result.success ? 'border-success' : 'border-destructive'}`}>
+            <p className="font-mono text-[10px] uppercase text-muted-foreground">{result.targetUsername}</p>
+            <h2 className={`mt-3 font-display text-6xl font-semibold uppercase ${result.success ? 'text-success' : 'text-destructive'}`}>
+              {result.success ? 'Success' : 'Failure'}
+            </h2>
+            <dl className="mt-6 space-y-3 text-left text-sm">
+              <div className="flex justify-between border-b border-border pb-2">
+                <dt className="font-mono text-[10px] uppercase text-muted-foreground">Chance</dt>
+                <dd>{result.successChance}%</dd>
+              </div>
+              <div className="flex justify-between border-b border-border pb-2">
+                <dt className="font-mono text-[10px] uppercase text-muted-foreground">Item used</dt>
+                <dd>{result.weaponName}</dd>
+              </div>
+              {result.success ? (
+                <div className="flex justify-between">
+                  <dt className="font-mono text-[10px] uppercase text-muted-foreground">Money Stolen</dt>
+                  <dd className="font-mono text-success">{money(result.amountStolen)}</dd>
+                </div>
+              ) : null}
+            </dl>
+            <button type="button" className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={() => setResult(null)}>
+              Close
+            </button>
+          </section>
+        </div>
       ) : null}
     </div>
   )

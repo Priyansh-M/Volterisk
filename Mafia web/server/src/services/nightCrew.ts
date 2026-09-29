@@ -4,36 +4,80 @@ import { prisma } from "../prisma.js";
 import { createPlayer, ensureWeaponCatalog } from "./userService.js";
 
 /**
- * Seeded night-crew ledgers. Vault balances sit at or above MIN_VAULT_BALANCE
- * so the vulnerability rule can keep them on the NPC board.
+ * Twenty stationed crews. They are heist targets and map markers, never players.
+ * The first five can be robbed once per UTC day. The other fifteen, once per UTC week.
+ * Sector ids match the client chart at step 22 (station marks in world.ts).
  */
 export const NIGHT_CREW = [
-  { username: "Mara Voss", cash: 12_000, vaultBalance: 18_000, vaultLevel: 1 },
-  { username: "Eddie Quill", cash: 8_000, vaultBalance: 42_000, vaultLevel: 1 },
-  { username: "Nia Pell", cash: 22_000, vaultBalance: 96_000, vaultLevel: 2 },
-  { username: "Hugo Brandt", cash: 15_000, vaultBalance: 80_000, vaultLevel: 4 },
-  { username: "Colette Marsh", cash: 40_000, vaultBalance: 240_000, vaultLevel: 3 },
-  { username: "Felix Dunn", cash: 90_000, vaultBalance: 880_000, vaultLevel: 6 },
-  { username: "Ruth Keene", cash: 6_000, vaultBalance: 55_000, vaultLevel: 2 },
-  { username: "Samir Odeh", cash: 120_000, vaultBalance: 1_500_000, vaultLevel: 8 },
-  { username: "Inez Calder", cash: 3_000, vaultBalance: 12_000, vaultLevel: 1 },
-  { username: "Paulie Tran", cash: 18_000, vaultBalance: 300_000, vaultLevel: 5 },
+  { username: "Mara Voss", cash: 4_000, vaultBalance: 18_000, vaultLevel: 1, cadence: "day" },
+  { username: "Eddie Quill", cash: 3_000, vaultBalance: 22_000, vaultLevel: 1, cadence: "day" },
+  { username: "Nia Pell", cash: 6_000, vaultBalance: 40_000, vaultLevel: 2, cadence: "day" },
+  { username: "Hugo Brandt", cash: 5_000, vaultBalance: 28_000, vaultLevel: 1, cadence: "day" },
+  { username: "Colette Marsh", cash: 8_000, vaultBalance: 55_000, vaultLevel: 2, cadence: "day" },
+  { username: "Felix Dunn", cash: 12_000, vaultBalance: 80_000, vaultLevel: 3, cadence: "week" },
+  { username: "Ruth Keene", cash: 2_000, vaultBalance: 16_000, vaultLevel: 1, cadence: "week" },
+  { username: "Samir Odeh", cash: 20_000, vaultBalance: 120_000, vaultLevel: 4, cadence: "week" },
+  { username: "Inez Calder", cash: 1_500, vaultBalance: 12_000, vaultLevel: 1, cadence: "week" },
+  { username: "Paulie Tran", cash: 9_000, vaultBalance: 64_000, vaultLevel: 2, cadence: "week" },
+  { username: "Wes Harlow", cash: 7_000, vaultBalance: 36_000, vaultLevel: 2, cadence: "week" },
+  { username: "Lila Quinn", cash: 4_500, vaultBalance: 24_000, vaultLevel: 1, cadence: "week" },
+  { username: "Otto Venn", cash: 11_000, vaultBalance: 90_000, vaultLevel: 3, cadence: "week" },
+  { username: "Sera Lang", cash: 6_500, vaultBalance: 48_000, vaultLevel: 2, cadence: "week" },
+  { username: "Mick Doyle", cash: 3_500, vaultBalance: 20_000, vaultLevel: 1, cadence: "week" },
+  { username: "Anya Frost", cash: 14_000, vaultBalance: 110_000, vaultLevel: 4, cadence: "week" },
+  { username: "Jules Peck", cash: 5_500, vaultBalance: 32_000, vaultLevel: 2, cadence: "week" },
+  { username: "Nora Kim", cash: 8_500, vaultBalance: 70_000, vaultLevel: 3, cadence: "week" },
+  { username: "Theo Marsh", cash: 4_200, vaultBalance: 26_000, vaultLevel: 1, cadence: "week" },
+  { username: "Cora Bennett", cash: 10_000, vaultBalance: 84_000, vaultLevel: 3, cadence: "week" },
 ] as const;
 
 export type NightCrewMember = (typeof NIGHT_CREW)[number];
+export type NpcCadence = NightCrewMember["cadence"];
 
-/**
- * Five Velmora squares held by existing night-crew bots.
- * Sector ids match the client chart (stationSectors in world.ts).
- * No other squares are reserved.
- */
 export const NPC_STATIONS = [
-  { username: "Mara Voss", sectorId: "velmora-0027", landmassId: "velmora", regionName: "North Horn" },
-  { username: "Eddie Quill", sectorId: "velmora-0091", landmassId: "velmora", regionName: "West Reach" },
-  { username: "Nia Pell", sectorId: "velmora-0275", landmassId: "velmora", regionName: "Inner Shelf" },
-  { username: "Hugo Brandt", sectorId: "velmora-0206", landmassId: "velmora", regionName: "East Bight" },
-  { username: "Colette Marsh", sectorId: "velmora-0426", landmassId: "velmora", regionName: "South Keys" },
+  { username: "Mara Voss", sectorId: "velmora-0001", landmassId: "velmora", regionName: "North Horn", cadence: "day" },
+  { username: "Eddie Quill", sectorId: "velmora-0005", landmassId: "velmora", regionName: "West Reach", cadence: "day" },
+  { username: "Nia Pell", sectorId: "velmora-0019", landmassId: "velmora", regionName: "North Horn", cadence: "day" },
+  { username: "Hugo Brandt", sectorId: "velmora-0022", landmassId: "velmora", regionName: "West Reach", cadence: "day" },
+  { username: "Colette Marsh", sectorId: "velmora-0036", landmassId: "velmora", regionName: "North Horn", cadence: "day" },
+  { username: "Felix Dunn", sectorId: "velmora-0044", landmassId: "velmora", regionName: "North Horn", cadence: "week" },
+  { username: "Ruth Keene", sectorId: "velmora-0068", landmassId: "velmora", regionName: "West Reach", cadence: "week" },
+  { username: "Samir Odeh", sectorId: "velmora-0074", landmassId: "velmora", regionName: "East Bight", cadence: "week" },
+  { username: "Inez Calder", sectorId: "velmora-0091", landmassId: "velmora", regionName: "East Bight", cadence: "week" },
+  { username: "Paulie Tran", sectorId: "velmora-0094", landmassId: "velmora", regionName: "West Reach", cadence: "week" },
+  { username: "Wes Harlow", sectorId: "velmora-0100", landmassId: "velmora", regionName: "Inner Shelf", cadence: "week" },
+  { username: "Lila Quinn", sectorId: "velmora-0128", landmassId: "velmora", regionName: "Inner Shelf", cadence: "week" },
+  { username: "Otto Venn", sectorId: "velmora-0134", landmassId: "velmora", regionName: "Inner Shelf", cadence: "week" },
+  { username: "Sera Lang", sectorId: "velmora-0151", landmassId: "velmora", regionName: "East Bight", cadence: "week" },
+  { username: "Mick Doyle", sectorId: "velmora-0157", landmassId: "velmora", regionName: "Inner Shelf", cadence: "week" },
+  { username: "Anya Frost", sectorId: "velmora-0163", landmassId: "velmora", regionName: "Inner Shelf", cadence: "week" },
+  { username: "Jules Peck", sectorId: "velmora-0177", landmassId: "velmora", regionName: "Inner Shelf", cadence: "week" },
+  { username: "Nora Kim", sectorId: "velmora-0187", landmassId: "velmora", regionName: "Inner Shelf", cadence: "week" },
+  { username: "Theo Marsh", sectorId: "velmora-0194", landmassId: "velmora", regionName: "South Keys", cadence: "week" },
+  { username: "Cora Bennett", sectorId: "velmora-0206", landmassId: "velmora", regionName: "South Keys", cadence: "week" },
 ] as const;
+
+const stationByName = new Map(NPC_STATIONS.map((station) => [station.username.toLowerCase(), station]));
+
+export function stationForUsername(username: string) {
+  return stationByName.get(username.trim().toLowerCase()) ?? null;
+}
+
+export function isStationedNpc(username: string): boolean {
+  return stationByName.has(username.trim().toLowerCase());
+}
+
+/** UTC day or ISO week (Monday) start. A successful hit inside this window locks the crew. */
+export function npcWindowStart(cadence: NpcCadence, now = new Date()): Date {
+  if (cadence === "day") {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  }
+  const day = now.getUTCDay();
+  const mondayOffset = day === 0 ? 6 : day - 1;
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  start.setUTCDate(start.getUTCDate() - mondayOffset);
+  return start;
+}
 
 /** Seed balance, lifted to the heist floor only when the roster itself is too thin. */
 export function heistableVaultBalance(balance: number): number {
@@ -42,8 +86,7 @@ export function heistableVaultBalance(balance: number): number {
 
 /**
  * Inserts any missing night-crew bots. Existing rows keep their cash and vault
- * so a restart does not undo a completed heist. A name already on the ledger
- * is marked as a bot so it stays on the NPC board and off the leaderboard.
+ * so a restart does not undo a completed heist.
  */
 export async function ensureNightCrew(): Promise<void> {
   await ensureWeaponCatalog();
@@ -68,7 +111,7 @@ export async function ensureNightCrew(): Promise<void> {
   await ensureNpcStations();
 }
 
-/** Plants the five station squares once. Skips a square a player already holds. */
+/** Plants the twenty roster squares. Moves a bot onto its square when that square is free. */
 export async function ensureNpcStations(): Promise<void> {
   for (const station of NPC_STATIONS) {
     const user = await prisma.user.findUnique({
@@ -76,9 +119,20 @@ export async function ensureNpcStations(): Promise<void> {
     });
     if (!user?.isBot) continue;
     const owned = await prisma.base.findUnique({ where: { userId: user.id } });
-    if (owned) continue;
+    if (owned?.sectorId === station.sectorId) continue;
     const taken = await prisma.base.findUnique({ where: { sectorId: station.sectorId } });
-    if (taken) continue;
+    if (taken && taken.userId !== user.id) continue;
+    if (owned) {
+      await prisma.base.update({
+        where: { id: owned.id },
+        data: {
+          sectorId: station.sectorId,
+          landmassId: station.landmassId,
+          regionName: station.regionName,
+        },
+      });
+      continue;
+    }
     await prisma.base.create({
       data: {
         userId: user.id,

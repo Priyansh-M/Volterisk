@@ -96,7 +96,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
       {needsKit ? (
         <section className="border border-line bg-panel p-4">
           <p className="text-[11px] font-semibold tracking-[0.22em] text-gold uppercase">Operation initialized</p>
-          <p className="mt-2 text-sm text-muted">The desk is holding $20,000 and a Rusty Crowbar. Take them, then choose a square.</p>
+          <p className="mt-2 text-sm text-muted">The desk is holding $1,000 and a Rusty Crowbar. Take them, then choose a square.</p>
           <button
             type="button"
             disabled={busy}

@@ -15,6 +15,7 @@ model User {
   cash             Int
   tokenVersion     Int       @default(0)
   isBot            Boolean   @default(false)
+  cameraLevel      Int       @default(0)
   starterClaimedAt DateTime?
   createdAt        DateTime  @default(now())
 
@@ -29,6 +30,7 @@ model User {
   notifications  Notification[]
   txFrom         Transaction[]     @relation("TxFrom")
   txTo           Transaction[]     @relation("TxTo")
+  inventory      InventoryItem[]
 }
 
 /**
@@ -88,15 +90,28 @@ model ContractRun {
 }
 
 model UserAchievement {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   achievementId String
-  unlockedAt    DateTime @default(now())
+  unlockedAt    DateTime  @default(now())
+  announcedAt   DateTime?
+  claimedAt     DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
   @@index([userId, unlockedAt])
+}
+
+model InventoryItem {
+  id       String @id @default(cuid())
+  userId   String
+  itemId   String
+  quantity Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
 }
 
 model Vault {

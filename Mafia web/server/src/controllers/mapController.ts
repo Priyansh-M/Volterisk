@@ -3,6 +3,7 @@ import { z } from "zod";
 import { GameError } from "../game/errors.js";
 import { RULES } from "../game/rules.js";
 import { currentUserId } from "../middleware/auth.js";
+import { syncAchievements } from "../services/achievementService.js";
 import { claimBase, listBases } from "../services/baseService.js";
 
 const claimSchema = z
@@ -20,7 +21,10 @@ export async function bases(req: Request, res: Response): Promise<void> {
 export async function claim(req: Request, res: Response): Promise<void> {
   const body = claimSchema.parse(req.body ?? {});
   try {
-    res.status(201).json(await claimBase(currentUserId(req), body));
+    const userId = currentUserId(req);
+    const claimed = await claimBase(userId, body);
+    const unlocked = await syncAchievements(userId);
+    res.status(201).json({ ...claimed, unlocked });
   } catch (error) {
     if (error instanceof GameError && error.code === "SECTOR_OCCUPIED") {
       res.status(409).json({ error: { code: error.code, message: error.message } });

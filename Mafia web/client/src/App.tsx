@@ -9,6 +9,7 @@ import { HeistsPage } from './pages/HeistsPage.tsx'
 import { LeaderboardPage } from './pages/LeaderboardPage.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { MapPage } from './pages/MapPage.tsx'
+import { MarketPage } from './pages/MarketPage.tsx'
 import { NotificationsPage } from './pages/NotificationsPage.tsx'
 import { OnboardingPage } from './pages/OnboardingPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
@@ -43,7 +44,7 @@ export default function App() {
         <Route path="/heists" element={<HeistsPage />} />
         <Route path="/vault" element={<VaultPage />} />
         <Route path="/arsenal" element={<ArsenalPage />} />
-        <Route path="/market" element={<Navigate to="/arsenal" replace />} />
+        <Route path="/market" element={<MarketPage />} />
         <Route path="/properties" element={<PropertiesPage />} />
         <Route path="/work" element={<WorkPage />} />
         <Route path="/achievements" element={<AchievementsPage />} />

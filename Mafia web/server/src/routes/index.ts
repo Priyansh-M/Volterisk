@@ -1,9 +1,20 @@
 import { Router } from "express";
 import { login, logout, register } from "../controllers/authController.js";
-import { createHeist, history, preview, targets } from "../controllers/heistController.js";
+import { createHeist, estimate, history, targets } from "../controllers/heistController.js";
 import { bases, claim as claimBase } from "../controllers/mapController.js";
 import { me, myVault, myWeapons } from "../controllers/meController.js";
-import { leaderboard, notifications } from "../controllers/metaController.js";
+import {
+  achievementAlerts,
+  achievements,
+  ackAchievement,
+  buyShop,
+  cameraUpgrade,
+  claimAchievementReward,
+  leaderboard,
+  notifications,
+  readNotification,
+  shop,
+} from "../controllers/metaController.js";
 import { claim as claimStarter } from "../controllers/onboardingController.js";
 import { publicPlayer } from "../controllers/playerController.js";
 import { upgrade as upgradeVault, withdraw } from "../controllers/vaultController.js";
@@ -23,7 +34,7 @@ api.get("/me/vault", requireAuth, asyncHandler(myVault));
 api.get("/me/weapons", requireAuth, asyncHandler(myWeapons));
 
 api.get("/heists/targets", requireAuth, asyncHandler(targets));
-api.get("/heists/preview", requireAuth, asyncHandler(preview));
+api.post("/heists/estimate", requireAuth, asyncHandler(estimate));
 api.post("/heists", requireAuth, asyncHandler(createHeist));
 api.get("/heists/history", requireAuth, asyncHandler(history));
 
@@ -47,3 +58,13 @@ api.post("/work/contracts/collect", requireAuth, asyncHandler(collect));
 
 api.get("/leaderboard", requireAuth, asyncHandler(leaderboard));
 api.get("/notifications", requireAuth, asyncHandler(notifications));
+api.post("/notifications/:id/read", requireAuth, asyncHandler(readNotification));
+
+api.get("/achievements", requireAuth, asyncHandler(achievements));
+api.get("/achievements/unannounced", requireAuth, asyncHandler(achievementAlerts));
+api.post("/achievements/ack", requireAuth, asyncHandler(ackAchievement));
+api.post("/achievements/claim", requireAuth, asyncHandler(claimAchievementReward));
+
+api.get("/shop", requireAuth, asyncHandler(shop));
+api.post("/shop/buy", requireAuth, asyncHandler(buyShop));
+api.post("/shop/camera/upgrade", requireAuth, asyncHandler(cameraUpgrade));

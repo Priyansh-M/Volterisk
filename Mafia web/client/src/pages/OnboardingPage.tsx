@@ -69,7 +69,7 @@ function Allocation() {
         <dl className="mt-8 space-y-4">
           <div className="flex items-baseline justify-between gap-4 border-b border-line pb-3">
             <dt className="text-sm text-muted">Operating capital</dt>
-            <dd className="font-serif text-2xl text-gold">{kit ? money(kit.cash) : money(20_000)}</dd>
+            <dd className="font-display text-3xl text-primary">{kit ? money(kit.cash) : money(1_000)}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-4 border-b border-line pb-3">
             <dt className="text-sm text-muted">Issued weapon</dt>
@@ -77,7 +77,7 @@ function Allocation() {
           </div>
           <div>
             <dt className="text-sm text-muted">Starter kit</dt>
-            <dd className="mt-1 text-sm text-paper">Rusty Crowbar, basic lockpicks, encrypted radio</dd>
+            <dd className="mt-1 text-sm text-paper">Rusty Crowbar, level 1. Nothing else is in the case.</dd>
           </div>
         </dl>
         {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}

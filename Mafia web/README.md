@@ -48,9 +48,9 @@ Every gameplay number is on `RULES` in `server/src/game/rules.ts`.
 | --- | --- |
 | `MIN_VAULT_BALANCE` | 10000 |
 | `TARGET_PROTECTION_HOURS` | 12 |
-| `HEIST_COOLDOWN_HOURS` | 2 |
+| `HEIST_COOLDOWN_MINUTES` | 15 |
 | `HEIST_REWARD_PERCENT` | 10 (hard max 10) |
-| `STARTING_CASH` | 40000 |
+| `STARTING_CASH` | 1000 |
 | `STARTING_VAULT_BALANCE` | 25000 |
 | Vault upgrade costs | 1→2 $25,000, 2→3 $75,000, 3→4 $200,000, then up through level 10 |
 | Weapon buy / upgrade costs | tables in the same object |

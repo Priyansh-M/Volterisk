@@ -10,7 +10,7 @@ import type { OwnedWeapon, ShopWeapon } from '../lib/types.ts'
 type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null }
 
 export function ArsenalPage() {
-  const { me, refresh } = useAuth()
+  const { refresh } = useAuth()
   const [arsenal, setArsenal] = useState<Arsenal | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -67,38 +67,27 @@ export function ArsenalPage() {
                   )}
                 </div>
                 <p className="mt-2 text-sm text-muted">
-                  {owned ? `Level ${owned.effectiveLevel} · upgrade ${owned.upgradeLevel}` : `Level —`}
+                  {owned
+                    ? `Damage ${owned.effectiveLevel}${owned.nextEffectiveLevel != null ? ` · after upgrade ${owned.nextEffectiveLevel}` : ''}`
+                    : 'Not in the case'}
                 </p>
                 <p className="mt-2 flex-1 text-sm text-muted">{item.flavor}</p>
-                <p className="mt-3 text-gold">{item.price > 0 ? money(item.price) : 'Issued with the kit'}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {owned ? (
                     <>
-                      {owned.equipped ? null : (
-                        <Btn disabled={busy !== null} onClick={() => void act('/api/weapons/equip', item.id)}>
-                          Equip
-                        </Btn>
-                      )}
+                      <Btn disabled={busy !== null || owned.equipped} onClick={() => void act('/api/weapons/equip', item.id)}>
+                        {owned.equipped ? 'Equipped' : 'Equip'}
+                      </Btn>
                       {owned.nextUpgradeCost === null ? (
                         <span className="self-center text-sm text-muted">Capped</span>
                       ) : (
                         <Btn variant="gold" disabled={busy !== null} onClick={() => void act('/api/weapons/upgrade', item.id)}>
-                          Upgrade {money(owned.nextUpgradeCost)}
+                          Upgrade · damage {owned.nextEffectiveLevel} · {money(owned.nextUpgradeCost)}
                         </Btn>
                       )}
                     </>
-                  ) : canBuy ? (
-                    <Btn
-                      variant="gold"
-                      disabled={busy !== null || (me !== null && me.cash < item.price)}
-                      onClick={() => void act('/api/weapons/buy', item.id)}
-                    >
-                      {busy === item.id ? 'Buying…' : `Buy ${money(item.price)}`}
-                    </Btn>
-                  ) : locked ? (
-                    <Btn disabled>Buy previous first</Btn>
                   ) : (
-                    <p className="text-sm text-muted">Starter tool.</p>
+                    <p className="text-sm text-muted">{locked || canBuy ? 'Buy it on the marketplace.' : 'Issued with the kit.'}</p>
                   )}
                 </div>
               </div>

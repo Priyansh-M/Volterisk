@@ -2,8 +2,10 @@
  * The only success formula in the game.
  *
  *   levelDifference = weaponLevel - vaultLevel
- *   successChance = 60 + (levelDifference * 8)
+ *   successChance = 60 + (levelDifference * 8) - cameraLevel
  *   clamp to [10, 95]
+ *
+ * cameraLevel is subtracted before the clamp. A missing camera is 0.
  *
  * weaponLevel is the effective combat level from rules.ts.
  * Worked examples: W1/V1 = 60, W2/V1 = 68, W1/V2 = 52, W1/V4 = 36.
@@ -14,9 +16,10 @@ const CHANCE_PER_LEVEL = 8;
 const MIN_CHANCE = 10;
 const MAX_CHANCE = 95;
 
-export function successChance(weaponLevel: number, vaultLevel: number): number {
+export function successChance(weaponLevel: number, vaultLevel: number, cameraLevel = 0): number {
   const levelDifference = weaponLevel - vaultLevel;
-  const raw = BASE_CHANCE + levelDifference * CHANCE_PER_LEVEL;
+  const reduction = Number.isFinite(cameraLevel) ? Math.max(0, cameraLevel) : 0;
+  const raw = BASE_CHANCE + levelDifference * CHANCE_PER_LEVEL - reduction;
   if (raw < MIN_CHANCE) return MIN_CHANCE;
   if (raw > MAX_CHANCE) return MAX_CHANCE;
   return raw;

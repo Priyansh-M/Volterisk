@@ -5,8 +5,8 @@ import { GameError } from "../game/errors.js";
 import {
   RULES,
   effectiveWeaponLevel,
-  hoursAgo,
-  hoursFromNow,
+  minutesAgo,
+  minutesFromNow,
   playerLevelFromHeists,
   titleForLevel,
   weaponById,
@@ -119,11 +119,11 @@ export async function logoutPlayer(userId: string): Promise<void> {
 
 async function cooldownEndsAt(userId: string): Promise<string | null> {
   const last = await prisma.heist.findFirst({
-    where: { attackerId: userId, createdAt: { gt: hoursAgo(RULES.HEIST_COOLDOWN_HOURS) } },
+    where: { attackerId: userId, createdAt: { gt: minutesAgo(RULES.HEIST_COOLDOWN_MINUTES) } },
     orderBy: { createdAt: "desc" },
   });
   if (!last) return null;
-  return hoursFromNow(RULES.HEIST_COOLDOWN_HOURS, last.createdAt).toISOString();
+  return minutesFromNow(RULES.HEIST_COOLDOWN_MINUTES, last.createdAt).toISOString();
 }
 
 export async function getProfile(userId: string) {

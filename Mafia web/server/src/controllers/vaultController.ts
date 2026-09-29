@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentUserId } from "../middleware/auth.js";
+import { syncAchievements } from "../services/achievementService.js";
 import { upgradeVault, withdrawVault } from "../services/vaultService.js";
 
 const withdrawSchema = z
@@ -13,7 +14,10 @@ const emptySchema = z.object({}).strict();
 
 export async function upgrade(req: Request, res: Response): Promise<void> {
   emptySchema.parse(req.body ?? {});
-  res.json(await upgradeVault(currentUserId(req)));
+  const userId = currentUserId(req);
+  const vault = await upgradeVault(userId);
+  const unlocked = await syncAchievements(userId);
+  res.json({ ...vault, unlocked });
 }
 
 export async function withdraw(req: Request, res: Response): Promise<void> {

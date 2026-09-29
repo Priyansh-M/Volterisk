@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
-import { Tooltip } from './ui/Tooltip.tsx'
+import { useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { heatFromJobs, money } from '../lib/format.ts'
@@ -21,132 +21,192 @@ import {
 
 const links = [
   { to: '/', label: 'Dashboard', end: true, Icon: IconHome },
-  { to: '/map', label: 'Map', end: false, Icon: IconMap },
   { to: '/heists', label: 'Heists', end: false, Icon: IconHeist },
   { to: '/vault', label: 'Vault', end: false, Icon: IconVault },
   { to: '/arsenal', label: 'Arsenal', end: false, Icon: IconArsenal },
+  { to: '/market', label: 'Marketplace', end: false, Icon: IconBoard },
   { to: '/properties', label: 'Properties', end: false, Icon: IconProperty },
   { to: '/work', label: 'Work', end: false, Icon: IconContract },
+  { to: '/map', label: 'Map', end: false, Icon: IconMap },
   { to: '/achievements', label: 'Achievements', end: false, Icon: IconSeal },
   { to: '/profile', label: 'Profile', end: false, Icon: IconProfile },
   { to: '/leaderboard', label: 'Leaderboard', end: false, Icon: IconBoard },
 ]
 
+const pageMeta: Record<string, [string, string]> = {
+  '/': ['Operations Center', 'Live overview of your network, assets, and opportunities.'],
+  '/heists': ['Heist Intelligence', 'Evaluate targets, exposure, and operational risk.'],
+  '/vault': ['Vault Facility', 'Secure capital and improve protection systems.'],
+  '/arsenal': ['Classified Arsenal', 'Inspect and manage registered equipment.'],
+  '/market': ['Marketplace', 'Buy the next tool, a predictor, or a security camera.'],
+  '/properties': ['Property Network', 'Control the physical infrastructure behind your operation.'],
+  '/work': ['Contract Board', 'Select underground work by reward, risk, and location.'],
+  '/map': ['World Intelligence', 'Monitor territories and inspect the network.'],
+  '/achievements': ['Criminal Record', 'Archived milestones, sealed cases, and distinctions.'],
+  '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
+  '/leaderboard': ['Intelligence Ranking', 'Current standing across the criminal network.'],
+  '/notifications': ['Incoming Reports', 'Security alerts and operational updates.'],
+}
+
 export function Shell() {
   const { me, logout } = useAuth()
+  const location = useLocation()
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [notices, setNotices] = useState(0)
 
-  useEffect(() => {
-    let cancelled = false
+  function recount() {
     api<{ notifications: GameNotice[] }>('/api/notifications')
-      .then((data) => {
-        if (!cancelled) setNotices(data.notifications.filter((row) => row.read !== true).length)
-      })
-      .catch(() => {
-        if (!cancelled) setNotices(0)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [me?.id])
+      .then((data) => setNotices(data.notifications.filter((row) => row.read !== true).length))
+      .catch(() => setNotices(0))
+  }
 
   if (!me) return null
   const heat = heatFromJobs(me.stats.successfulHeists, me.stats.failedHeists)
-  const initial = me.username.slice(0, 1).toUpperCase()
+  const heatLabel = heat < 2 ? 'Low' : heat < 5 ? 'Medium' : 'High'
+  const initial = me.username.slice(0, 2).toUpperCase()
+  const meta = pageMeta[location.pathname] ?? ['Blackledger', 'Private network.']
+  const stamp = new Date().toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 
   return (
-    <div className="flex min-h-screen bg-ink text-paper">
-      <aside className="hidden w-[212px] shrink-0 flex-col border-r border-line bg-ink md:flex">
-        <div className="px-4 pt-5 pb-4">
-          <p className="font-serif text-[15px] tracking-[0.28em]">BLACKLEDGER</p>
-          <p className="mt-1 text-[10px] tracking-[0.22em] text-muted">PRIVATE NETWORK</p>
+    <div className="min-h-screen bg-background text-foreground">
+      <LedgerAlerts onChange={recount} />
+      {mobileOpen ? (
+        <button aria-label="Close navigation overlay" className="fixed inset-0 z-40 bg-background/75 lg:hidden" onClick={() => setMobileOpen(false)} />
+      ) : null}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0 ${collapsed ? 'lg:w-[76px]' : 'lg:w-64'}`}
+      >
+        <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+          <NavLink to="/" className="flex min-w-0 items-center gap-3 text-left no-underline" onClick={() => setMobileOpen(false)}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-primary font-display text-lg font-bold text-primary">B</span>
+            {collapsed ? null : (
+              <span>
+                <span className="block font-display text-lg font-semibold uppercase leading-none text-foreground">Blackledger</span>
+                <span className="font-mono text-[8px] uppercase text-muted-foreground">Private network</span>
+              </span>
+            )}
+          </NavLink>
+          <button type="button" className="font-mono text-[10px] uppercase text-muted lg:hidden" onClick={() => setMobileOpen(false)}>
+            Close
+          </button>
         </div>
-        <nav className="flex flex-col gap-0.5 px-2">
+        <div className={`border-b border-sidebar-border p-4 ${collapsed ? 'lg:px-3' : ''}`}>
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-card font-display text-lg">{initial}</span>
+            {collapsed ? null : (
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{me.username}</p>
+                <p className="font-mono text-[9px] uppercase text-primary">
+                  {me.title} · Lvl {String(me.level).padStart(2, '0')}
+                </p>
+              </div>
+            )}
+          </div>
+          {collapsed ? null : (
+            <div className="mt-4 flex justify-between border-t border-sidebar-border pt-3">
+              <span>
+                <small className="block font-mono text-[8px] uppercase text-muted-foreground">Cash</small>
+                <b className="font-mono text-xs">{money(me.cash)}</b>
+              </span>
+              <span className="text-right">
+                <small className="block font-mono text-[8px] uppercase text-muted-foreground">Location</small>
+                <b className="font-mono text-xs">{me.base ? me.base.regionName : 'Unplaced'}</b>
+              </span>
+            </div>
+          )}
+        </div>
+        <nav className="flex-1 overflow-y-auto px-2 py-3">
           {links.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
               end={link.end}
+              title={collapsed ? link.label : undefined}
+              onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 border-l-2 px-3 py-2 text-[13px] no-underline ${
-                  isActive ? 'border-gold text-gold' : 'border-transparent text-paper/80 hover:text-paper'
+                `mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs no-underline ${
+                  isActive
+                    ? 'border-primary bg-accent text-foreground'
+                    : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`
               }
             >
-              <link.Icon className="h-4 w-4" />
-              {link.label}
+              <link.Icon className="h-4 w-4 shrink-0" />
+              {collapsed ? null : <span>{link.label}</span>}
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto border-t border-line p-3">
-          <div className="flex gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-gold/50 font-serif text-gold">
-              {initial}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm">{me.username}</p>
-              <p className="truncate text-[11px] text-muted">{me.title}</p>
-            </div>
-          </div>
-          <dl className="mt-3 space-y-1 text-[12px]">
-            <div className="flex justify-between gap-2">
-              <dt className="text-muted">Level</dt>
-              <dd>{me.level}</dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-muted">Cash</dt>
-              <dd className="text-gold">{money(me.cash)}</dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-muted">Location</dt>
-              <dd className="truncate text-right">{me.base ? me.base.regionName : '—'}</dd>
-            </div>
-          </dl>
-          <button type="button" className="mt-3 cursor-pointer text-[11px] tracking-[0.14em] text-muted uppercase hover:text-paper" onClick={() => void logout()}>
-            Log out
+        <div className="border-t border-sidebar-border p-3">
+          <NavLink
+            to="/notifications"
+            onClick={() => setMobileOpen(false)}
+            className="mb-2 flex h-9 items-center gap-3 px-3 text-xs text-muted-foreground no-underline hover:text-foreground"
+          >
+            <IconSignal className="h-4 w-4" />
+            {collapsed ? null : <span>Notifications</span>}
+            {!collapsed && notices > 0 ? (
+              <span className="ml-auto bg-destructive px-1.5 font-mono text-[8px] text-white">{notices}</span>
+            ) : null}
+          </NavLink>
+          <button type="button" className="px-3 font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground" onClick={() => void logout()}>
+            {collapsed ? 'Out' : 'Log out'}
           </button>
         </div>
+        <button
+          type="button"
+          className="absolute -right-4 bottom-5 hidden h-8 w-8 border border-border bg-card text-xs lg:inline-flex lg:items-center lg:justify-center"
+          onClick={() => setCollapsed((value) => !value)}
+          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+        >
+          {collapsed ? '›' : '‹'}
+        </button>
       </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 items-center gap-3 border-b border-line px-3 md:px-5">
-          <p className="font-serif text-sm tracking-[0.22em] md:hidden">BLACKLEDGER</p>
-          <p className="hidden text-[10px] tracking-[0.2em] text-muted uppercase sm:block">Network online</p>
-          <div className="ml-auto flex items-center gap-4 text-[12px]">
-            <Tooltip content="Jobs already run. Not a separate heat system.">
-              <span className="text-muted">
-                Heat <span className="ml-1 text-paper tabular-nums">{heat}</span>
-              </span>
-            </Tooltip>
-            <span className="text-muted">
-              Vault <span className="ml-1 text-gold tabular-nums">{money(me.vault.balance)}</span>
-            </span>
-            <NavLink to="/notifications" className="relative text-paper no-underline" aria-label="Notifications">
+      <main className={`min-h-screen transition-[margin] ${collapsed ? 'lg:ml-[76px]' : 'lg:ml-64'}`}>
+        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur md:px-6">
+          <div className="flex items-center gap-3">
+            <button type="button" className="border border-border px-2 py-1 font-mono text-[10px] uppercase lg:hidden" onClick={() => setMobileOpen(true)}>
+              Menu
+            </button>
+            <div className="hidden items-center gap-2 text-xs text-success sm:flex">
+              <span className="h-1.5 w-1.5 bg-success" /> Network online
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-5">
+            <div className="hidden items-center gap-2 text-xs sm:flex">
+              <span className="text-muted-foreground">Heat</span>
+              <b>{heatLabel}</b>
+            </div>
+            <div className="border-l border-border pl-3 sm:pl-5">
+              <span className="block font-mono text-[8px] uppercase text-muted-foreground">Vault</span>
+              <b className="font-mono text-xs">{money(me.vault.balance)}</b>
+            </div>
+            <NavLink to="/notifications" aria-label="Notifications" className="relative text-foreground no-underline">
               <IconSignal className="h-4 w-4" />
-              {notices > 0 ? (
-                <span className="absolute -top-2 -right-2 min-w-4 bg-gold px-1 text-center text-[10px] text-ink">{notices}</span>
-              ) : null}
+              {notices > 0 ? <span className="absolute -top-1 -right-1 h-1.5 w-1.5 bg-destructive" /> : null}
             </NavLink>
           </div>
         </header>
-        <nav className="flex gap-1 overflow-x-auto border-b border-line px-2 py-2 md:hidden">
-          {links.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.end}
-              className={({ isActive }) =>
-                `shrink-0 px-2.5 py-1 text-[12px] no-underline ${isActive ? 'text-gold' : 'text-muted'}`
-              }
-            >
-              {link.label}
-            </NavLink>
-          ))}
-        </nav>
-        <main className="flex-1 p-4 md:p-6">
+        <div className="p-4 md:p-6 xl:p-8">
+          <div className="mb-6 flex items-end justify-between border-b border-border pb-5">
+            <div>
+              <p className="font-mono text-[9px] uppercase text-primary">Blackledger / {location.pathname === '/' ? 'dashboard' : location.pathname.slice(1)}</p>
+              <h1 className="font-display text-4xl font-semibold uppercase md:text-5xl">{meta[0]}</h1>
+              <p className="mt-1 max-w-xl text-sm text-muted-foreground">{meta[1]}</p>
+            </div>
+            <p className="hidden font-mono text-[9px] uppercase text-muted-foreground md:block">{stamp}</p>
+          </div>
           <Outlet />
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }

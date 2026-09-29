@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentUserId } from "../middleware/auth.js";
+import { syncAchievements } from "../services/achievementService.js";
 import { acceptContract, collectContract, listContracts } from "../services/workService.js";
 
 const acceptSchema = z
@@ -22,5 +23,8 @@ export async function accept(req: Request, res: Response): Promise<void> {
 
 export async function collect(req: Request, res: Response): Promise<void> {
   emptySchema.parse(req.body ?? {});
-  res.json(await collectContract(currentUserId(req)));
+  const userId = currentUserId(req);
+  const paid = await collectContract(userId);
+  const unlocked = await syncAchievements(userId);
+  res.json({ ...paid, unlocked });
 }

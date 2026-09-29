@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentUserId } from "../middleware/auth.js";
-import { attemptHeist, heistHistory, listTargets, previewHeist } from "../services/heistService.js";
+import { attemptHeist, consumeEstimate, heistHistory, listTargets } from "../services/heistService.js";
 
 const kindSchema = z.enum(["npc", "player"]);
 
@@ -13,20 +13,22 @@ const heistBodySchema = z
   })
   .strict();
 
-const previewQuerySchema = z.object({
-  targetUserId: z.string().min(1).max(64),
-  weaponId: z.string().regex(/^weapon:\d{4}$/),
-  kind: kindSchema.optional(),
-});
-
 export async function targets(req: Request, res: Response): Promise<void> {
   res.json(await listTargets(currentUserId(req)));
 }
 
-export async function preview(req: Request, res: Response): Promise<void> {
-  const query = previewQuerySchema.parse(req.query);
+const estimateSchema = z
+  .object({
+    targetUserId: z.string().min(1).max(64),
+    weaponId: z.string().regex(/^weapon:\d{4}$/),
+    kind: kindSchema.optional(),
+  })
+  .strict();
+
+export async function estimate(req: Request, res: Response): Promise<void> {
+  const body = estimateSchema.parse(req.body ?? {});
   res.json(
-    await previewHeist(currentUserId(req), query.targetUserId, query.weaponId, query.kind ?? "player"),
+    await consumeEstimate(currentUserId(req), body.targetUserId, body.weaponId, body.kind ?? "player"),
   );
 }
 

@@ -19,7 +19,7 @@ export const WORLD = { width: 520, height: 760 }
 const velmora: Landmass = {
   id: 'velmora',
   name: 'Velmora',
-  step: 16,
+  step: 22,
   label: [300, 340],
   polygon: [
     [259, 53],
@@ -94,13 +94,7 @@ const velmora: Landmass = {
     { name: 'East Bight', x: 390, y: 270 },
     { name: 'South Keys', x: 340, y: 560 },
   ],
-  borders: [
-    [[176, 150], [230, 190], [300, 170], [360, 150], [410, 190]],
-    [[110, 210], [170, 280], [200, 380], [230, 500], [290, 610]],
-    [[120, 340], [210, 320], [300, 350], [390, 330]],
-    [[250, 420], [300, 470], [340, 540], [360, 600]],
-    [[300, 110], [280, 200], [300, 300], [330, 420]],
-  ],
+  borders: [],
 }
 
 export const LANDMASSES: Landmass[] = [velmora]
@@ -115,11 +109,26 @@ export const SEA_LABELS: { name: string; at: Pt }[] = []
  * The server stores the same sector ids so the squares stay occupied.
  */
 export const NPC_STATION_MARKS = [
-  { username: 'Mara Voss', x: 300, y: 140 },
-  { username: 'Eddie Quill', x: 110, y: 196 },
-  { username: 'Nia Pell', x: 250, y: 340 },
-  { username: 'Hugo Brandt', x: 390, y: 280 },
-  { username: 'Colette Marsh', x: 340, y: 560 },
+  { username: 'Mara Voss', x: 275, y: 77 },
+  { username: 'Eddie Quill', x: 187, y: 121 },
+  { username: 'Nia Pell', x: 319, y: 143 },
+  { username: 'Hugo Brandt', x: 99, y: 165 },
+  { username: 'Colette Marsh', x: 407, y: 165 },
+  { username: 'Felix Dunn', x: 231, y: 187 },
+  { username: 'Ruth Keene', x: 165, y: 231 },
+  { username: 'Samir Odeh', x: 297, y: 231 },
+  { username: 'Inez Calder', x: 385, y: 253 },
+  { username: 'Paulie Tran', x: 99, y: 275 },
+  { username: 'Wes Harlow', x: 231, y: 275 },
+  { username: 'Lila Quinn', x: 165, y: 319 },
+  { username: 'Otto Venn', x: 297, y: 319 },
+  { username: 'Sera Lang', x: 385, y: 341 },
+  { username: 'Mick Doyle', x: 231, y: 363 },
+  { username: 'Anya Frost', x: 121, y: 385 },
+  { username: 'Jules Peck', x: 297, y: 407 },
+  { username: 'Nora Kim', x: 209, y: 451 },
+  { username: 'Theo Marsh', x: 363, y: 451 },
+  { username: 'Cora Bennett', x: 275, y: 495 },
 ] as const
 
 export type Sector = {

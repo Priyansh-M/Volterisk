@@ -11,8 +11,8 @@
  *
  *   Rusty Crowbar (1) upgrade 1 → 1
  *   Rusty Crowbar (1) upgrade 4 → 4
- *   Lockpick Set  (2) upgrade 1 → 4
- *   Vault Breaker (5) upgrade 4 → 16
+ *   Gun           (2) upgrade 1 → 4
+ *   Thermal Cutter (5) upgrade 4 → 16
  *
  * That effective level is the weaponLevel passed into the success formula
  * in probability.ts. Vault level is the integer on the target vault (1–10).
@@ -20,10 +20,11 @@
 export const RULES = {
   MIN_VAULT_BALANCE: 10_000,
   TARGET_PROTECTION_HOURS: 12,
-  HEIST_COOLDOWN_HOURS: 2,
+  /** Attacker lockout after any heist attempt. */
+  HEIST_COOLDOWN_MINUTES: 15,
   /** Hard ceiling is 10. rewards.ts clamps to this and never pays more. */
   HEIST_REWARD_PERCENT: 10,
-  STARTING_CASH: 20_000,
+  STARTING_CASH: 1_000,
   STARTING_VAULT_BALANCE: 25_000,
   STARTING_VAULT_LEVEL: 1,
   VAULT_MIN_LEVEL: 1,
@@ -37,10 +38,10 @@ export const RULES = {
   WEALTH_FORTUNE_AT: 500_000,
   WEAPONS: [
     { id: "weapon:0001", number: 1, name: "Rusty Crowbar" },
-    { id: "weapon:0002", number: 2, name: "Lockpick Set" },
-    { id: "weapon:0003", number: 3, name: "Advanced Drill" },
-    { id: "weapon:0004", number: 4, name: "Thermal Cutter" },
-    { id: "weapon:0005", number: 5, name: "Vault Breaker" },
+    { id: "weapon:0002", number: 2, name: "Gun" },
+    { id: "weapon:0003", number: 3, name: "Drill" },
+    { id: "weapon:0004", number: 4, name: "Lockpick Set" },
+    { id: "weapon:0005", number: 5, name: "Thermal Cutter" },
   ],
   /**
    * Cash to buy a weapon the player does not own yet.
@@ -50,10 +51,46 @@ export const RULES = {
   WEAPON_BUY_COSTS: {
     "weapon:0001": 0,
     "weapon:0002": 20_000,
-    "weapon:0003": 80_000,
-    "weapon:0004": 220_000,
-    "weapon:0005": 650_000,
+    "weapon:0003": 40_000,
+    "weapon:0004": 60_000,
+    "weapon:0005": 80_000,
   } as Record<string, number>,
+  /** Consumable. One use reveals the server chance for a single inspect. */
+  ESTIMATE_PREDICTOR_COST: 1_000,
+  ESTIMATE_PREDICTOR_ID: "estimate-predictor",
+  /** Level 1 purchase. Each later upgrade is 1.5× the previous upgrade cost. */
+  CAMERA_BASE_COST: 5_000,
+  CAMERA_ID: "security-camera",
+  CAMERA_MAX_LEVEL: 40,
+  ACHIEVEMENTS: [
+    {
+      id: "first-entry",
+      name: "First Entry",
+      description: "Establish your first operational base.",
+      reward: 1_000,
+    },
+    {
+      id: "clean-hands",
+      name: "Clean Hands",
+      description: "Complete 10 contracts without raising heat.",
+      reward: 5_000,
+    },
+    {
+      id: "false-bottom",
+      name: "False Bottom",
+      description: "Upgrade your vault to level 5.",
+      reward: 5_000,
+    },
+    {
+      id: "redacted",
+      name: "Redacted",
+      description: "Requirements remain classified.",
+      reward: 5_000,
+    },
+  ] as { id: string; name: string; description: string; reward: number }[],
+  /** Successful heists required before Redacted unlocks. The client never shows this number. */
+  REDACTED_HEIST_GOAL: 15,
+  CLEAN_HANDS_CONTRACTS: 10,
   /**
    * Cash to raise a weapon FROM this upgrade level to the next.
    * Keys are the current upgrade level (1, 2, or 3). Level 4 is the cap.
@@ -276,6 +313,20 @@ export function minutesFromNow(minutes: number, from = new Date()): Date {
 
 export function minutesAgo(minutes: number, from = new Date()): Date {
   return new Date(from.getTime() - minutes * 60 * 1000);
+}
+
+/** Cost to raise an installed camera from `currentLevel` to the next level. Level 0 is the $5,000 buy. */
+export function cameraUpgradeCost(currentLevel: number): number | null {
+  if (currentLevel < 0 || currentLevel >= RULES.CAMERA_MAX_LEVEL) return null;
+  let cost = RULES.CAMERA_BASE_COST;
+  for (let step = 0; step < currentLevel; step += 1) {
+    cost = Math.round(cost * 1.5);
+  }
+  return cost;
+}
+
+export function achievementById(id: string) {
+  return RULES.ACHIEVEMENTS.find((entry) => entry.id === id) ?? null;
 }
 
 export function hoursFromNow(hours: number, from = new Date()): Date {

@@ -42,13 +42,23 @@ describe("heist security", () => {
     });
     await prisma.vault.update({ where: { userId: target.id }, data: { level: 1 } });
 
+    const bought = await request(app)
+      .post("/api/shop/buy")
+      .set(auth(attacker.token))
+      .send({ itemId: "estimate-predictor" });
+    expect(bought.status).toBe(201);
     const preview = await request(app)
-      .get("/api/heists/preview")
-      .query({ targetUserId: target.id, weaponId: "weapon:0001" })
-      .set(auth(attacker.token));
+      .post("/api/heists/estimate")
+      .set(auth(attacker.token))
+      .send({ targetUserId: target.id, weaponId: "weapon:0001", successChance: 99 });
     const expected = successChance(effectiveWeaponLevel(1, 2), 1);
-    expect(preview.status).toBe(200);
-    expect(preview.body).toEqual({ estimatedChance: expected });
+    expect(preview.status).toBe(400);
+    const clean = await request(app)
+      .post("/api/heists/estimate")
+      .set(auth(attacker.token))
+      .send({ targetUserId: target.id, weaponId: "weapon:0001" });
+    expect(clean.status).toBe(200);
+    expect(clean.body).toEqual({ estimatedChance: expected });
     expect(expected).toBe(68);
     expect(await prisma.heist.count()).toBe(0);
 

@@ -38,6 +38,7 @@ export async function loadPublicProfiles(): Promise<Map<string, PublicProfile>> 
   const weaponCounts = new Map(weapons.map((row) => [row.userId, row._count._all]));
 
   const ranked = users
+    .filter((user) => !user.isBot)
     .map((user) => ({
       user,
       netWorth: user.cash + (user.vault?.balance ?? 0),
@@ -90,7 +91,7 @@ export async function publicDossier(username: string) {
     where: { usernameKey: username.trim().toLowerCase() },
     include: { base: true },
   });
-  if (!user) return null;
+  if (!user || user.isBot) return null;
   const profile = await publicProfileFor(user.id);
   if (!profile) return null;
   return {

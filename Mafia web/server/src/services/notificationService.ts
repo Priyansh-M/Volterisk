@@ -27,6 +27,15 @@ export async function writeNotification(client: Tx, input: NotificationInput): P
   });
 }
 
+export async function markNotificationRead(userId: string, notificationId: string) {
+  const row = await prisma.notification.findFirst({ where: { id: notificationId, userId } });
+  if (!row) return null;
+  if (!row.read) {
+    await prisma.notification.update({ where: { id: row.id }, data: { read: true } });
+  }
+  return { id: row.id, read: true };
+}
+
 export async function listNotifications(userId: string) {
   const rows = await prisma.notification.findMany({
     where: { userId },

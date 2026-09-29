@@ -23,6 +23,10 @@ function presentOwned(
     number: row.weapon.number,
     upgradeLevel: row.upgradeLevel,
     effectiveLevel: effectiveWeaponLevel(row.weapon.number, row.upgradeLevel),
+    nextEffectiveLevel:
+      row.upgradeLevel >= RULES.WEAPON_MAX_UPGRADE
+        ? null
+        : effectiveWeaponLevel(row.weapon.number, row.upgradeLevel + 1),
     equipped: row.equipped,
     nextUpgradeCost,
   };

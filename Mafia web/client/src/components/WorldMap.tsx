@@ -2,13 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, api } from '../lib/api.ts'
 import type { MapPin, PublicCard } from '../lib/types.ts'
 import {
-  ISLANDS,
   LANDMASSES,
   SEA_LABELS,
   SECTORS,
   WORLD,
   sectorById,
-  openPath,
   sectorAt,
   sectorsInView,
   toPath,
@@ -166,7 +164,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
   return (
     <div
       ref={frame}
-      className={`relative h-[68vh] min-h-[420px] overflow-hidden border border-[#1c1c1c] bg-[#f4f1ea] text-[#1c1c1c] select-none ${className}`}
+      className={`relative h-[calc(100vh-11rem)] min-h-[720px] overflow-hidden border border-[#1c1c1c] bg-[#efe6d4] text-[#1c1c1c] select-none ${className}`}
     >
       <svg
         ref={svgRef}
@@ -215,8 +213,8 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
         aria-label="World chart. Drag to pan, scroll to zoom, click a sector to read it."
       >
         <defs>
-          <pattern id="chart-grid" width="16" height="16" patternUnits="userSpaceOnUse">
-            <path d="M 16 0 L 0 0 0 16" fill="none" stroke="#b7ad9e" strokeWidth="1.15" />
+          <pattern id="chart-grid" width="22" height="22" patternUnits="userSpaceOnUse">
+            <path d="M 22 0 L 0 0 0 22" fill="none" stroke="#3a342c" strokeWidth="1.35" />
           </pattern>
           {LANDMASSES.map((landmass) => (
             <clipPath id={`coast-${landmass.id}`} key={landmass.id}>
@@ -224,34 +222,13 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
             </clipPath>
           ))}
         </defs>
-        <rect x={-400} y={-400} width={WORLD.width + 800} height={WORLD.height + 800} fill="url(#chart-grid)" />
         {LANDMASSES.map((landmass) => (
           <g key={landmass.id}>
-            <path d={toPath(landmass.polygon)} fill="#f7f4ec" stroke="#141414" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+            <path d={toPath(landmass.polygon)} fill="#f7f1e4" stroke="#141414" strokeWidth={1.8} vectorEffect="non-scaling-stroke" />
             <g clipPath={`url(#coast-${landmass.id})`}>
-              {landmass.borders.map((border, index) => (
-                <path
-                  key={index}
-                  d={openPath(border)}
-                  fill="none"
-                  stroke="#141414"
-                  strokeWidth={0.9}
-                  vectorEffect="non-scaling-stroke"
-                  opacity={0.85}
-                />
-              ))}
+              <rect x={-20} y={-20} width={WORLD.width + 40} height={WORLD.height + 40} fill="url(#chart-grid)" />
             </g>
           </g>
-        ))}
-        {ISLANDS.map((island, index) => (
-          <path
-            key={index}
-            d={toPath(island)}
-            fill="#f7f4ec"
-            stroke="#141414"
-            strokeWidth={1}
-            vectorEffect="non-scaling-stroke"
-          />
         ))}
         {showSectors
           ? LANDMASSES.map((landmass) => (
@@ -262,14 +239,14 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
                     const pin = pinBySector.get(sector.id)
                     const hot = focus?.id === sector.id
                     const fill = pin?.isYou
-                      ? 'rgba(198,161,91,0.88)'
+                      ? 'rgba(46, 158, 72, 0.92)'
                       : pin?.isNpc
-                        ? 'rgba(120,42,36,0.78)'
+                        ? 'rgba(196, 92, 38, 0.9)'
                         : pin
-                          ? 'rgba(36,92,134,0.72)'
+                          ? 'rgba(47, 95, 158, 0.88)'
                           : hot
-                            ? 'rgba(20,20,20,0.14)'
-                            : 'rgba(255,255,255,0.18)'
+                            ? 'rgba(20,20,20,0.16)'
+                            : 'rgba(255,255,255,0.08)'
                     return (
                       <g key={sector.id}>
                         <rect
@@ -288,7 +265,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
                             y={sector.cy - 3.1}
                             width={6.2}
                             height={6.2}
-                            fill={pin.isYou ? '#c6a15b' : pin.isNpc ? '#7a2c26' : '#245c86'}
+                            fill={pin.isYou ? '#1f7a38' : pin.isNpc ? '#9a3f16' : '#1d4e8c'}
                             stroke={pin.isYou ? '#141414' : '#f7f4ee'}
                             strokeWidth={0.7}
                           />
@@ -308,7 +285,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
                   y={sector.cy - 4.5 / cam.k}
                   width={9 / cam.k}
                   height={9 / cam.k}
-                  fill={pin.isYou ? '#c6a15b' : pin.isNpc ? '#7a2c26' : '#245c86'}
+                  fill={pin.isYou ? '#2e9e48' : pin.isNpc ? '#c45c26' : '#2f5f9e'}
                   stroke="#f4f1ea"
                   strokeWidth={0.8}
                   vectorEffect="non-scaling-stroke"
@@ -397,7 +374,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
           style={{ left: tip.x, top: tip.y }}
         >
           <p className="text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
-            {focusPin?.isYou ? 'Your base' : focusPin ? 'Occupied' : 'Open sector'}
+            {focusPin?.isYou ? 'yours' : focusPin?.isNpc ? 'NPC crew' : focusPin ? 'Player' : 'Open sector'}
           </p>
           <p className="mt-1 font-mono text-[12px] tracking-[0.08em]">{focus.id.toUpperCase()}</p>
           <p className="mt-1 text-[12px] text-[#3c3a36]">
