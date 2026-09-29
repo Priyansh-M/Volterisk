@@ -66,15 +66,23 @@ export function HeistsPage() {
 
   async function usePredictor() {
     if (!targetId || !weaponId) return
+    const selected = weapons.find((row) => (row.instanceId ?? row.id) === weaponId)
+    const catalogId = selected?.id
+    if (!catalogId || !/^weapon:\d{4}$/.test(catalogId)) return
     setBusy(true)
     setError(null)
     try {
       const data = await api<{ estimatedChance: number }>('/api/heists/estimate', {
         method: 'POST',
-        body: JSON.stringify({ targetUserId: targetId, weaponId, kind }),
+        body: JSON.stringify({
+          targetUserId: targetId,
+          weaponId: catalogId,
+          kind,
+        }),
       })
       setChance(data.estimatedChance)
-      setPredictors((count) => Math.max(0, count - 1))
+      const shop = await api<{ predictor: { quantity: number } }>('/api/shop')
+      setPredictors(shop.predictor.quantity)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The predictor did not fire.')
     } finally {
@@ -83,7 +91,7 @@ export function HeistsPage() {
   }
 
   const targets = board ? (kind === 'npc' ? board.npc : board.players) : null
-  const weapon = weapons.find((row) => row.id === weaponId) ?? null
+  const weapon = weapons.find((row) => (row.instanceId ?? row.id) === weaponId) ?? null
   const cooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
 
   async function commit() {
@@ -104,7 +112,12 @@ export function HeistsPage() {
       setResult(heist)
       setConfirming(false)
       await refresh()
-      setBoard(await api<TargetBoard>('/api/heists/targets'))
+      const [nextBoard, weaponData] = await Promise.all([
+        api<TargetBoard>('/api/heists/targets'),
+        api<{ owned: OwnedWeapon[] }>('/api/me/weapons'),
+      ])
+      setBoard(nextBoard)
+      setWeapons(weaponData.owned.filter((row) => (row.durability ?? 1) > 0))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The job failed to start.')
     } finally {
@@ -211,7 +224,8 @@ export function HeistsPage() {
                         <p className="text-sm">Defense: {quote.defense}</p>
                       </div>
                       <p className="sm:col-span-2 font-mono text-xs">
-                        Attack advantage: {quote.advantage >= 0 ? `+${quote.advantage}` : quote.advantage} · Estimated success {quote.estimatedChance}%
+                        Attack advantage: {quote.advantage >= 0 ? `+${quote.advantage}` : quote.advantage}
+                        {chance !== null ? ` · Estimated success ${chance}%` : ''}
                       </p>
                     </div>
                   ) : null}

@@ -37,15 +37,17 @@ export function ArsenalPage() {
     }
   }
 
-  const ownedRows = arsenal?.owned ?? []
-  const ownedIds = new Set(ownedRows.map((row) => row.id))
-  const cards = [
-    ...ownedRows.map((row) => ({
-      item: WEAPON_CATALOG.find((entry) => entry.id === row.id) ?? WEAPON_CATALOG[0],
+  const cards = (arsenal?.owned ?? [])
+    .filter((row) => (row.durability ?? 1) > 0)
+    .map((row) => ({
+      item: WEAPON_CATALOG.find((entry) => entry.id === row.id) ?? {
+        id: row.id,
+        name: row.name,
+        flavor: '',
+        price: 0,
+      },
       owned: row,
-    })),
-    ...WEAPON_CATALOG.filter((item) => !ownedIds.has(item.id)).map((item) => ({ item, owned: undefined })),
-  ]
+    }))
 
   return (
     <div className="space-y-4">
@@ -53,33 +55,29 @@ export function ArsenalPage() {
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {!arsenal && !error ? <Notice tone="muted">Unlocking the case…</Notice> : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {cards.length === 0 && arsenal ? <Notice tone="muted">The case is empty.</Notice> : null}
         {cards.map(({ item, owned }) => {
-          const locked = !owned && item.price > 0
           return (
-            <article key={owned?.instanceId ?? item.id} className="flex flex-col border border-line bg-panel">
+            <article key={owned.instanceId ?? item.id} className="flex flex-col border border-line bg-panel">
               <div className="aspect-[11/7] border-b border-line">
                 <WeaponArt id={item.id} />
               </div>
               <div className="flex flex-1 flex-col p-4">
                 <div className="flex items-start justify-between gap-2">
                   <h2 className="font-serif text-xl tracking-wide">{item.name}</h2>
-                  {owned?.equipped ? (
+                  {owned.equipped ? (
                     <span className="text-[10px] tracking-[0.16em] text-gold uppercase">Equipped</span>
-                  ) : owned ? (
-                    <span className="text-[10px] tracking-[0.16em] text-ok uppercase">Owned</span>
                   ) : (
-                    <span className="text-[10px] tracking-[0.16em] text-muted uppercase">Locked</span>
+                    <span className="text-[10px] tracking-[0.16em] text-ok uppercase">Owned</span>
                   )}
                 </div>
                 <p className="mt-2 font-display text-xl uppercase">
-                  {item.name} {owned ? `(L.${owned.upgradeLevel})` : ''}
+                  {item.name} (L.{owned.upgradeLevel})
                 </p>
                 <p className="mt-1 text-sm text-muted">
-                  {owned
-                    ? `Attack ${owned.attack ?? owned.effectiveLevel}${owned.nextAttack != null ? ` · after upgrade ${owned.nextAttack}` : ''}`
-                    : 'Not in the case'}
+                  {`Attack ${owned.attack ?? owned.effectiveLevel}${owned.nextAttack != null ? ` · after upgrade ${owned.nextAttack}` : ''}`}
                 </p>
-                {owned && owned.maxDurability ? (
+                {owned.maxDurability ? (
                   <div className="mt-3">
                     <div className="h-1.5 bg-muted">
                       <div
@@ -95,21 +93,15 @@ export function ArsenalPage() {
                 ) : null}
                 <p className="mt-2 flex-1 text-sm text-muted">{item.flavor}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {owned ? (
-                    <>
-                      <Btn disabled={busy !== null || owned.equipped} onClick={() => void act('/api/weapons/equip', item.id, owned.instanceId)}>
-                        {owned.equipped ? 'Equipped' : 'Equip'}
-                      </Btn>
-                      {owned.nextUpgradeCost === null ? (
-                        <span className="self-center text-sm text-muted">Capped</span>
-                      ) : (
-                        <Btn variant="gold" disabled={busy !== null} onClick={() => void act('/api/weapons/upgrade', item.id, owned.instanceId)}>
-                          Upgrade · attack {owned.nextAttack ?? owned.nextEffectiveLevel} · {money(owned.nextUpgradeCost)}
-                        </Btn>
-                      )}
-                    </>
+                  <Btn disabled={busy !== null || owned.equipped} onClick={() => void act('/api/weapons/equip', item.id, owned.instanceId)}>
+                    {owned.equipped ? 'Equipped' : 'Equip'}
+                  </Btn>
+                  {owned.nextUpgradeCost === null ? (
+                    <span className="self-center text-sm text-muted">Capped</span>
                   ) : (
-                    <p className="text-sm text-muted">{locked ? 'Buy it on the marketplace.' : 'Issued with the kit.'}</p>
+                    <Btn variant="gold" disabled={busy !== null} onClick={() => void act('/api/weapons/upgrade', item.id, owned.instanceId)}>
+                      Upgrade · attack {owned.nextAttack ?? owned.nextEffectiveLevel} · {money(owned.nextUpgradeCost)}
+                    </Btn>
                   )}
                 </div>
               </div>

@@ -61,6 +61,16 @@ describe("heist security", () => {
     expect(clean.body).toEqual({ estimatedChance: expected });
     expect(expected).toBe(61);
     expect(await prisma.heist.count()).toBe(0);
+    const left = await prisma.inventoryItem.findFirst({
+      where: { userId: attacker.id, itemId: "estimate-predictor" },
+    });
+    expect(left?.quantity ?? 0).toBe(0);
+    const again = await request(app)
+      .post("/api/heists/estimate")
+      .set(auth(attacker.token))
+      .send({ targetUserId: target.id, weaponId: "weapon:0001" });
+    expect(again.status).toBe(400);
+    expect(again.body.code).toBe("NO_PREDICTOR");
 
     const heist = await request(app)
       .post("/api/heists")
