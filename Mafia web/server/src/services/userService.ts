@@ -187,6 +187,7 @@ export async function getProfile(userId: string) {
           sectorId: user.base.sectorId,
           landmassId: user.base.landmassId,
           regionName: user.base.regionName,
+          name: user.base.name,
         }
       : null,
     stats: {

@@ -8,6 +8,7 @@ export type PlayerBase = {
   sectorId: string
   landmassId: string
   regionName: string
+  name?: string | null
 }
 
 export type Profile = {
@@ -136,6 +137,7 @@ export type MapPin = {
   sectorId: string
   landmassId: string
   regionName: string
+  name?: string | null
   isYou: boolean
   isNpc?: boolean
   player: PublicCard

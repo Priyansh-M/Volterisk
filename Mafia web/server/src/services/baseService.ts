@@ -8,12 +8,14 @@ export type BaseClaim = {
   sectorId: string;
   landmassId: string;
   regionName: string;
+  name?: string | null;
 };
 
 export type BaseView = {
   sectorId: string;
   landmassId: string;
   regionName: string;
+  name: string | null;
 };
 
 function cleanClaim(input: BaseClaim): BaseView {
@@ -29,7 +31,18 @@ function cleanClaim(input: BaseClaim): BaseView {
   if (regionName.length < 1 || regionName.length > RULES.REGION_NAME_MAX_LENGTH) {
     throw new GameError(400, "VALIDATION", "Region name is missing.");
   }
-  return { sectorId, landmassId, regionName };
+  const name = cleanBlockName(input.name);
+  return { sectorId, landmassId, regionName, name };
+}
+
+export function cleanBlockName(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const name = value.trim().replace(/\s+/g, " ");
+  if (!name) return null;
+  if (name.length > 32) {
+    throw new GameError(400, "VALIDATION", "Block name can be 32 characters at most.");
+  }
+  return name;
 }
 
 function occupied(): GameError {
@@ -59,6 +72,7 @@ export async function claimBase(userId: string, input: BaseClaim): Promise<{ bas
             sectorId: claim.sectorId,
             landmassId: claim.landmassId,
             regionName: claim.regionName,
+            name: claim.name,
           },
         });
       } catch (error) {
@@ -74,7 +88,21 @@ export async function claimBase(userId: string, input: BaseClaim): Promise<{ bas
       sectorId: base.sectorId,
       landmassId: base.landmassId,
       regionName: base.regionName,
+      name: base.name,
     },
+  };
+}
+
+export async function renameBase(userId: string, name: string | null) {
+  const cleaned = cleanBlockName(name);
+  const base = await prisma.base.findUnique({ where: { userId } });
+  if (!base) throw new GameError(404, "NO_BASE", "You do not have a block yet.");
+  const updated = await prisma.base.update({ where: { userId }, data: { name: cleaned } });
+  return {
+    sectorId: updated.sectorId,
+    landmassId: updated.landmassId,
+    regionName: updated.regionName,
+    name: updated.name,
   };
 }
 
@@ -95,6 +123,7 @@ export async function listBases(viewerId: string) {
           sectorId: base.sectorId,
           landmassId: base.landmassId,
           regionName: base.regionName,
+          name: base.name,
           isYou: base.userId === viewerId,
           isNpc: base.user.isBot,
           player: profile

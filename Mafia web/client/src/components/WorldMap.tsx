@@ -23,7 +23,7 @@ type Props = {
   busy: boolean
   loading?: boolean
   focusSectorId?: string | null
-  onClaim: (sector: Sector) => void
+  onClaim: (sector: Sector, name: string) => void
   className?: string
   /** Onboarding only. The live map does not nag after login. */
   showHint?: boolean
@@ -51,6 +51,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
   const [tip, setTip] = useState({ x: 16, y: 16 })
   const [dossier, setDossier] = useState<PublicCard | null>(null)
   const [squaresOn, setSquaresOn] = useState(false)
+  const [blockName, setBlockName] = useState('')
 
   const pinBySector = useMemo(() => new Map(pins.map((pin) => [pin.sectorId, pin])), [pins])
   const focus = pinned ?? hover
@@ -282,6 +283,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
                   .map((sector) => {
                     const pin = pinBySector.get(sector.id)
                     const hot = focus?.id === sector.id
+                    const selected = pinned?.id === sector.id
                     const fill = pin?.isYou
                       ? 'rgba(46, 158, 72, 0.92)'
                       : pin?.isNpc
@@ -299,8 +301,8 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
                           width={sector.w}
                           height={sector.h}
                           fill={fill}
-                          stroke="#1a1a1a"
-                          strokeWidth={hot || pin ? 1.8 : 1.25}
+                          stroke={selected ? '#ffffff' : '#1a1a1a'}
+                          strokeWidth={selected ? 3.4 : hot || pin ? 1.8 : 1.25}
                           vectorEffect="non-scaling-stroke"
                         />
                         {pin ? (
@@ -422,7 +424,9 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
           <p className="text-[10px] font-semibold tracking-[0.14em] text-[#6d6860]">
             {focusPin?.isYou ? 'yours' : focusPin?.isNpc ? 'NPC crew' : focusPin ? 'Player' : 'Open sector'}
           </p>
-          <p className="mt-1 font-mono text-[12px] tracking-[0.08em]">{focus.id.toUpperCase()}</p>
+          <p className="mt-1 font-display text-lg font-semibold uppercase">
+            {focusPin?.name?.trim() || focus.regionName}
+          </p>
           <p className="mt-1 text-[12px] text-[#3c3a36]">
             {focusPin && !focusPin.isYou && !focusPin.isNpc
               ? focusPin.player.username
@@ -455,14 +459,26 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
             </button>
           ) : null}
           {pinned && !focusPin && canClaim ? (
-            <button
-              type="button"
-              disabled={busy}
-              className="gloss-gold mt-2 w-full cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-              onClick={() => onClaim(focus)}
-            >
-              {busy ? 'Filing…' : 'Claim sector'}
-            </button>
+            <div className="mt-2 space-y-2">
+              <label className="block text-[10px] tracking-[0.14em] text-[#6d6860] uppercase">
+                Block name
+                <input
+                  className="mt-1 w-full border border-[#1c1c1c] bg-white px-2 py-1 text-sm text-[#1c1c1c]"
+                  value={blockName}
+                  maxLength={32}
+                  placeholder="Name this block"
+                  onChange={(event) => setBlockName(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={busy || blockName.trim().length < 1}
+                className="gloss-gold w-full cursor-pointer px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                onClick={() => onClaim(focus, blockName.trim())}
+              >
+                {busy ? 'Filing…' : 'Claim sector'}
+              </button>
+            </div>
           ) : null}
           {pinned && !focusPin && !canClaim && claimHint ? (
             <p className="mt-2 text-[11px] text-[#6d6860]">{claimHint}</p>

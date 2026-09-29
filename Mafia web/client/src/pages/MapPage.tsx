@@ -61,7 +61,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
     }
   }
 
-  async function claimSector(sector: Sector) {
+  async function claimSector(sector: Sector, name: string) {
     setBusy(true)
     setError(null)
     try {
@@ -71,6 +71,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
           sectorId: sector.id,
           landmassId: sector.landmassId,
           regionName: sector.regionName,
+          name,
         }),
       })
       setEstablished(result.base)
@@ -126,7 +127,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
           canClaim={!needsKit && needsBase}
           claimHint={needsKit ? 'Take the kit before you plant a flag.' : needsBase ? null : 'This square is for reading. Your base is already filed.'}
           busy={busy}
-          onClaim={(sector) => void claimSector(sector)}
+          onClaim={(sector, name) => void claimSector(sector, name)}
         />
         {onboarding ? null : (
           <aside className="border border-line bg-panel p-4">
@@ -136,7 +137,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
               <Intel label="Sectors" value={String(SECTORS.length)} />
               <Intel label="Occupied" value={pins ? String(pins.length) : '—'} />
               <Intel label="Your base" value={filed ? filed.regionName : '—'} />
-              <Intel label="Square" value={filed ? filed.sectorId.toUpperCase() : '—'} />
+              <Intel label="Block" value={filed?.name?.trim() || 'Unnamed'} />
             </dl>
             {established ? (
               <Link to="/" className="mt-4 inline-block border border-gold/40 px-3 py-1.5 text-[11px] tracking-[0.14em] text-gold uppercase no-underline">

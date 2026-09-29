@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { login, logout, register } from "../controllers/authController.js";
 import { createHeist, estimate, history, quote, targets } from "../controllers/heistController.js";
-import { bases, claim as claimBase } from "../controllers/mapController.js";
+import { bases, claim as claimBase, rename as renameBase } from "../controllers/mapController.js";
 import { me, myVault, myWeapons } from "../controllers/meController.js";
 import {
   achievementAlerts,
@@ -54,6 +54,7 @@ api.post("/onboarding/claim", requireAuth, asyncHandler(claimStarter));
 
 api.get("/map/bases", requireAuth, asyncHandler(bases));
 api.post("/map/base", requireAuth, asyncHandler(claimBase));
+api.post("/map/base/name", requireAuth, asyncHandler(renameBase));
 
 api.get("/players/:username/public", requireAuth, asyncHandler(publicPlayer));
 
