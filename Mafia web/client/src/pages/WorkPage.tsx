@@ -5,8 +5,20 @@ import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
 import type { WorkBoard } from '../lib/types.ts'
 
+type PassiveJob = {
+  id: string
+  name: string
+  payPerDay: number
+  requirement: string
+  qualified: boolean
+  available: boolean
+  nextAt: string | null
+}
+
 export function WorkPage() {
-  const { refresh } = useAuth()
+  const { me, refresh, applyCash } = useAuth()
+  const [lane, setLane] = useState<'passive' | 'active'>('passive')
+  const [passive, setPassive] = useState<PassiveJob[] | null>(null)
   const [board, setBoard] = useState<WorkBoard | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [missing, setMissing] = useState(false)
@@ -14,8 +26,12 @@ export function WorkPage() {
   const [busy, setBusy] = useState(false)
 
   async function load() {
-    const data = await api<WorkBoard>('/api/work/contracts')
+    const [data, jobs] = await Promise.all([
+      api<WorkBoard>('/api/work/contracts'),
+      api<{ jobs: PassiveJob[] }>('/api/work/passive'),
+    ])
     setBoard(data)
+    setPassive(jobs.jobs)
     setMissing(false)
   }
 
@@ -49,24 +65,79 @@ export function WorkPage() {
   }
 
   async function collect() {
-    setBusy(true)
+    if (!board?.active || !me) return
+    const reward = board.active.reward
+    const snapshot = me.cash
+    const previous = board
+    applyCash(snapshot + reward)
+    setBoard({ ...board, active: null })
+    setNote(`Collected ${money(reward)}.`)
     setError(null)
-    setNote(null)
     try {
-      const paid = await api<{ reward: number }>('/api/work/contracts/collect', { method: 'POST', body: '{}' })
-      await load()
-      await refresh()
-      setNote(`Collected ${money(paid.reward)}.`)
+      const paid = await api<{ reward: number; cash: number }>('/api/work/contracts/collect', { method: 'POST', body: '{}' })
+      applyCash(paid.cash)
+      void load()
+      void refresh()
     } catch (err) {
+      applyCash(snapshot)
+      setBoard(previous)
+      setNote(null)
       setError(err instanceof ApiError ? err.message : 'The payout is not ready.')
-    } finally {
-      setBusy(false)
+    }
+  }
+
+  async function collectPassive(job: PassiveJob) {
+    if (!me) return
+    const snapshot = me.cash
+    applyCash(snapshot + job.payPerDay)
+    setPassive((current) => current?.map((row) => (row.id === job.id ? { ...row, available: false, nextAt: new Date(Date.now() + 86400000).toISOString() } : row)) ?? null)
+    setNote(`Collected ${money(job.payPerDay)} for today.`)
+    setError(null)
+    try {
+      const paid = await api<{ cash: number }>('/api/work/passive/collect', {
+        method: 'POST',
+        body: JSON.stringify({ jobId: job.id }),
+      })
+      applyCash(paid.cash)
+      void load()
+      void refresh()
+    } catch (err) {
+      applyCash(snapshot)
+      void load()
+      setNote(null)
+      setError(err instanceof ApiError ? err.message : 'That pay is not ready.')
     }
   }
 
   return (
     <div className="space-y-4">
       <PageTitle kicker="Board">Contract board</PageTitle>
+      <div className="flex gap-2">
+        <Btn variant={lane === 'passive' ? 'gold' : 'ghost'} onClick={() => setLane('passive')}>Passive</Btn>
+        <Btn variant={lane === 'active' ? 'gold' : 'ghost'} onClick={() => setLane('active')}>Active</Btn>
+      </div>
+      {lane === 'passive' ? (
+        <div className="grid gap-3">
+          <p className="text-sm text-muted-foreground">Each open job pays {money(3000)} per day. A higher level than the requirement still qualifies.</p>
+          {passive?.map((job) => (
+            <article key={job.id} className="border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-semibold uppercase">{job.name}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{job.requirement}</p>
+                  <p className="mt-1 font-mono text-xs text-primary">{money(job.payPerDay)} per day</p>
+                </div>
+                {job.available ? (
+                  <Btn variant="gold" onClick={() => void collectPassive(job)}>Collect</Btn>
+                ) : (
+                  <Btn disabled>{job.qualified ? 'Collected today' : 'Locked'}</Btn>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {lane === 'active' ? (<>
       {missing ? <Notice tone="muted">The work board has not been posted.</Notice> : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {note ? <Notice tone="ok">{note}</Notice> : null}
@@ -129,6 +200,7 @@ export function WorkPage() {
         ))}
       </div>
       {board && board.contracts.length === 0 && !missing ? <Notice tone="muted">Nothing is offered this watch.</Notice> : null}
+      </>) : null}
     </div>
   )
 }

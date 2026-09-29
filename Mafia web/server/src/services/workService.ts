@@ -11,6 +11,7 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { creditCash } from "./economyService.js";
+import { ASSETS, assetById } from "./propertyService.js";
 import { writeNotification } from "./notificationService.js";
 import { uniqueConflictText, withSqliteRetry } from "./sqlite.js";
 
@@ -232,4 +233,101 @@ export async function collectContract(userId: string) {
     }),
   );
   return paid;
+}
+
+const VEHICLE_IDS = new Set<string>(ASSETS.filter((item) => item.kind === "vehicle").map((item) => item.id));
+const PASSIVE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function passiveRequirement(job: (typeof RULES.PASSIVE_JOBS)[number]): string {
+  const parts = job.requires.map((req) => {
+    if (req.anyVehicle) return `Vehicle level ${req.minLevel} or higher`;
+    const name = assetById(req.id ?? "")?.name ?? req.id;
+    return `${name} level ${req.minLevel} or higher`;
+  });
+  const needsBuilding = job.requires.some((req) => req.id && assetById(req.id)?.kind === "property");
+  if (!needsBuilding) parts.unshift("No property");
+  return parts.join(", ");
+}
+
+function passiveQualified(
+  owned: { catalogId: string; level: number }[],
+  job: (typeof RULES.PASSIVE_JOBS)[number],
+) {
+  return job.requires.every((req) => {
+    if (req.anyVehicle) {
+      return owned.some((row) => VEHICLE_IDS.has(row.catalogId) && row.level >= req.minLevel);
+    }
+    const row = owned.find((item) => item.catalogId === req.id);
+    return Boolean(row && row.level >= req.minLevel);
+  });
+}
+
+export async function listPassiveJobs(userId: string) {
+  const now = Date.now();
+  const [owned, runs] = await Promise.all([
+    prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } }),
+    prisma.contractRun.findMany({
+      where: { userId, contractId: { in: RULES.PASSIVE_JOBS.map((job) => job.id) }, collectedAt: { not: null } },
+      orderBy: { collectedAt: "desc" },
+    }),
+  ]);
+  const latest = new Map<string, Date>();
+  for (const run of runs) {
+    if (!run.collectedAt || latest.has(run.contractId)) continue;
+    latest.set(run.contractId, run.collectedAt);
+  }
+  return {
+    jobs: RULES.PASSIVE_JOBS.map((job) => {
+      const last = latest.get(job.id) ?? null;
+      const readyAt = last ? last.getTime() + PASSIVE_DAY_MS : 0;
+      const cooling = readyAt > now;
+      const qualified = passiveQualified(owned, job);
+      return {
+        id: job.id,
+        name: job.name,
+        payPerDay: RULES.PASSIVE_PAY_PER_DAY,
+        requirement: passiveRequirement(job),
+        qualified,
+        available: qualified && !cooling,
+        nextAt: cooling ? new Date(readyAt).toISOString() : null,
+      };
+    }),
+  };
+}
+
+export async function collectPassiveJob(userId: string, jobId: string) {
+  const job = RULES.PASSIVE_JOBS.find((entry) => entry.id === jobId);
+  if (!job) throw new GameError(400, "UNKNOWN_CONTRACT", "That passive job is not on the board.");
+  return prisma.$transaction(async (tx) => {
+    const owned = await tx.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
+    if (!passiveQualified(owned, job)) {
+      throw new GameError(403, "NOT_QUALIFIED", "You do not meet that job's requirements.");
+    }
+    const now = new Date();
+    const last = await tx.contractRun.findFirst({
+      where: { userId, contractId: job.id, collectedAt: { not: null } },
+      orderBy: { collectedAt: "desc" },
+    });
+    if (last?.collectedAt && last.collectedAt.getTime() + PASSIVE_DAY_MS > now.getTime()) {
+      throw new GameError(409, "CONTRACT_COOLDOWN", "That pay was already collected today.", {
+        nextAt: new Date(last.collectedAt.getTime() + PASSIVE_DAY_MS).toISOString(),
+      });
+    }
+    await creditCash(tx, userId, RULES.PASSIVE_PAY_PER_DAY);
+    await tx.contractRun.create({
+      data: {
+        userId,
+        contractId: job.id,
+        reward: RULES.PASSIVE_PAY_PER_DAY,
+        completesAt: now,
+        collectedAt: now,
+        activeSlot: null,
+      },
+    });
+    await tx.transaction.create({
+      data: { type: "passive_payout", amount: RULES.PASSIVE_PAY_PER_DAY, toUserId: userId },
+    });
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    return { cash: user?.cash ?? 0, reward: RULES.PASSIVE_PAY_PER_DAY, jobId: job.id };
+  });
 }

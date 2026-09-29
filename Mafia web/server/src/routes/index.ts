@@ -22,7 +22,7 @@ import { claim as claimStarter } from "../controllers/onboardingController.js";
 import { publicPlayer } from "../controllers/playerController.js";
 import { insurance, upgrade as upgradeVault, withdraw } from "../controllers/vaultController.js";
 import { buy, equip, upgrade as upgradeWeapon } from "../controllers/weaponController.js";
-import { accept, collect, contracts } from "../controllers/workController.js";
+import { accept, collect, collectPassivePay, contracts, passive } from "../controllers/workController.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "./asyncHandler.js";
 
@@ -60,6 +60,8 @@ api.get("/players/:username/public", requireAuth, asyncHandler(publicPlayer));
 api.get("/work/contracts", requireAuth, asyncHandler(contracts));
 api.post("/work/contracts/accept", requireAuth, asyncHandler(accept));
 api.post("/work/contracts/collect", requireAuth, asyncHandler(collect));
+api.get("/work/passive", requireAuth, asyncHandler(passive));
+api.post("/work/passive/collect", requireAuth, asyncHandler(collectPassivePay));
 
 api.get("/leaderboard", requireAuth, asyncHandler(leaderboard));
 api.get("/notifications", requireAuth, asyncHandler(notifications));

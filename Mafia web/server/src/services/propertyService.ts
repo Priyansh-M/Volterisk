@@ -9,6 +9,8 @@ export const ASSETS = [
   { id: "safehouse", name: "Safehouse", price: 30_000, kind: "property", note: "A second door and a quiet room." },
   { id: "hangar", name: "Hangar", price: 50_000, kind: "property", note: "Cover for anything that needs a runway." },
   { id: "caravan", name: "Caravan", price: 50_000, kind: "property", note: "A house that can leave town." },
+  { id: "warehouse", name: "Warehouse", price: 20_000, kind: "property", note: "Floor space for a loader crew." },
+  { id: "front", name: "Front Business", price: 20_000, kind: "property", note: "A counter that faces the street." },
   { id: "car", name: "Car", price: 35_000, kind: "vehicle", note: "A street car with clean plates." },
   { id: "bike", name: "Bike", price: 20_000, kind: "vehicle", note: "Fast through the alleys." },
   { id: "truck", name: "Truck", price: 75_000, kind: "vehicle", note: "Hauls a job that will not fit in a trunk." },

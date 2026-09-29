@@ -19,7 +19,7 @@ const notes: Record<number, string> = {
 }
 
 export function VaultPage() {
-  const { me, refresh } = useAuth()
+  const { me, refresh, applyCash } = useAuth()
   const [vault, setVault] = useState<VaultView | null>(() => peek<VaultView>('/api/me/vault'))
   const [amount, setAmount] = useState('5000')
   const [error, setError] = useState<string | null>(null)
@@ -54,15 +54,20 @@ export function VaultPage() {
     setBusy(true)
     setError(null)
     setNote(null)
+    const snapshot = me?.cash
     try {
-      await api('/api/vault/withdraw', {
+      const moved = Number(amount)
+      if (me) applyCash(me.cash + moved)
+      const paid = await api<{ cash: number }>('/api/vault/withdraw', {
         method: 'POST',
-        body: JSON.stringify({ amount: Number(amount) }),
+        body: JSON.stringify({ amount: moved }),
       })
-      await reload()
-      await refresh()
+      applyCash(paid.cash)
+      void reload()
+      void refresh()
       setNote('Moved to cash.')
     } catch (err) {
+      if (snapshot != null) applyCash(snapshot)
       setError(err instanceof ApiError ? err.message : 'Withdraw failed.')
     } finally {
       setBusy(false)

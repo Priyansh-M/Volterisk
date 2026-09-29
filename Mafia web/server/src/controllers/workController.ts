@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentUserId } from "../middleware/auth.js";
 import { syncAchievements } from "../services/achievementService.js";
-import { acceptContract, collectContract, listContracts } from "../services/workService.js";
+import { acceptContract, collectContract, collectPassiveJob, listContracts, listPassiveJobs } from "../services/workService.js";
 
 const acceptSchema = z
   .object({
@@ -27,4 +27,13 @@ export async function collect(req: Request, res: Response): Promise<void> {
   const paid = await collectContract(userId);
   const unlocked = await syncAchievements(userId);
   res.json({ ...paid, unlocked });
+}
+
+export async function passive(req: Request, res: Response): Promise<void> {
+  res.json(await listPassiveJobs(currentUserId(req)));
+}
+
+export async function collectPassivePay(req: Request, res: Response): Promise<void> {
+  const body = z.object({ jobId: z.string().trim().min(1).max(64) }).strict().parse(req.body ?? {});
+  res.json(await collectPassiveJob(currentUserId(req), body.jobId));
 }

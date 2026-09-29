@@ -184,6 +184,19 @@ export const RULES = {
   WORK_BOARD_ROTATION_MINUTES: 30,
   /** After collecting, that one contract is unavailable for this long. */
   WORK_CONTRACT_COOLDOWN_MINUTES: 10,
+  PASSIVE_PAY_PER_DAY: 3_000,
+  PASSIVE_JOBS: [
+    { id: "delivery-worker", name: "Delivery Worker", requires: [{ id: "hangar", minLevel: 2 }, { id: "bike", minLevel: 1 }] },
+    { id: "package-runner", name: "Package Runner", requires: [{ id: "bike", minLevel: 1 }] },
+    { id: "night-courier", name: "Night Courier", requires: [{ id: "hangar", minLevel: 1 }, { id: "bike", minLevel: 1 }] },
+    { id: "warehouse-loader", name: "Warehouse Loader", requires: [{ id: "warehouse", minLevel: 1 }] },
+    { id: "cash-collection", name: "Cash Collection", requires: [{ id: "front", minLevel: 1 }, { anyVehicle: true, minLevel: 1 }] },
+    { id: "document-runner", name: "Document Runner", requires: [{ id: "safehouse", minLevel: 1 }, { id: "bike", minLevel: 1 }] },
+    { id: "local-transport", name: "Local Transport", requires: [{ id: "hangar", minLevel: 1 }, { anyVehicle: true, minLevel: 1 }] },
+    { id: "street-lookout", name: "Street Lookout", requires: [{ id: "safehouse", minLevel: 1 }] },
+    { id: "shop-security", name: "Shop Security", requires: [{ id: "safehouse", minLevel: 1 }] },
+    { id: "private-driver", name: "Private Driver", requires: [{ id: "hangar", minLevel: 1 }, { id: "car", minLevel: 1 }] },
+  ] as { id: string; name: string; requires: { id?: string; anyVehicle?: boolean; minLevel: number }[] }[],
   /** The whole contract pool. Rewards and durations are never taken from the client. */
   WORK_CONTRACTS: [
     {
