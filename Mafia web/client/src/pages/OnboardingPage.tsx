@@ -15,7 +15,7 @@ export function OnboardingPage() {
   return (
     <div className="classified-grid min-h-screen p-4 md:p-6">
       <p className="mb-3 font-serif text-2xl tracking-[0.18em] text-paper md:text-3xl">SELECT YOUR BASE</p>
-      <p className="mb-4 max-w-xl text-sm text-muted">Zoom in. Every grid square on Velmora is a sector. Occupied squares already hold a base.</p>
+      <p className="mb-4 max-w-xl text-sm text-muted">Every grid square on Velmora is a sector. Occupied squares already hold a base.</p>
       <OnboardingChart />
     </div>
   )

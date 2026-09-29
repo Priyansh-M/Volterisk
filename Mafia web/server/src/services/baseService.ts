@@ -80,30 +80,37 @@ export async function claimBase(userId: string, input: BaseClaim): Promise<{ bas
 
 export async function listBases(viewerId: string) {
   const [bases, profiles] = await Promise.all([
-    prisma.base.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.base.findMany({
+      orderBy: { createdAt: "asc" },
+      include: { user: { select: { username: true, isBot: true } } },
+    }),
     loadPublicProfiles(),
   ]);
   return {
-    bases: bases.map((base) => {
+    bases: bases.flatMap((base) => {
+      if (!base.user) return [];
       const profile = profiles.get(base.userId);
-      return {
-        sectorId: base.sectorId,
-        landmassId: base.landmassId,
-        regionName: base.regionName,
-        isYou: base.userId === viewerId,
-        player: profile
-          ? toPublicCard(profile)
-          : {
-              username: "Unknown",
-              title: "Street Operator",
-              level: 1,
-              rank: 0,
-              estimatedWealth: "Under $25K",
-              properties: 0,
-              weapons: 0,
-              successfulHeists: 0,
-            },
-      };
+      return [
+        {
+          sectorId: base.sectorId,
+          landmassId: base.landmassId,
+          regionName: base.regionName,
+          isYou: base.userId === viewerId,
+          isNpc: base.user.isBot,
+          player: profile
+            ? toPublicCard(profile)
+            : {
+                username: base.user.username,
+                title: "",
+                level: 0,
+                rank: 0,
+                estimatedWealth: "—",
+                properties: 0,
+                weapons: 0,
+                successfulHeists: 0,
+              },
+        },
+      ];
     }),
   };
 }

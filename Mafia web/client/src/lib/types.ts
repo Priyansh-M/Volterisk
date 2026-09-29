@@ -124,6 +124,7 @@ export type MapPin = {
   landmassId: string
   regionName: string
   isYou: boolean
+  isNpc?: boolean
   player: PublicCard
 }
 

@@ -26,8 +26,6 @@ type Props = {
   className?: string
 }
 
-const SECTOR_ZOOM = 2.35
-
 function fitCamera(width: number, height: number): Cam {
   const k = Math.min(width / WORLD.width, height / WORLD.height) * 0.92
   const viewW = width / k
@@ -52,7 +50,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
   const pinBySector = useMemo(() => new Map(pins.map((pin) => [pin.sectorId, pin])), [pins])
   const focus = pinned ?? hover
   const focusPin = focus ? pinBySector.get(focus.id) ?? null : null
-  const showSectors = size.w > 0 && cam.k >= fitK.current * SECTOR_ZOOM
+  const showSectors = size.w > 0
 
   useEffect(() => {
     camRef.current = cam
@@ -200,7 +198,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
             return
           }
           const world = worldFromEvent(event)
-          const sector = showSectors ? sectorAt(world.x, world.y) : null
+          const sector = sectorAt(world.x, world.y)
           setHover(sector)
           if (sector || pinned) placeTip(event)
         }}
@@ -210,11 +208,6 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
           if (!active || active.moved) return
           const world = worldFromEvent(event)
           const sector = sectorAt(world.x, world.y)
-          if (!showSectors) {
-            if (sector) zoomToward(world.x, world.y, 1.9)
-            setPinned(null)
-            return
-          }
           setPinned(sector)
           placeTip(event)
         }}
@@ -223,7 +216,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
       >
         <defs>
           <pattern id="chart-grid" width="16" height="16" patternUnits="userSpaceOnUse">
-            <path d="M 16 0 L 0 0 0 16" fill="none" stroke="#ddd6c8" strokeWidth="0.45" />
+            <path d="M 16 0 L 0 0 0 16" fill="none" stroke="#b7ad9e" strokeWidth="1.15" />
           </pattern>
           {LANDMASSES.map((landmass) => (
             <clipPath id={`coast-${landmass.id}`} key={landmass.id}>
@@ -269,13 +262,15 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
                     const pin = pinBySector.get(sector.id)
                     const hot = focus?.id === sector.id
                     const fill = pin?.isYou
-                      ? 'rgba(198,161,91,0.78)'
-                      : pin
-                        ? 'rgba(28,28,28,0.22)'
-                        : hot
-                          ? 'rgba(20,20,20,0.08)'
-                          : 'transparent'
-                      return (
+                      ? 'rgba(198,161,91,0.88)'
+                      : pin?.isNpc
+                        ? 'rgba(120,42,36,0.78)'
+                        : pin
+                          ? 'rgba(36,92,134,0.72)'
+                          : hot
+                            ? 'rgba(20,20,20,0.14)'
+                            : 'rgba(255,255,255,0.18)'
+                    return (
                       <g key={sector.id}>
                         <rect
                           x={sector.x}
@@ -283,19 +278,19 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
                           width={sector.w}
                           height={sector.h}
                           fill={fill}
-                          stroke="#141414"
-                          strokeWidth={hot || pin?.isYou ? 1.5 : 0.45}
+                          stroke="#1a1a1a"
+                          strokeWidth={hot || pin ? 1.8 : 1.25}
                           vectorEffect="non-scaling-stroke"
                         />
                         {pin ? (
                           <rect
-                            x={sector.cx - 2.2}
-                            y={sector.cy - 2.2}
-                            width={4.4}
-                            height={4.4}
-                            fill={pin.isYou ? '#c6a15b' : '#1c1c1c'}
-                            stroke="#f7f4ee"
-                            strokeWidth={0.4}
+                            x={sector.cx - 3.1}
+                            y={sector.cy - 3.1}
+                            width={6.2}
+                            height={6.2}
+                            fill={pin.isYou ? '#c6a15b' : pin.isNpc ? '#7a2c26' : '#245c86'}
+                            stroke={pin.isYou ? '#141414' : '#f7f4ee'}
+                            strokeWidth={0.7}
                           />
                         ) : null}
                       </g>
@@ -313,8 +308,8 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
                   y={sector.cy - 4.5 / cam.k}
                   width={9 / cam.k}
                   height={9 / cam.k}
-                  fill={pin.isYou ? '#c6a15b' : '#1c1c1c'}
-                  stroke={pin.isYou ? '#1c1c1c' : '#c6a15b'}
+                  fill={pin.isYou ? '#c6a15b' : pin.isNpc ? '#7a2c26' : '#245c86'}
+                  stroke="#f4f1ea"
                   strokeWidth={0.8}
                   vectorEffect="non-scaling-stroke"
                 />
@@ -363,7 +358,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, onClaim, clas
         1 square
       </div>
       <div className="pointer-events-none absolute top-3 left-3 text-[10px] font-semibold tracking-[0.18em] text-[#6d6860] uppercase">
-        {showSectors ? 'Every square is a sector' : 'Zoom to read the grid'}
+        Click a square
       </div>
 
       <div className="absolute right-3 bottom-14 flex flex-col gap-1.5">

@@ -121,7 +121,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
           className={onboarding ? 'h-[calc(100vh-9rem)] min-h-[480px]' : ''}
           pins={pins ?? []}
           canClaim={!needsKit && needsBase}
-          claimHint={needsKit ? 'Take the kit before you plant a flag.' : null}
+          claimHint={needsKit ? 'Take the kit before you plant a flag.' : needsBase ? null : 'This square is for reading. Your base is already filed.'}
           busy={busy}
           onClaim={(sector) => void claimSector(sector)}
         />
@@ -145,7 +145,10 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
               {pins && pins.length === 0 ? <li className="text-muted">No bases filed.</li> : null}
               {pins?.map((pin) => (
                 <li key={pin.sectorId} className="border-b border-line/70 pb-2">
-                  <p className={pin.isYou ? 'text-gold' : ''}>{pin.player.username}</p>
+                  <p className={pin.isYou ? 'text-gold' : pin.isNpc ? 'text-[#c47a72]' : ''}>
+                    {pin.player.username}
+                    {pin.isNpc ? <span className="ml-2 text-[10px] tracking-[0.14em] text-muted">NPC</span> : null}
+                  </p>
                   <p className="text-[12px] text-muted">
                     {pin.regionName} · {pin.sectorId.toUpperCase()}
                   </p>

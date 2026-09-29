@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { Tooltip } from './ui/Tooltip.tsx'
 import { api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { heatFromJobs, money } from '../lib/format.ts'
@@ -112,9 +113,11 @@ export function Shell() {
           <p className="font-serif text-sm tracking-[0.22em] md:hidden">BLACKLEDGER</p>
           <p className="hidden text-[10px] tracking-[0.2em] text-muted uppercase sm:block">Network online</p>
           <div className="ml-auto flex items-center gap-4 text-[12px]">
-            <span className="text-muted" title="Jobs you have run. There is no separate heat system.">
-              Heat <span className="ml-1 text-paper tabular-nums">{heat}</span>
-            </span>
+            <Tooltip content="Jobs already run. Not a separate heat system.">
+              <span className="text-muted">
+                Heat <span className="ml-1 text-paper tabular-nums">{heat}</span>
+              </span>
+            </Tooltip>
             <span className="text-muted">
               Vault <span className="ml-1 text-gold tabular-nums">{money(me.vault.balance)}</span>
             </span>

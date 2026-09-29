@@ -105,14 +105,8 @@ const velmora: Landmass = {
 
 export const LANDMASSES: Landmass[] = [velmora]
 
-/** Decorative islands. They are not claimable sectors. */
-export const ISLANDS: Pt[][] = [
-  [[28, 188], [46, 172], [68, 184], [62, 208], [36, 214]],
-  [[454, 118], [472, 108], [488, 124], [470, 140], [450, 132]],
-  [[36, 430], [52, 416], [70, 428], [58, 448], [38, 446]],
-  [[448, 500], [466, 486], [486, 504], [468, 522], [446, 514]],
-  [[70, 600], [84, 590], [98, 604], [82, 618]],
-]
+/** Nothing sits outside the Velmora outline. */
+export const ISLANDS: Pt[][] = []
 
 export const SEA_LABELS: { name: string; at: Pt }[] = []
 

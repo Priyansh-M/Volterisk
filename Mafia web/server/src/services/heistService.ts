@@ -11,6 +11,7 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { creditCash, debitVault } from "./economyService.js";
+import { NIGHT_CREW, NPC_STATIONS } from "./nightCrew.js";
 import { writeNotification } from "./notificationService.js";
 
 // Future: crew shares would split the take after a successful debit.
@@ -131,9 +132,15 @@ export async function listTargets(attackerId: string) {
       } satisfies TargetCard,
     }));
 
+  const stationed = new Set(NPC_STATIONS.map((station) => station.username.toLowerCase()));
+  const crew = new Set(NIGHT_CREW.map((bot) => bot.username.toLowerCase()));
   return {
-    npc: cards.filter((row) => row.isBot).map((row) => row.card),
-    players: cards.filter((row) => !row.isBot).map((row) => row.card),
+    npc: cards
+      .filter((row) => stationed.has(row.card.username.toLowerCase()))
+      .map((row) => row.card),
+    players: cards
+      .filter((row) => !row.isBot && !crew.has(row.card.username.toLowerCase()))
+      .map((row) => row.card),
   };
 }
 

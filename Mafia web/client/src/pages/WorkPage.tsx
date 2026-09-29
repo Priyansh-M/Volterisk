@@ -90,6 +90,13 @@ export function WorkPage() {
         </section>
       ) : null}
       <div className="border border-line">
+        <div className="hidden border-b border-line px-4 py-2 text-[10px] tracking-[0.16em] text-muted uppercase md:grid md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))_auto]">
+          <span>Contract</span>
+          <span>Location</span>
+          <span>Time</span>
+          <span>Risk</span>
+          <span className="text-right">Payout</span>
+        </div>
         {board?.contracts.map((contract) => (
           <article key={contract.id} className="grid gap-3 border-b border-line bg-panel p-4 last:border-b-0 md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))_auto] md:items-center">
             <div>

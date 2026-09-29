@@ -187,8 +187,13 @@ describe("heist boards", () => {
     expect(board.status).toBe(200);
     const npcNames = board.body.npc.map((row: { username: string }) => row.username);
     const playerNames = board.body.players.map((row: { username: string }) => row.username);
-    expect(npcNames.sort()).toEqual(NIGHT_CREW.map((bot) => bot.username).sort());
     const { NPC_STATIONS } = await import("../src/services/nightCrew.js");
+    expect(npcNames.sort()).toEqual(NPC_STATIONS.map((station) => station.username).sort());
+    for (const bot of NIGHT_CREW) {
+      if (!NPC_STATIONS.some((station) => station.username === bot.username)) {
+        expect(npcNames).not.toContain(bot.username);
+      }
+    }
     const stationed = await prisma.base.findMany();
     expect(stationed).toHaveLength(NPC_STATIONS.length);
     expect(new Set(stationed.map((row) => row.sectorId)).size).toBe(NPC_STATIONS.length);
@@ -226,14 +231,12 @@ describe("heist boards", () => {
 
     const board = await request(app).get("/api/heists/targets").set(auth(player.token));
     expect(board.status).toBe(200);
-    expect(board.body.npc.map((row: { userId: string }) => row.userId)).toContain(bot.id);
+    expect(board.body.npc.map((row: { userId: string }) => row.userId)).not.toContain(bot.id);
     expect(board.body.players.map((row: { userId: string }) => row.userId)).toContain(other.id);
     expect(board.body.players.map((row: { userId: string }) => row.userId)).not.toContain(player.id);
     expect(board.body.players.map((row: { userId: string }) => row.userId)).not.toContain(bot.id);
     expect(board.body.npc.map((row: { userId: string }) => row.userId)).not.toContain(other.id);
-    const npcCard = board.body.npc.find((row: { userId: string }) => row.userId === bot.id);
-    expect(JSON.stringify(npcCard)).not.toContain("40000");
-    expect(npcCard.wealthBucket).toBe("modest");
+    expect(JSON.stringify(board.body)).not.toContain("40000");
 
     const npcOnPlayer = await request(app)
       .post("/api/heists")

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { Btn, Field, Notice, PageTitle, inputClass } from '../components/ui.tsx'
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
@@ -81,30 +82,20 @@ export function HeistsPage() {
   return (
     <div className="space-y-4">
       <PageTitle kicker="Dossiers">Heist intelligence</PageTitle>
-      <div className="flex flex-wrap gap-2">
-        <KindButton
-          active={kind === 'npc'}
-          onClick={() => {
-            setKind('npc')
-            setTargetId(null)
-            setConfirming(false)
-            setResult(null)
-          }}
-        >
-          NPC Heists
-        </KindButton>
-        <KindButton
-          active={kind === 'player'}
-          onClick={() => {
-            setKind('player')
-            setTargetId(null)
-            setConfirming(false)
-            setResult(null)
-          }}
-        >
-          Player Heists
-        </KindButton>
-      </div>
+      <Tabs
+        value={kind}
+        onValueChange={(value) => {
+          setKind(value as HeistKind)
+          setTargetId(null)
+          setConfirming(false)
+          setResult(null)
+        }}
+      >
+        <TabsList>
+          <TabsTrigger value="npc">NPC Heists</TabsTrigger>
+          <TabsTrigger value="player">Player Heists</TabsTrigger>
+        </TabsList>
+      </Tabs>
       {targets === null && !error ? <Notice tone="muted">Reading the board…</Notice> : null}
       {targets && targets.length === 0 ? (
         <Notice tone="muted">
@@ -215,27 +206,5 @@ export function HeistsPage() {
         </section>
       ) : null}
     </div>
-  )
-}
-
-function KindButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`cursor-pointer border px-4 py-2 text-[11px] tracking-[0.16em] uppercase ${
-        active ? 'border-gold text-gold' : 'border-line text-paper'
-      }`}
-    >
-      {children}
-    </button>
   )
 }
