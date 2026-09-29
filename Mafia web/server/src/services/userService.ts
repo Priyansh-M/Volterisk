@@ -8,9 +8,12 @@ import {
   hoursAgo,
   hoursFromNow,
   playerLevelFromHeists,
+  titleForLevel,
   weaponById,
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
+import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js";
+import { publicProfileFor } from "./publicProfileService.js";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -51,28 +54,33 @@ export async function createPlayer(input: {
     throw new GameError(500, "CATALOG", "Starter weapon is missing from the rules.");
   }
 
+  const cash = input.cash ?? RULES.STARTING_CASH;
   try {
-    return await prisma.user.create({
-      data: {
-        username,
-        usernameKey,
-        passwordHash,
-        cash: input.cash ?? RULES.STARTING_CASH,
-        isBot: input.isBot ?? false,
-        vault: {
-          create: {
-            balance: input.vaultBalance ?? RULES.STARTING_VAULT_BALANCE,
-            level: input.vaultLevel ?? RULES.STARTING_VAULT_LEVEL,
+    return await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          username,
+          usernameKey,
+          passwordHash,
+          cash,
+          isBot: input.isBot ?? false,
+          vault: {
+            create: {
+              balance: input.vaultBalance ?? RULES.STARTING_VAULT_BALANCE,
+              level: input.vaultLevel ?? RULES.STARTING_VAULT_LEVEL,
+            },
+          },
+          weapons: {
+            create: {
+              weaponId: starter.id,
+              upgradeLevel: RULES.WEAPON_MIN_UPGRADE,
+              equipped: true,
+            },
           },
         },
-        weapons: {
-          create: {
-            weaponId: starter.id,
-            upgradeLevel: RULES.WEAPON_MIN_UPGRADE,
-            equipped: true,
-          },
-        },
-      },
+      });
+      await recordStarterGrant(tx, user.id, user.cash);
+      return user;
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -123,6 +131,7 @@ export async function getProfile(userId: string) {
     where: { id: userId },
     include: {
       vault: true,
+      base: true,
       weapons: { where: { equipped: true }, include: { weapon: true } },
     },
   });
@@ -144,11 +153,15 @@ export async function getProfile(userId: string) {
   ]);
 
   const successfulHeists = won._count;
+  const level = playerLevelFromHeists(successfulHeists);
   const equipped = user.weapons[0];
+  const standing = await publicProfileFor(userId);
   return {
     id: user.id,
     username: user.username,
-    level: playerLevelFromHeists(successfulHeists),
+    level,
+    title: titleForLevel(level),
+    rank: standing?.rank ?? 1,
     cash: user.cash,
     vault: {
       balance: user.vault.balance,
@@ -164,6 +177,14 @@ export async function getProfile(userId: string) {
         }
       : null,
     cooldownEndsAt: await cooldownEndsAt(userId),
+    onboarding: onboardingStateFrom(user),
+    base: user.base
+      ? {
+          sectorId: user.base.sectorId,
+          landmassId: user.base.landmassId,
+          regionName: user.base.regionName,
+        }
+      : null,
     stats: {
       successfulHeists,
       failedHeists: failed,
@@ -175,8 +196,13 @@ export async function getProfile(userId: string) {
 
 export async function getLeaderboard() {
   const users = await prisma.user.findMany({
+    where: { isBot: false },
     include: { vault: true },
   });
+  if (users.length === 0) {
+    return { richest: [], heisters: [], largestHeists: [] };
+  }
+  const realIds = users.map((user) => user.id);
 
   const richest = users
     .map((user) => ({
@@ -189,21 +215,22 @@ export async function getLeaderboard() {
 
   const grouped = await prisma.heist.groupBy({
     by: ["attackerId"],
-    where: { success: true },
+    where: { success: true, attackerId: { in: realIds } },
     _count: { _all: true },
   });
   const names = new Map(users.map((user) => [user.id, user.username]));
   const heisters = grouped
-    .map((row) => ({
-      username: names.get(row.attackerId) ?? "Unknown",
-      successfulHeists: row._count._all,
-    }))
+    .flatMap((row) => {
+      const username = names.get(row.attackerId);
+      if (!username) return [];
+      return [{ username, successfulHeists: row._count._all }];
+    })
     .sort((a, b) => b.successfulHeists - a.successfulHeists || a.username.localeCompare(b.username))
     .slice(0, 20)
     .map((row, index) => ({ rank: index + 1, ...row }));
 
   const biggest = await prisma.heist.findMany({
-    where: { success: true },
+    where: { success: true, attackerId: { in: realIds } },
     orderBy: [{ amountStolen: "desc" }, { createdAt: "asc" }],
     take: 20,
     include: {

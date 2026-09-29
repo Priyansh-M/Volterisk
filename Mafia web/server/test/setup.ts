@@ -24,6 +24,10 @@ beforeEach(async () => {
   await prisma.notification.deleteMany();
   await prisma.transaction.deleteMany();
   await prisma.heist.deleteMany();
+  await prisma.userAchievement.deleteMany();
+  await prisma.contractRun.deleteMany();
+  await prisma.property.deleteMany();
+  await prisma.base.deleteMany();
   await prisma.userWeapon.deleteMany();
   await prisma.vault.deleteMany();
   await prisma.user.deleteMany();

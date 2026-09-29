@@ -11,6 +11,7 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { creditCash, debitVault } from "./economyService.js";
+import { writeNotification } from "./notificationService.js";
 
 // Future: crew shares would split the take after a successful debit.
 // Future: heat would lengthen cooldowns. Special items are not part of this ledger.
@@ -79,6 +80,25 @@ function presentHeist(
   };
 }
 
+export type HeistKind = "npc" | "player";
+
+type TargetCard = {
+  userId: string;
+  username: string;
+  vaultLevel: number;
+  wealthBucket: ReturnType<typeof wealthBucket>;
+  vulnerable: boolean;
+};
+
+function assertTargetKind(target: { isBot: boolean }, kind: HeistKind): void {
+  if (kind === "npc" && !target.isBot) {
+    throw new GameError(400, "WRONG_TARGET_KIND", "Real accounts are not on the NPC board.");
+  }
+  if (kind === "player" && target.isBot) {
+    throw new GameError(400, "WRONG_TARGET_KIND", "Seeded crews are not player targets.");
+  }
+}
+
 export async function listTargets(attackerId: string) {
   const users = await prisma.user.findMany({
     where: { id: { not: attackerId } },
@@ -94,18 +114,31 @@ export async function listTargets(attackerId: string) {
   });
   const protectedIds = new Set(recentHits.map((row) => row.targetId));
 
-  return users
+  const cards = users
     .filter((user) => user.vault && user.vault.balance >= RULES.MIN_VAULT_BALANCE)
     .map((user) => ({
-      userId: user.id,
-      username: user.username,
-      vaultLevel: user.vault!.level,
-      wealthBucket: wealthBucket(user.vault!.balance),
-      vulnerable: !protectedIds.has(user.id),
+      isBot: user.isBot,
+      card: {
+        userId: user.id,
+        username: user.username,
+        vaultLevel: user.vault!.level,
+        wealthBucket: wealthBucket(user.vault!.balance),
+        vulnerable: !protectedIds.has(user.id),
+      } satisfies TargetCard,
     }));
+
+  return {
+    npc: cards.filter((row) => row.isBot).map((row) => row.card),
+    players: cards.filter((row) => !row.isBot).map((row) => row.card),
+  };
 }
 
-export async function previewHeist(attackerId: string, targetUserId: string, weaponId: string) {
+export async function previewHeist(
+  attackerId: string,
+  targetUserId: string,
+  weaponId: string,
+  kind: HeistKind,
+) {
   if (attackerId === targetUserId) {
     throw new GameError(400, "SELF_TARGET", "You cannot rob your own vault.");
   }
@@ -123,11 +156,17 @@ export async function previewHeist(attackerId: string, targetUserId: string, wea
   if (!target?.vault) {
     throw new GameError(404, "INVALID_TARGET", "No such target.");
   }
+  assertTargetKind(target, kind);
   const weaponLevel = effectiveWeaponLevel(owned.weapon.number, owned.upgradeLevel);
   return { estimatedChance: successChance(weaponLevel, target.vault.level) };
 }
 
-export async function attemptHeist(attackerId: string, targetUserId: string, weaponId: string) {
+export async function attemptHeist(
+  attackerId: string,
+  targetUserId: string,
+  weaponId: string,
+  kind: HeistKind,
+) {
   if (attackerId === targetUserId) {
     throw new GameError(400, "SELF_TARGET", "You cannot rob your own vault.");
   }
@@ -155,6 +194,7 @@ export async function attemptHeist(attackerId: string, targetUserId: string, wea
         if (!target?.vault) {
           throw new GameError(404, "INVALID_TARGET", "No such target.");
         }
+        assertTargetKind(target, kind);
 
         const now = new Date();
         const recentAttempt = await tx.heist.findFirst({
@@ -201,13 +241,12 @@ export async function attemptHeist(attackerId: string, targetUserId: string, wea
               amountStolen: 0,
             },
           });
-          await tx.notification.create({
-            data: {
-              userId: targetUserId,
-              heistId: heist.id,
-              title: "Someone tried your vault",
-              body: `${attacker.username} tested the door with a ${owned.weapon.name} and left with nothing.`,
-            },
+          await writeNotification(tx, {
+            userId: targetUserId,
+            heistId: heist.id,
+            title: "Someone tried your vault",
+            body: `${attacker.username} tested the door with a ${owned.weapon.name} and left with nothing.`,
+            severity: "WARNING",
           });
           return presentHeist(heist, target.username, owned.weapon.name);
         }
@@ -240,13 +279,12 @@ export async function attemptHeist(attackerId: string, targetUserId: string, wea
             heistId: heist.id,
           },
         });
-        await tx.notification.create({
-          data: {
-            userId: targetUserId,
-            heistId: heist.id,
-            title: "Your vault was hit",
-            body: `${attacker.username} took $${amount.toLocaleString("en-US")} with a ${owned.weapon.name}.`,
-          },
+        await writeNotification(tx, {
+          userId: targetUserId,
+          heistId: heist.id,
+          title: "Your vault was hit",
+          body: `${attacker.username} took $${amount.toLocaleString("en-US")} with a ${owned.weapon.name}.`,
+          severity: "CRITICAL",
         });
         return presentHeist(heist, target.username, owned.weapon.name);
       },

@@ -1,0 +1,26 @@
+import type { Request, Response } from "express";
+import { z } from "zod";
+import { currentUserId } from "../middleware/auth.js";
+import { acceptContract, collectContract, listContracts } from "../services/workService.js";
+
+const acceptSchema = z
+  .object({
+    contractId: z.string().trim().min(1).max(64),
+  })
+  .strict();
+
+const emptySchema = z.object({}).strict();
+
+export async function contracts(req: Request, res: Response): Promise<void> {
+  res.json(await listContracts(currentUserId(req)));
+}
+
+export async function accept(req: Request, res: Response): Promise<void> {
+  const body = acceptSchema.parse(req.body ?? {});
+  res.status(201).json(await acceptContract(currentUserId(req), body.contractId));
+}
+
+export async function collect(req: Request, res: Response): Promise<void> {
+  emptySchema.parse(req.body ?? {});
+  res.json(await collectContract(currentUserId(req)));
+}

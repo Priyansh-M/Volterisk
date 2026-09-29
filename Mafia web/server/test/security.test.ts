@@ -159,7 +159,8 @@ describe("heist security", () => {
     });
     const res = await request(app).get("/api/heists/targets").set(auth(viewer.token));
     expect(res.status).toBe(200);
-    const card = res.body.targets.find((row: { userId: string }) => row.userId === target.id);
+    const card = res.body.players.find((row: { userId: string }) => row.userId === target.id);
+    expect(res.body.npc.find((row: { userId: string }) => row.userId === target.id)).toBeUndefined();
     expect(card).toMatchObject({
       username: target.username,
       vaultLevel: 2,
