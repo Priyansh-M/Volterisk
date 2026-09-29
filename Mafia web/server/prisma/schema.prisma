@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String
+  usernameKey  String   @unique
+  passwordHash String
+  cash         Int
+  tokenVersion Int      @default(0)
+  isBot        Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  vault          Vault?
+  weapons        UserWeapon[]
+  heistsAttacked Heist[]        @relation("HeistAttacker")
+  heistsDefended Heist[]        @relation("HeistTarget")
+  notifications  Notification[]
+  txFrom         Transaction[]  @relation("TxFrom")
+  txTo           Transaction[]  @relation("TxTo")
+}
+
+model Vault {
+  id      String @id @default(cuid())
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance Int
+  level   Int
+}
+
+model Weapon {
+  id      String @id
+  name    String
+  number  Int    @unique
+  owners  UserWeapon[]
+  heists  Heist[]
+}
+
+model UserWeapon {
+  id           String  @id @default(cuid())
+  userId       String
+  weaponId     String
+  upgradeLevel Int
+  equipped     Boolean @default(false)
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weapon       Weapon  @relation(fields: [weaponId], references: [id])
+
+  @@unique([userId, weaponId])
+  @@index([userId, equipped])
+}
+
+model Heist {
+  id            String   @id @default(cuid())
+  attackerId    String
+  targetId      String
+  weaponId      String
+  weaponLevel   Int
+  vaultLevel    Int
+  successChance Int
+  success       Boolean
+  amountStolen  Int
+  createdAt     DateTime @default(now())
+
+  attacker     User          @relation("HeistAttacker", fields: [attackerId], references: [id])
+  target       User          @relation("HeistTarget", fields: [targetId], references: [id])
+  weapon       Weapon        @relation(fields: [weaponId], references: [id])
+  transaction  Transaction?
+  notification Notification?
+
+  @@index([attackerId, createdAt])
+  @@index([targetId, success, createdAt])
+}
+
+model Transaction {
+  id         String   @id @default(cuid())
+  type       String
+  amount     Int
+  fromUserId String?
+  toUserId   String?
+  heistId    String?  @unique
+  createdAt  DateTime @default(now())
+
+  fromUser User?  @relation("TxFrom", fields: [fromUserId], references: [id])
+  toUser   User?  @relation("TxTo", fields: [toUserId], references: [id])
+  heist    Heist? @relation(fields: [heistId], references: [id])
+
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  heistId   String?  @unique
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  heist Heist? @relation(fields: [heistId], references: [id])
+
+  @@index([userId, createdAt])
+}

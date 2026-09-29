@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", "Avenir Next", system-ui, sans-serif;
+  --font-serif: Georgia, "Iowan Old Style", Palatino, serif;
+  --color-ink: #12110f;
+  --color-panel: #1c1b19;
+  --color-panel-2: #26231f;
+  --color-line: #3a342c;
+  --color-paper: #ebe6dc;
+  --color-muted: #a39886;
+  --color-gold: #e0b15a;
+  --color-danger: #d4654f;
+  --color-ok: #7dba78;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #12110f;
+  color: #ebe6dc;
+  font-family: var(--font-sans);
+}
+
+button,
+input {
+  font: inherit;
+}
