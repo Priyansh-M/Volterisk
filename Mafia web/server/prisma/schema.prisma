@@ -122,6 +122,20 @@ model InventoryItem {
   @@unique([userId, itemId])
 }
 
+model NpcPurse {
+  id             String   @id @default(cuid())
+  attackerId     String
+  npcId          String
+  weekStart      DateTime
+  balance        Int
+  defaultBalance Int
+  vaultTier      String
+  vaultLevel     Int
+
+  @@unique([attackerId, npcId, weekStart])
+  @@index([attackerId, weekStart])
+}
+
 model Vault {
   id            String    @id @default(cuid())
   userId        String    @unique

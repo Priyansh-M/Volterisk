@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { WorldMap, claimErrorCopy } from '../components/WorldMap.tsx'
 import { Notice, PageTitle } from '../components/ui.tsx'
 import { ApiError, api, isMissing, load, peek } from '../lib/api.ts'
@@ -18,6 +18,7 @@ export function MapPage() {
 
 function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
   const { me, refresh } = useAuth()
+  const navigate = useNavigate()
   const [params] = useSearchParams()
   const [pins, setPins] = useState<MapPin[] | null>(() => peek<{ bases: MapPin[] }>('/api/map/bases')?.bases ?? null)
   const [pinNote, setPinNote] = useState<string | null>(null)
@@ -62,6 +63,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
   }
 
   async function claimSector(sector: Sector, name: string) {
+    const firstBase = needsBase
     setBusy(true)
     setError(null)
     try {
@@ -75,6 +77,10 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
         }),
       })
       setEstablished(result.base)
+      if (firstBase) {
+        sessionStorage.setItem('volterisk-brief', '1')
+        navigate('/')
+      }
       await refresh()
       const next = await api<{ bases: MapPin[] }>('/api/map/bases')
       setPins(next.bases)

@@ -74,6 +74,7 @@ export function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notices, setNotices] = useState(0)
   const [unclaimed, setUnclaimed] = useState(me?.unclaimedAchievements ?? 0)
+  const [brief, setBrief] = useState(false)
 
   useEffect(() => {
     if (typeof me?.unclaimedAchievements === 'number') setUnclaimed(me.unclaimedAchievements)
@@ -82,6 +83,10 @@ export function Shell() {
   useEffect(() => {
     Object.values(warm).flat().forEach(prefetch)
   }, [])
+
+  useEffect(() => {
+    if (location.pathname === '/' && sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
+  }, [location.pathname])
 
   function recount(count?: number) {
     if (typeof count === 'number') {
@@ -109,6 +114,33 @@ export function Shell() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <LedgerAlerts onChange={recount} onUnclaimed={setUnclaimed} />
+      {brief && location.pathname === '/' ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/80 p-4">
+          <section className="animate-dossier w-full max-w-lg border border-primary bg-card p-6 shadow-2xl">
+            <p className="font-mono text-[10px] tracking-[0.2em] text-primary uppercase">Before you step onto the chart</p>
+            <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Keep the cash in the vault</h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              $25,000 is already in your vault. Heat is the number at the top left of the bar. Heists push it up. Work and time bring it down.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              At 12:00 GMT, if Heat is still above 50, there is a 95% chance the police take every dollar still in your pocket. Money sitting in the vault is not part of that seizure.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              The vault can still be robbed, but it has a door, a capacity, and insurance. Loose cash has none of those. Deposit before you go looking for trouble.
+            </p>
+            <button
+              type="button"
+              className="gloss-gold mt-5 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+              onClick={() => {
+                sessionStorage.removeItem('volterisk-brief')
+                setBrief(false)
+              }}
+            >
+              I understand
+            </button>
+          </section>
+        </div>
+      ) : null}
       <ReputationAlert />
       {mobileOpen ? (
         <button aria-label="Close navigation overlay" className="fixed inset-0 z-40 bg-background/75 lg:hidden" onClick={() => setMobileOpen(false)} />
