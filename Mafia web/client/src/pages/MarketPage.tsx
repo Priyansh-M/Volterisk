@@ -16,8 +16,13 @@ type Counter = {
   camera: { id: string; name: string; level: number; nextCost: number | null; installed: boolean }
 }
 
+const emptyCounter: Counter = {
+  predictor: { id: 'estimate-predictor', name: 'Estimate Predictor', price: 1_000, quantity: 0 },
+  camera: { id: 'security-camera', name: 'Security Camera', level: 0, nextCost: 5_000, installed: false },
+}
+
 export function MarketPage() {
-  const { me, refresh } = useAuth()
+  const { me, refresh, applyCash } = useAuth()
   const [arsenal, setArsenal] = useState<Arsenal | null>(() => peek<Arsenal>('/api/me/weapons'))
   const [counter, setCounter] = useState<Counter | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,14 +57,35 @@ export function MarketPage() {
     setError(null)
     try {
       if (itemId.startsWith('weapon:')) {
+        const item = WEAPON_CATALOG.find((row) => row.id === itemId)
         await api('/api/weapons/buy', { method: 'POST', body: JSON.stringify({ weaponId: itemId }) })
+        if (me && item) applyCash(me.cash - item.price)
+        setArsenal((current) => {
+          if (!current || !item) return current
+          const owned = current.owned.some((row) => row.id === itemId)
+            ? current.owned
+            : [...current.owned, { id: item.id, name: item.name, number: item.number, upgradeLevel: 1, effectiveLevel: item.attacks[0], nextEffectiveLevel: null, equipped: false, nextUpgradeCost: null }]
+          const next = WEAPON_CATALOG.find((row) => row.number === item.number + 1)
+          return { owned, shop: current.owned.some((row) => row.id === itemId) ? current.shop : next ? { id: next.id, name: next.name, number: next.number, price: next.price, effectiveLevel: next.attacks[0] } : null }
+        })
       } else if (itemId === 'estimate-predictor' || itemId === 'security-camera') {
-        await api('/api/shop/buy', { method: 'POST', body: JSON.stringify({ itemId }) })
+        const paid = await api<{ cash: number; quantity?: number; level?: number; nextCost?: number | null }>('/api/shop/buy', { method: 'POST', body: JSON.stringify({ itemId }) })
+        applyCash(paid.cash)
+        setCounter((current) => {
+          const base = current ?? emptyCounter
+          if (itemId === 'estimate-predictor') {
+            return { ...base, predictor: { ...base.predictor, quantity: paid.quantity ?? base.predictor.quantity + 1 } }
+          }
+          return { ...base, camera: { ...base.camera, installed: true, level: paid.level ?? 1, nextCost: paid.nextCost ?? base.camera.nextCost } }
+        })
       } else {
+        const lot = [...(lots ?? []), ...(motors ?? [])].find((row) => row.id === itemId)
         await api('/api/properties/buy', { method: 'POST', body: JSON.stringify({ catalogId: itemId }) })
+        if (me && lot) applyCash(me.cash - lot.price)
+        const mark = (rows: SaleLot[] | null) => rows?.map((row) => (row.id === itemId ? { ...row, owned: true } : row)) ?? rows
+        setLots(mark)
+        setMotors(mark)
       }
-      await reload()
-      void refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The stall refused the sale.')
     } finally {
@@ -71,9 +97,9 @@ export function MarketPage() {
     setBusy('camera')
     setError(null)
     try {
-      await api('/api/shop/camera/upgrade', { method: 'POST', body: '{}' })
-      await reload()
-      void refresh()
+      const paid = await api<{ cash: number; level: number; nextCost: number | null }>('/api/shop/camera/upgrade', { method: 'POST', body: '{}' })
+      applyCash(paid.cash)
+      setCounter((current) => current ? { ...current, camera: { ...current.camera, installed: true, level: paid.level, nextCost: paid.nextCost } } : current)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The camera did not take the upgrade.')
     } finally {
@@ -97,6 +123,7 @@ export function MarketPage() {
 
   const ownedById = new Map(arsenal?.owned.map((row) => [row.id, row]) ?? [])
   const nextId = arsenal?.shop?.id ?? null
+  const board = counter ?? emptyCounter
 
   return (
     <div>
@@ -113,20 +140,20 @@ export function MarketPage() {
       <p className="mb-4 max-w-2xl text-sm text-muted">
         Cash only. The stall sells the next tool in the line, and another copy of a tool you already own. Each copy keeps its own level and durability.
       </p>
-      {counter ? (
-        <div className="mb-6 grid gap-4 md:grid-cols-2">
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
           <article className="overflow-hidden border border-border bg-card">
             <div className="aspect-[11/7] border-b border-border">
               <AssetGlyph id="predictor" />
             </div>
             <div className="p-5">
             <p className="font-mono text-[9px] uppercase text-muted-foreground">Consumable</p>
-            <h2 className="font-display text-2xl font-semibold uppercase">{counter.predictor.name}</h2>
+            <h2 className="font-display text-2xl font-semibold uppercase">{board.predictor.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">Spend one under Inspect to read the server chance. The roll still happens on the job.</p>
-            <p className="mt-3 font-mono text-sm text-primary">{money(counter.predictor.price)} · held {counter.predictor.quantity}</p>
-            <Btn className="mt-4" variant="gold" disabled={busy !== null || (me !== null && me.cash < counter.predictor.price)} onClick={() => void buy(counter.predictor.id)}>
-              {busy === counter.predictor.id ? 'Buying…' : 'Buy'}
+            <p className="mt-3 font-mono text-sm text-primary">{money(board.predictor.price)} · held {board.predictor.quantity}</p>
+            <Btn className="mt-4" variant="gold" disabled={busy !== null || (me !== null && me.cash < board.predictor.price)} onClick={() => void buy(board.predictor.id)}>
+              {busy === board.predictor.id ? 'Buying…' : 'Buy'}
             </Btn>
+            {me && me.cash < board.predictor.price ? <p className="mt-2 text-xs text-destructive">Not enough cash. Check your vault.</p> : null}
             </div>
           </article>
           <article className="overflow-hidden border border-border bg-card">
@@ -135,27 +162,27 @@ export function MarketPage() {
             </div>
             <div className="p-5">
             <p className="font-mono text-[9px] uppercase text-muted-foreground">Installed defense</p>
-            <h2 className="font-display text-2xl font-semibold uppercase">{counter.camera.name}</h2>
+            <h2 className="font-display text-2xl font-semibold uppercase">{board.camera.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Each level subtracts that many points from an attacker&apos;s success chance, before the roll is clamped between 8% and 92%. Level 1 is −1. An upgrade adds 1 level and costs 1.5× the previous price, up to level 40.
-              {counter.camera.installed ? ` Yours is level ${counter.camera.level}, so attackers lose ${counter.camera.level} points.` : ''}
+              {board.camera.installed ? ` Yours is level ${board.camera.level}, so attackers lose ${board.camera.level} points.` : ''}
             </p>
             <p className="mt-3 font-mono text-sm text-primary">
-              {counter.camera.nextCost == null ? 'Capped' : money(counter.camera.nextCost)}
+              {board.camera.nextCost == null ? 'Capped' : money(board.camera.nextCost)}
             </p>
-            {counter.camera.installed ? (
-              <Btn className="mt-4" variant="gold" disabled={busy !== null || counter.camera.nextCost == null} onClick={() => void upgradeCamera()}>
+            {board.camera.installed ? (
+              <Btn className="mt-4" variant="gold" disabled={busy !== null || board.camera.nextCost == null || (me !== null && board.camera.nextCost != null && me.cash < board.camera.nextCost)} onClick={() => void upgradeCamera()}>
                 {busy === 'camera' ? 'Upgrading…' : 'Upgrade'}
               </Btn>
             ) : (
-              <Btn className="mt-4" variant="gold" disabled={busy !== null || (me !== null && counter.camera.nextCost != null && me.cash < counter.camera.nextCost)} onClick={() => void buy(counter.camera.id)}>
-                {busy === counter.camera.id ? 'Buying…' : 'Buy level 1'}
+              <Btn className="mt-4" variant="gold" disabled={busy !== null || (me !== null && board.camera.nextCost != null && me.cash < board.camera.nextCost)} onClick={() => void buy(board.camera.id)}>
+                {busy === board.camera.id ? 'Buying…' : 'Buy level 1'}
               </Btn>
             )}
+            {me && board.camera.nextCost != null && me.cash < board.camera.nextCost ? <p className="mt-2 text-xs text-destructive">Not enough cash. Check your vault.</p> : null}
             </div>
           </article>
-        </div>
-      ) : null}
+      </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {!arsenal && !error ? <Notice tone="muted">Lighting the stalls…</Notice> : null}
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -215,6 +242,9 @@ export function MarketPage() {
                   ) : null}
                   {!owned && item.price === 0 ? <p className="text-sm text-muted">Starter tool.</p> : null}
                   {locked ? <Btn disabled>Buy previous first</Btn> : null}
+                  {me && ((canBuy && me.cash < item.price) || (owned && item.price > 0 && me.cash < item.price)) ? (
+                    <p className="w-full text-xs text-destructive">Not enough cash. Check your vault.</p>
+                  ) : null}
                 </div>
               </div>
             </article>
@@ -256,6 +286,7 @@ function LotGrid({
               <Btn className="mt-4" variant="gold" disabled={busy !== null || cash < lot.price} onClick={() => onBuy(lot.id)}>
                 {busy === lot.id ? 'Buying…' : `Buy ${money(lot.price)}`}
               </Btn>
+              {cash < lot.price ? <p className="mt-2 text-xs text-destructive">Not enough cash. Check your vault.</p> : null}
             )}
           </div>
         </article>

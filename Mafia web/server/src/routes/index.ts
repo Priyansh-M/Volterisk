@@ -2,7 +2,8 @@ import { Router } from "express";
 import { login, logout, register } from "../controllers/authController.js";
 import { createHeist, estimate, history, quote, targets } from "../controllers/heistController.js";
 import { bases, claim as claimBase, rename as renameBase } from "../controllers/mapController.js";
-import { me, myVault, myWeapons, updateAvatar } from "../controllers/meController.js";
+import { me, myVault, myWeapons, removeAccount, updateAvatar, updateName } from "../controllers/meController.js";
+import { spin } from "../controllers/casinoController.js";
 import {
   achievementAlerts,
   achievements,
@@ -36,6 +37,9 @@ api.post("/auth/logout", requireAuth, asyncHandler(logout));
 
 api.get("/me", requireAuth, asyncHandler(me));
 api.post("/me/avatar", requireAuth, asyncHandler(updateAvatar));
+api.post("/me/name", requireAuth, asyncHandler(updateName));
+api.delete("/me", requireAuth, asyncHandler(removeAccount));
+api.post("/casino/roulette", requireAuth, asyncHandler(spin));
 api.get("/me/vault", requireAuth, asyncHandler(myVault));
 api.get("/me/weapons", requireAuth, asyncHandler(myWeapons));
 

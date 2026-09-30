@@ -69,6 +69,7 @@ const pageMeta: Record<string, [string, string]> = {
   '/achievements': ['Criminal Record', 'Archived milestones, sealed cases, and distinctions.'],
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
   '/leaderboard': ['Intelligence Ranking', 'Current standing across the criminal network.'],
+  '/casino/roulette': ['Roulette', 'European wheel. Cash only. Five percent of the total.'],
   '/notifications': ['Incoming Reports', 'Security alerts and operational updates.'],
 }
 
@@ -80,6 +81,7 @@ export function Shell() {
   const [notices, setNotices] = useState(0)
   const [unclaimed, setUnclaimed] = useState(me?.unclaimedAchievements ?? 0)
   const [brief, setBrief] = useState(false)
+  const [casinoOpen, setCasinoOpen] = useState(location.pathname.startsWith('/casino'))
 
   useEffect(() => {
     if (typeof me?.unclaimedAchievements === 'number') setUnclaimed(me.unclaimedAchievements)
@@ -126,7 +128,7 @@ export function Shell() {
               At 12:00 GMT, if Heat is still above 50, there is a 95% chance the police take every dollar still in your pocket. Money sitting in the vault is not part of that seizure.
             </p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The vault can still be robbed, but it has a door, a capacity, and insurance. Loose cash has none of those. Deposit before you go looking for trouble.
+              The vault can still be robbed, but it has a door, a capacity, and insurance. Loose cash has none of those. Deposit before you go looking for trouble. Buys, bets, and fees come out of pocket cash only.
             </p>
             <button
               type="button"
@@ -218,6 +220,30 @@ export function Shell() {
               ) : null}
             </NavLink>
           ))}
+          <button
+            type="button"
+            className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs ${
+              location.pathname.startsWith('/casino')
+                ? 'border-primary bg-accent text-foreground'
+                : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
+            }`}
+            onClick={() => setCasinoOpen((open) => !open)}
+          >
+            <IconBoard className="h-4 w-4 shrink-0" />
+            {collapsed ? null : <span className="flex-1">Casino</span>}
+            {collapsed ? null : <span className="font-mono text-[10px]">{casinoOpen ? '−' : '+'}</span>}
+          </button>
+          {casinoOpen && !collapsed ? (
+            <NavLink
+              to="/casino/roulette"
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `mb-0.5 flex h-8 items-center pl-10 text-xs no-underline ${isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`
+              }
+            >
+              Roulette
+            </NavLink>
+          ) : null}
         </nav>
         <div className="border-t border-sidebar-border p-3">
           <button type="button" className="px-3 font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground" onClick={() => void logout()}>

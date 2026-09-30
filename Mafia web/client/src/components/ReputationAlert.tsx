@@ -26,10 +26,11 @@ export function ReputationAlert() {
         /* the desk will try again */
       }
     }
-    void look()
-    const timer = window.setInterval(() => void look(), 8000)
+    const start = window.setTimeout(() => void look(), 2500)
+    const timer = window.setInterval(() => void look(), 20000)
     return () => {
       cancelled = true
+      window.clearTimeout(start)
       window.clearInterval(timer)
     }
   }, [location.pathname])

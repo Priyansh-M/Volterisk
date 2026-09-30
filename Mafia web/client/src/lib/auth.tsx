@@ -7,6 +7,7 @@ type AuthValue = {
   loading: boolean
   refresh: () => Promise<void>
   applyCash: (cash: number) => void
+  patchMe: (update: (current: Profile) => Profile) => void
   login: (token: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -23,6 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function applyCash(cash: number) {
     setMe((current) => (current ? { ...current, cash } : current))
+  }
+
+  function patchMe(update: (current: Profile) => Profile) {
+    setMe((current) => (current ? update(current) : current))
   }
 
   useEffect(() => {
@@ -53,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe(null)
   }
 
-  return <AuthContext.Provider value={{ me, loading, refresh, applyCash, login, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ me, loading, refresh, applyCash, patchMe, login, logout }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

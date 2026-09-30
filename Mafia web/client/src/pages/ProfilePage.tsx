@@ -6,12 +6,15 @@ import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
 
 export function ProfilePage() {
-  const { me, refresh } = useAuth()
+  const { me, refresh, patchMe, logout } = useAuth()
   const [blockName, setBlockName] = useState(me?.base?.name ?? '')
   const [note, setNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [editingFace, setEditingFace] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nextName, setNextName] = useState(me?.username ?? '')
+  const [confirmDelete, setConfirmDelete] = useState(false)
   if (!me) return null
 
   return (
@@ -25,7 +28,46 @@ export function ProfilePage() {
           </button>
         </div>
         <div>
-          <h2 className="font-serif text-3xl tracking-wide">{me.username}</h2>
+          <div className="flex items-center gap-2">
+            {editingName ? (
+              <form
+                className="flex flex-wrap items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  setBusy(true)
+                  setError(null)
+                  void api<{ username: string }>('/api/me/name', { method: 'POST', body: JSON.stringify({ username: nextName.trim() }) })
+                    .then((saved) => {
+                      patchMe((current) => ({ ...current, username: saved.username }))
+                      setEditingName(false)
+                      setNote('Name updated.')
+                    })
+                    .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The name did not save.'))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                <input className={inputClass} value={nextName} maxLength={24} onChange={(event) => setNextName(event.target.value)} />
+                <Btn type="submit" variant="gold" disabled={busy || nextName.trim().length < 3}>Save</Btn>
+              </form>
+            ) : (
+              <>
+                <h2 className="font-serif text-3xl tracking-wide">{me.username}</h2>
+                <button
+                  type="button"
+                  aria-label="Edit name"
+                  className="cursor-pointer text-muted hover:text-gold"
+                  onClick={() => {
+                    setNextName(me.username)
+                    setEditingName(true)
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path d="M4 20h4l10-10-4-4L4 16v4z" />
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
           <p className="mt-1 text-sm text-muted">{me.title}</p>
           <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
             <Row label="Level" value={String(me.level)} />
@@ -69,6 +111,32 @@ export function ProfilePage() {
           {error ? <Notice tone="danger">{error}</Notice> : null}
           {note ? <Notice tone="ok">{note}</Notice> : null}
         </div>
+      </section>
+      <section className="border border-destructive/40 bg-card p-4">
+        <h2 className="font-display text-xl font-semibold uppercase">Account deletion</h2>
+        <p className="mt-2 text-sm text-muted-foreground">This removes the ledger, the base, and the vault. It cannot be undone.</p>
+        {confirmDelete ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Btn
+              variant="gold"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true)
+                void api('/api/me', { method: 'DELETE' })
+                  .then(() => logout())
+                  .catch((err: unknown) => {
+                    setError(err instanceof ApiError ? err.message : 'The account did not delete.')
+                    setBusy(false)
+                  })
+              }}
+            >
+              {busy ? 'Deleting…' : 'Delete the account'}
+            </Btn>
+            <Btn onClick={() => setConfirmDelete(false)}>Cancel</Btn>
+          </div>
+        ) : (
+          <Btn className="mt-3" onClick={() => setConfirmDelete(true)}>Delete account</Btn>
+        )}
       </section>
       {editingFace ? (
         <AvatarDialog

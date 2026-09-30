@@ -21,7 +21,7 @@ type Ledger = {
 }
 
 export function PropertiesPage() {
-  const { refresh } = useAuth()
+  const { applyCash, me } = useAuth()
   const [ledger, setLedger] = useState<Ledger | null>(() => peek<Ledger>('/api/properties'))
   const [tab, setTab] = useState<'properties' | 'vehicles'>('properties')
   const [error, setError] = useState<string | null>(null)
@@ -39,9 +39,13 @@ export function PropertiesPage() {
     setBusy(id)
     setError(null)
     try {
-      await api('/api/properties/upgrade', { method: 'POST', body: JSON.stringify({ id }) })
-      await reload()
-      await refresh()
+      const updated = await api<OwnedAsset>('/api/properties/upgrade', { method: 'POST', body: JSON.stringify({ id }) })
+      const cost = [...(ledger?.properties ?? []), ...(ledger?.vehicles ?? [])].find((row) => row.id === id)?.nextUpgradeCost
+      if (me && cost) applyCash(me.cash - cost)
+      setLedger((current) => current ? {
+        properties: current.properties.map((row) => (row.id === updated.id ? updated : row)),
+        vehicles: current.vehicles.map((row) => (row.id === updated.id ? updated : row)),
+      } : current)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The upgrade did not file.')
     } finally {

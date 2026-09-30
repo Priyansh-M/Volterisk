@@ -18,6 +18,7 @@ import { ProfilePage } from './pages/ProfilePage.tsx'
 import { ReputationPage } from './pages/ReputationPage.tsx'
 import { PropertiesPage } from './pages/PropertiesPage.tsx'
 import { RegisterPage } from './pages/RegisterPage.tsx'
+import { RoulettePage } from './pages/RoulettePage.tsx'
 import { VaultPage } from './pages/VaultPage.tsx'
 import { WorkPage } from './pages/WorkPage.tsx'
 
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/casino/roulette" element={<RoulettePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

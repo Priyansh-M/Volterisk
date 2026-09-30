@@ -348,3 +348,44 @@ export async function setAvatar(userId: string, raw: string) {
   await prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
   return getProfile(userId);
 }
+
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 .'-]*$/;
+
+export async function renamePlayer(userId: string, raw: string) {
+  const username = raw.trim();
+  if (username.length < 3 || username.length > 24 || !NAME_RE.test(username)) {
+    throw new GameError(400, "BAD_NAME", "Use 3 to 24 letters, numbers, spaces, apostrophes, or hyphens.");
+  }
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { username, usernameKey: username.toLowerCase() },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new GameError(409, "USERNAME_TAKEN", "That name is already on the ledger.");
+    }
+    throw error;
+  }
+  return { username };
+}
+
+export async function deletePlayer(userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const heists = await tx.heist.findMany({
+      where: { OR: [{ attackerId: userId }, { targetId: userId }] },
+      select: { id: true },
+    });
+    const heistIds = heists.map((row) => row.id);
+    await tx.notification.deleteMany({
+      where: { OR: [{ userId }, ...(heistIds.length ? [{ heistId: { in: heistIds } }] : [])] },
+    });
+    if (heistIds.length) {
+      await tx.transaction.deleteMany({ where: { heistId: { in: heistIds } } });
+    }
+    await tx.transaction.deleteMany({ where: { OR: [{ fromUserId: userId }, { toUserId: userId }] } });
+    await tx.heist.deleteMany({ where: { OR: [{ attackerId: userId }, { targetId: userId }] } });
+    await tx.npcPurse.deleteMany({ where: { OR: [{ attackerId: userId }, { npcId: userId }] } });
+    await tx.user.delete({ where: { id: userId } });
+  });
+}

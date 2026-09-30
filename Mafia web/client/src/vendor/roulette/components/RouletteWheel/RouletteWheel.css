@@ -1,0 +1,135 @@
+.roulette-wheel-container * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.roulette-wheel-container {
+  --spinningAnimationSpeed: 30s;
+  --spinningSpeed: 9s;
+  width: 374px;
+  margin: 0 auto;
+  user-select: none;
+  font-size: 18px;
+	font-weight: 400;
+	font-family: Helvetica, sans-serif;
+  line-height: 1.15;
+}
+
+.roulette-wheel-plate {
+  background-color: #808080;
+  width: 350px;
+  height: 350px;
+  margin: 12px;
+  border-radius: 50%;
+  position: relative;
+}
+.roulette-wheel-plate.automatic-spinning{
+  animation: rotate var(--spinningAnimationSpeed) infinite linear;
+}
+
+.roulette-wheel-plate::after,
+.roulette-wheel-plate::before {
+  content: "";
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+}
+.roulette-wheel-plate::after {
+  top: -6px;
+  right: -6px;
+  bottom: -6px;
+  left: -6px;
+  border: 6px solid #ffd700;
+  box-shadow: inset 0px 0px 0px 2px #b39700, 0px 0px 0px 2px #ffeb80;
+}
+.roulette-wheel-plate::before {
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid #c0c0c0;
+  box-shadow: inset 0px 0px 0px 2px #808080;
+  top: 12%;
+  left: 12%;
+  right: 12%;
+  bottom: 12%;
+  z-index: 1;
+}
+
+.roulette-wheel-pit {
+  color: #fff;
+  padding-top: 12px;
+  width: 32px;
+  display: inline-block;
+  font-size: 12px;
+  transform: scale(1, 1.8);
+  position: absolute;
+  top: -175px;
+  left: -16px;
+}
+.roulette-wheel-inner {
+  display: block;
+  height: 350px;
+  width: 350px;
+  position: relative;
+}
+.roulette-wheel-inner::after,
+.roulette-wheel-inner::before {
+  content: "";
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+}
+
+.roulette-wheel-inner::after {
+  z-index: 3;
+  top: 24%;
+  right: 24%;
+  bottom: 24%;
+  left: 24%;
+  background-color: #4d4d4d;
+  border: 3px solid #808080;
+  background-image: url("../../assets/roulette-center.png");
+  background-position: center;
+  background-size: cover;
+}
+
+.roulette-wheel-inner::before {
+  top: 24%;
+  bottom: 21%;
+  left: 24%;
+  right: 22%;
+  content: "";
+  color: #fff;
+  font-size: 60px;
+  z-index: 5;
+  border-radius: 0;
+  display: flex; /* 🚨🚨🚨 IMPORTANT 🚨🚨🚨 DO NOT REMOVE THIS 🚨🚨🚨 */
+  /* The problem is that by some reasons the wheel ball worked fine while
+  I was developing it. But when I tried to upload this to Codesandbox
+  the roulette wheel ball turned out to be not "centered" (https://i.imgur.com/GBExbD2.png).
+
+  Idk why I decided to to try to set `display: flex` but this worked.
+
+  First I thought the problem might be due to different line-height
+  but after playing with this property I understand it's not due to it.
+  */
+}
+
+.roulette-wheel-inner[data-spinToIndex]::before{
+  transition-property: transform;
+  transition-timing-function: var(--wheel-rotation-function);
+  transition-duration: var(--wheel-rotation-duration);
+
+  content: '\2022';
+}
+.roulette-wheel-inner[data-spintoindex]::before {
+  transform: rotateZ(var(--wheel-rotation));
+}
+
+@keyframes rotate {
+  0% {
+    transform: rotateZ(0deg);
+  }
+  100% {
+    transform: rotateZ(360deg);
+  }
+}

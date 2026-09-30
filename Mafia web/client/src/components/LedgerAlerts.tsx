@@ -54,10 +54,11 @@ export function LedgerAlerts({
         /* the desk will try again */
       }
     }
-    void poll()
+    const start = window.setTimeout(() => void poll(), 1500)
     const timer = window.setInterval(() => void poll(), 30000)
     return () => {
       cancelled = true
+      window.clearTimeout(start)
       window.clearInterval(timer)
     }
   }, [])

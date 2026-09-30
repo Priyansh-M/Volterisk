@@ -10,7 +10,7 @@ import type { OwnedWeapon, ShopWeapon } from '../lib/types.ts'
 type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null }
 
 export function ArsenalPage() {
-  const { refresh } = useAuth()
+  const { applyCash, me } = useAuth()
   const [arsenal, setArsenal] = useState<Arsenal | null>(() => peek<Arsenal>('/api/me/weapons'))
   const [predictors, setPredictors] = useState(() => peek<{ predictor: { quantity: number } }>('/api/shop')?.predictor.quantity ?? 0)
   const [camera, setCamera] = useState<{ level: number; nextCost: number | null; installed: boolean } | null>(
@@ -40,9 +40,9 @@ export function ArsenalPage() {
     setBusy('security-camera')
     setError(null)
     try {
-      await api('/api/shop/camera/upgrade', { method: 'POST', body: '{}' })
-      await reload()
-      await refresh()
+      const paid = await api<{ cash: number; level: number; nextCost: number | null }>('/api/shop/camera/upgrade', { method: 'POST', body: '{}' })
+      applyCash(paid.cash)
+      setCamera({ level: paid.level, nextCost: paid.nextCost, installed: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The camera did not take the upgrade.')
     } finally {
@@ -54,9 +54,16 @@ export function ArsenalPage() {
     setBusy(instanceId ?? weaponId)
     setError(null)
     try {
-      await api(path, { method: 'POST', body: JSON.stringify({ weaponId, instanceId }) })
-      await reload()
-      await refresh()
+      const updated = await api<OwnedWeapon>(path, { method: 'POST', body: JSON.stringify({ weaponId, instanceId }) })
+      const cost = arsenal?.owned.find((row) => row.instanceId === instanceId || row.id === weaponId)?.nextUpgradeCost
+      if (me && path.includes('upgrade') && cost) applyCash(me.cash - cost)
+      setArsenal((current) => {
+        if (!current) return current
+        if (path.includes('equip')) {
+          return { ...current, owned: current.owned.map((row) => ({ ...row, equipped: row.instanceId === updated.instanceId })) }
+        }
+        return { ...current, owned: current.owned.map((row) => (row.instanceId === updated.instanceId ? updated : row)) }
+      })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That did not go through.')
     } finally {

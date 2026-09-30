@@ -446,17 +446,21 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
             </dl>
           ) : null}
           {pinned && focusPin && !focusPin.isYou ? (
-            <button
-              type="button"
-              className="gloss-gold mt-2 w-full cursor-pointer px-3 py-1.5 text-sm font-medium"
-              onClick={() =>
-                navigate(
-                  `/heists?player=${encodeURIComponent(focusPin.player.username)}&kind=${focusPin.isNpc ? 'npc' : 'player'}`,
-                )
-              }
-            >
-              Prepare heist
-            </button>
+            showHint ? (
+              <p className="mt-2 bg-[#c8c3bb] px-2 py-2 text-center text-[11px] text-[#5c5852]">Finish account creation first.</p>
+            ) : (
+              <button
+                type="button"
+                className="gloss-gold mt-2 w-full cursor-pointer px-3 py-1.5 text-sm font-medium"
+                onClick={() =>
+                  navigate(
+                    `/heists?player=${encodeURIComponent(focusPin.player.username)}&kind=${focusPin.isNpc ? 'npc' : 'player'}`,
+                  )
+                }
+              >
+                Prepare heist
+              </button>
+            )
           ) : null}
           {pinned && !focusPin && canClaim ? (
             <div className="mt-2 space-y-2">

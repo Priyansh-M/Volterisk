@@ -19,7 +19,7 @@ const notes: Record<number, string> = {
 }
 
 export function VaultPage() {
-  const { me, refresh, applyCash } = useAuth()
+  const { me, applyCash, patchMe } = useAuth()
   const [vault, setVault] = useState<VaultView | null>(() => peek<VaultView>('/api/me/vault'))
   const [amount, setAmount] = useState('5000')
   const [error, setError] = useState<string | null>(null)
@@ -39,8 +39,9 @@ export function VaultPage() {
     setError(null)
     setNote(null)
     try {
-      setVault(await api<VaultView>('/api/vault/upgrade', { method: 'POST', body: '{}' }))
-      await refresh()
+      const next = await api<VaultView & { spent?: number }>('/api/vault/upgrade', { method: 'POST', body: '{}' })
+      setVault(next)
+      if (me && next.spent) applyCash(me.cash - next.spent)
       setNote('The door is heavier.')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Upgrade failed.')
@@ -57,10 +58,9 @@ export function VaultPage() {
     const path = kind.startsWith('deposit') ? '/api/vault/deposit' : '/api/vault/withdraw'
     const body = kind.endsWith('all') ? { all: true } : { amount: Number(amount) }
     try {
-      const paid = await api<{ cash: number; amount: number }>(path, { method: 'POST', body: JSON.stringify(body) })
-      applyCash(paid.cash)
-      await reload()
-      void refresh()
+      const paid = await api<{ cash: number; amount: number; balance: number }>(path, { method: 'POST', body: JSON.stringify(body) })
+      patchMe((current) => ({ ...current, cash: paid.cash, vault: { ...current.vault, balance: paid.balance } }))
+      setVault((current) => (current ? { ...current, balance: paid.balance } : current))
       setNote(kind.startsWith('deposit') ? `Deposited ${money(paid.amount)}.` : `Withdrew ${money(paid.amount)}.`)
     } catch (err) {
       if (snapshot != null) applyCash(snapshot)
