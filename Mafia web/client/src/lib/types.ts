@@ -76,6 +76,7 @@ export type Target = {
   sectorId?: string | null
   regionName?: string | null
   cadence?: 'day' | 'week' | null
+  locked?: boolean
 }
 
 /** `player` is the heist kind. The targets payload names that list `players`. */

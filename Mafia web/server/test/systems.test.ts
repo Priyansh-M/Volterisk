@@ -266,13 +266,15 @@ describe("heist boards", () => {
     await ensureNightCrew();
     const crew = await prisma.user.findUnique({ where: { usernameKey: "mara voss" }, include: { vault: true } });
     expect(crew?.vault).toBeTruthy();
+    setHeistRng(() => 1);
     const hit = await request(app)
       .post("/api/heists")
       .set(auth(player.token))
       .send({ targetUserId: crew!.id, weaponId: "weapon:0001", kind: "npc" });
     expect(hit.status).toBe(201);
     expect(hit.body.success).toBe(true);
-    expect(hit.body.amountStolen).toBe(Math.floor((crew!.vault!.balance * 10) / 100));
+    expect(hit.body.amountStolen).toBeGreaterThan(0);
+    expect((await userState(crew!.id)).vault).toBe(crew!.vault!.balance);
     expect((await userState(player.id)).cash).toBe(player.cash + hit.body.amountStolen);
   });
 });

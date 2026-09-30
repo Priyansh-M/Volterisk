@@ -18,7 +18,7 @@ import {
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { creditCash, debitVault, type Tx } from "./economyService.js";
-import { isStationedNpc, npcWindowStart, NPC_STATIONS, stationForUsername } from "./nightCrew.js";
+import { isNpcGated, isStationedNpc, npcWindowStart, NPC_STATIONS, openNpcPurse, stationForUsername } from "./nightCrew.js";
 import { gainHeat, heistHeatGain } from "./heatService.js";
 import { writeNotification } from "./notificationService.js";
 
@@ -101,6 +101,7 @@ type TargetCard = {
   sectorId: string | null;
   regionName: string | null;
   cadence: "day" | "week" | null;
+  locked: boolean;
 };
 
 function assertTargetKind(target: { isBot: boolean; username: string }, kind: HeistKind): void {
@@ -114,6 +115,8 @@ function assertTargetKind(target: { isBot: boolean; username: string }, kind: He
 }
 
 export async function listTargets(attackerId: string) {
+  const attacker = await prisma.user.findUnique({ where: { id: attackerId }, select: { reputationLevel: true } });
+  const attackerLevel = attacker?.reputationLevel ?? 1;
   const users = await prisma.user.findMany({
     where: { id: { not: attackerId } },
     include: { vault: true, base: true },
@@ -133,32 +136,39 @@ export async function listTargets(attackerId: string) {
     select: { targetId: true, createdAt: true },
   });
 
-  const cards = users
-    .filter((user) => user.vault && user.vault.balance >= RULES.MIN_VAULT_BALANCE)
-    .map((user) => {
-      const station = stationForUsername(user.username);
-      const npcLocked =
-        station !== null &&
-        npcHits.some(
-          (hit) => hit.targetId === user.id && hit.createdAt.getTime() > npcWindowStart(station.cadence).getTime(),
-        );
-      return {
-        isBot: user.isBot,
-        card: {
-          userId: user.id,
-          username: user.username,
-          vaultLevel: user.vault!.level,
-          wealthBucket: wealthBucket(user.vault!.balance),
-        estimatedWealth: wealthBandLabel(user.vault!.balance),
-          vulnerable: station
-            ? !npcLocked
-            : Boolean(user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()) || !protectedIds.has(user.id),
-          sectorId: user.base?.sectorId ?? null,
-          regionName: user.base?.regionName ?? null,
-          cadence: station?.cadence ?? null,
-        } satisfies TargetCard,
-      };
-    });
+  const cards = await Promise.all(
+    users
+      .filter((user) => user.vault && (stationForUsername(user.username) || user.vault.balance >= RULES.MIN_VAULT_BALANCE))
+      .map(async (user) => {
+        const station = stationForUsername(user.username);
+        const npcLocked =
+          station !== null &&
+          npcHits.some(
+            (hit) => hit.targetId === user.id && hit.createdAt.getTime() > npcWindowStart(station.cadence).getTime(),
+          );
+        const purse = station ? await openNpcPurse(attackerId, user.id, user.username, attackerLevel) : null;
+        const gated = station ? isNpcGated(user.username, attackerLevel) : false;
+        const vaultLevel = purse?.vaultLevel ?? user.vault!.level;
+        const balance = purse?.balance ?? user.vault!.balance;
+        return {
+          isBot: user.isBot,
+          card: {
+            userId: user.id,
+            username: user.username,
+            vaultLevel,
+            wealthBucket: wealthBucket(balance),
+            estimatedWealth: wealthBandLabel(balance),
+            vulnerable: station
+              ? !npcLocked && !gated
+              : Boolean(user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()) || !protectedIds.has(user.id),
+            sectorId: user.base?.sectorId ?? null,
+            regionName: user.base?.regionName ?? null,
+            cadence: station?.cadence ?? null,
+            locked: gated,
+          } satisfies TargetCard,
+        };
+      }),
+  );
 
   const stationed = new Set(NPC_STATIONS.map((station) => station.username.toLowerCase()));
   return {
@@ -210,17 +220,35 @@ async function previewChance(
   }
   assertTargetKind(target, kind);
   const attack = attackPower(owned.weapon.number, owned.upgradeLevel);
-  const defense = vaultDefense(target.vault.tier, target.vault.level);
+  const facing = await npcFacing(attackerId, { ...target, vault: target.vault }, kind);
+  const defense = vaultDefense(facing.tier, facing.vaultLevel);
   return {
-    estimatedChance: successChance(attack, defense, target.cameraLevel),
+    estimatedChance: successChance(attack, defense, facing.camera),
     attack,
     defense,
     advantage: attack - defense,
     weaponName: owned.weapon.name,
     weaponLevel: owned.upgradeLevel,
-    vaultTier: target.vault.tier,
-    vaultLevel: target.vault.level,
+    vaultTier: facing.tier,
+    vaultLevel: facing.vaultLevel,
   };
+}
+
+async function npcFacing(
+  attackerId: string,
+  target: { id: string; username: string; isBot: boolean; cameraLevel: number; vault: { tier: string; level: number } },
+  kind: HeistKind,
+) {
+  if (kind !== "npc") {
+    return { tier: target.vault.tier, vaultLevel: target.vault.level, camera: target.cameraLevel, purseId: null as string | null, balance: null as number | null };
+  }
+  const attacker = await prisma.user.findUnique({ where: { id: attackerId }, select: { reputationLevel: true } });
+  const level = attacker?.reputationLevel ?? 1;
+  if (isNpcGated(target.username, level)) {
+    throw new GameError(403, "LEVEL_LOCKED", "That crew is locked until you reach level 5.");
+  }
+  const purse = await openNpcPurse(attackerId, target.id, target.username, level);
+  return { tier: "standard", vaultLevel: purse.vaultLevel, camera: 0, purseId: purse.id, balance: purse.balance };
 }
 
 async function wearWeapon(tx: Tx, instanceId: string): Promise<boolean> {
@@ -275,6 +303,10 @@ export async function attemptHeist(
   }
   const weaponLevel = owned.upgradeLevel;
   const attack = attackPower(owned.weapon.number, owned.upgradeLevel);
+  const previewTarget = await prisma.user.findUnique({ where: { id: targetUserId }, include: { vault: true } });
+  if (!previewTarget?.vault) throw new GameError(404, "INVALID_TARGET", "No such target.");
+  assertTargetKind(previewTarget, kind);
+  const facing = await npcFacing(attackerId, { ...previewTarget, vault: previewTarget.vault }, kind);
 
   const heist = await withSqliteRetry(() =>
     prisma.$transaction(
@@ -303,7 +335,8 @@ export async function attemptHeist(
           });
         }
 
-        if (target.vault.balance < RULES.MIN_VAULT_BALANCE) {
+        const purseBalance = facing.balance ?? target.vault.balance;
+        if (purseBalance < RULES.MIN_VAULT_BALANCE) {
           throw new GameError(409, "NOT_VULNERABLE", "That vault is too thin to hit.");
         }
 
@@ -339,8 +372,8 @@ export async function attemptHeist(
           }
         }
 
-        const vaultLevel = target.vault.level;
-        const defense = vaultDefense(target.vault.tier, vaultLevel);
+        const vaultLevel = facing.vaultLevel;
+        const defense = vaultDefense(facing.tier, vaultLevel);
         const chance = successChance(attack, defense, target.cameraLevel);
         const roll = rollPercent();
         const success = roll <= chance;
@@ -389,15 +422,17 @@ export async function attemptHeist(
         }
 
         const insuredNow =
+          !facing.purseId &&
           target.vault.insured &&
           target.vault.insuredUntil !== null &&
           target.vault.insuredUntil.getTime() > now.getTime();
-        const openVault = target.vault.breached && !insuredNow;
-        const exposed = openVault
-          ? target.vault.balance
-          : exposedBalance(target.vault.balance, target.vault.tier, vaultLevel);
+        const openVault = !facing.purseId && target.vault.breached && !insuredNow;
+        const pool = facing.balance ?? target.vault.balance;
+        const exposed = openVault ? pool : exposedBalance(pool, facing.tier, vaultLevel);
         const amount = heistStealAmount(exposed);
-        const debited = await debitVault(tx, targetUserId, amount);
+        const debited = facing.purseId
+          ? (await tx.npcPurse.updateMany({ where: { id: facing.purseId, balance: { gte: amount } }, data: { balance: { decrement: amount } } })).count === 1
+          : await debitVault(tx, targetUserId, amount);
         if (!debited) {
           throw new GameError(409, "VAULT_CHANGED", "The vault shifted before the take landed.");
         }
@@ -424,10 +459,12 @@ export async function attemptHeist(
             heistId: heist.id,
           },
         });
-        await tx.vault.update({
-          where: { userId: targetUserId },
-          data: { breached: !insuredNow },
-        });
+        if (!facing.purseId) {
+          await tx.vault.update({
+            where: { userId: targetUserId },
+            data: { breached: !insuredNow },
+          });
+        }
         if (!target.isBot) {
           await writeNotification(tx, {
             userId: targetUserId,

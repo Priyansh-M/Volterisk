@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { RULES } from "../game/rules.js";
+import { RULES, vaultCapacity } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { createPlayer, ensureWeaponCatalog } from "./userService.js";
 
@@ -141,5 +141,90 @@ export async function ensureNpcStations(): Promise<void> {
         regionName: station.regionName,
       },
     });
+  }
+}
+
+/** How many crews step up with the player. The rest stay on a level 1 standard vault. */
+export function scaledNpcCount(level: number): number {
+  if (level <= 1) return NIGHT_CREW.length;
+  if (level === 2) return 15;
+  if (level === 3) return 10;
+  return Math.max(3, 13 - level);
+}
+
+const GATED_NPCS = new Set(["samir odeh", "anya frost"]);
+const PINNED_HARD = ["Felix Dunn", "Samir Odeh", "Anya Frost"];
+
+export function isNpcGated(username: string, attackerLevel: number): boolean {
+  return GATED_NPCS.has(username.trim().toLowerCase()) && attackerLevel < 5;
+}
+
+function mix(seed: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
+
+export type NpcOffer = {
+  npcId: string;
+  tier: "standard";
+  vaultLevel: number;
+  defaultBalance: number;
+  locked: boolean;
+};
+
+/** Stable for the UTC week, the attacker, and their reputation level. */
+export function npcOffer(attackerLevel: number, npcId: string, weekStart: Date): NpcOffer {
+  const week = weekStart.toISOString();
+  const rest = NIGHT_CREW.map((bot) => bot.username).filter((name) => !PINNED_HARD.includes(name));
+  rest.sort((a, b) => mix(`${week}:${a}`) - mix(`${week}:${b}`));
+  const scaled = new Set([...PINNED_HARD, ...rest].slice(0, scaledNpcCount(attackerLevel)));
+  const roster = NIGHT_CREW.find((bot) => bot.username === npcId) ?? NIGHT_CREW[0];
+  const stepped = scaled.has(roster.username);
+  const hard = PINNED_HARD.includes(roster.username);
+  const vaultLevel = !stepped ? 1 : hard ? 5 : 1 + Math.floor(mix(`${week}:${attackerLevel}:${roster.username}:level`) * 4);
+  const capacity = Math.max(RULES.MIN_VAULT_BALANCE, vaultCapacity("standard", vaultLevel));
+  const rolled = Math.max(
+    RULES.MIN_VAULT_BALANCE,
+    Math.floor(capacity * (0.45 + mix(`${week}:${attackerLevel}:${roster.username}:cash`) * 0.55)),
+  );
+  const defaultBalance = stepped ? rolled : Math.min(heistableVaultBalance(roster.vaultBalance), capacity);
+  return {
+    npcId: roster.username,
+    tier: "standard",
+    vaultLevel,
+    defaultBalance,
+    locked: isNpcGated(roster.username, attackerLevel),
+  };
+}
+
+export async function openNpcPurse(attackerId: string, npcUserId: string, npcUsername: string, attackerLevel: number) {
+  const weekStart = npcWindowStart("week");
+  const existing = await prisma.npcPurse.findUnique({
+    where: { attackerId_npcId_weekStart: { attackerId, npcId: npcUserId, weekStart } },
+  });
+  if (existing) return existing;
+  const offer = npcOffer(attackerLevel, npcUsername, weekStart);
+  try {
+    return await prisma.npcPurse.create({
+      data: {
+        attackerId,
+        npcId: npcUserId,
+        weekStart,
+        balance: offer.defaultBalance,
+        defaultBalance: offer.defaultBalance,
+        vaultTier: offer.tier,
+        vaultLevel: offer.vaultLevel,
+      },
+    });
+  } catch {
+    const again = await prisma.npcPurse.findUnique({
+      where: { attackerId_npcId_weekStart: { attackerId, npcId: npcUserId, weekStart } },
+    });
+    if (!again) throw new Error("NPC purse did not open.");
+    return again;
   }
 }

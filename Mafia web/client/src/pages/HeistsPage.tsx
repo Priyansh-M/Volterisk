@@ -182,11 +182,11 @@ export function HeistsPage() {
           setResult(null)
         }}
       >
-        <TabsList className="border-border bg-transparent p-0">
-          <TabsTrigger value="npc" className="h-8 rounded-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+        <TabsList className="h-11 w-fit px-1.5">
+          <TabsTrigger value="npc" className="h-9 min-w-[9.5rem] rounded-sm px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             NPC heists
           </TabsTrigger>
-          <TabsTrigger value="player" className="h-8 rounded-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+          <TabsTrigger value="player" className="h-9 min-w-[9.5rem] rounded-sm px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Player heists
           </TabsTrigger>
         </TabsList>
@@ -372,7 +372,7 @@ function Dossier({
       <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>
       <h2 className="mt-1 font-display text-4xl font-semibold uppercase">{row.username}</h2>
       <div className="my-5 grid grid-cols-2 gap-4 border-y border-border py-4">
-        <Cell label="Clearance" value={`Level ${row.vaultLevel}`} />
+        <Cell label="Recommended clearance" value={`Level ${row.vaultLevel}`} />
         <Cell label="Estimated wealth" value={row.estimatedWealth ?? '—'} />
         <Cell label="Location" value={location} />
         <Cell label="Vulnerability" value={vulnerability} tone={vulnerability === 'HIGH' ? 'ok' : 'bad'} />
@@ -388,11 +388,11 @@ function Dossier({
         </button>
         <button
           type="button"
-          disabled={!row.vulnerable || cooling || busy}
+          disabled={!row.vulnerable || cooling || busy || row.locked}
           className="gloss-gold h-9 flex-1 cursor-pointer text-xs disabled:cursor-not-allowed disabled:opacity-40"
           onClick={onPrepare}
         >
-          {cooling ? `Cooling ${coolLabel}` : 'Prepare heist'}
+          {row.locked ? 'Level 5' : cooling ? `Cooling ${coolLabel}` : 'Prepare heist'}
         </button>
       </div>
       {open ? (
