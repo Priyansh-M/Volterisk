@@ -51,7 +51,7 @@ export async function ensureDatabase(): Promise<void> {
     env: process.env,
   });
   if (!(await weaponTableExists())) {
-    throw new Error("Weapon table is still missing. From Mafia web/server run: npm run db:push");
+    throw new Error("Weapon table is still missing. From volterisk/server run: npm run db:push");
   }
 }
 

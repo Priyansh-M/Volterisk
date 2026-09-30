@@ -11,7 +11,7 @@ function postgresUrl(name, value) {
   const url = (value ?? "").trim();
   if (url.startsWith("postgres://") || url.startsWith("postgresql://")) return url;
   console.error(
-    `${name} must be a Supabase postgres URL in Mafia web/server/.env. Open that file, paste the URL, save, and run this command again.`,
+    `${name} must be a Supabase postgres URL in volterisk/server/.env. Open that file, paste the URL, save, and run this command again.`,
   );
   process.exit(1);
 }

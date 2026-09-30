@@ -13,7 +13,7 @@ Send `Authorization: Bearer <token>` on every route except register and login. L
 Two terminals, from the repo root.
 
 ```powershell
-cd "Mafia web\server"
+cd "volterisk\server"
 npm install
 npm run db:push
 npm run db:seed
@@ -21,7 +21,7 @@ npm run dev
 ```
 
 ```powershell
-cd "Mafia web\client"
+cd "volterisk\client"
 npm install
 npm run dev
 ```
@@ -29,11 +29,11 @@ npm run dev
 Tests:
 
 ```powershell
-cd "Mafia web\server"
+cd "volterisk\server"
 npm test
 ```
 
-Bash is the same with `Mafia web/server` and `Mafia web/client`.
+Bash is the same with `volterisk/server` and `volterisk/client`.
 
 - API: http://localhost:8787 (bound to `0.0.0.0`)
 - Client: http://localhost:4178 (bound to `0.0.0.0`, proxies `/api` to the API)
@@ -106,18 +106,18 @@ Heist body is only `{ "targetUserId", "weaponId" }`.
 
 ## Publish (Supabase + Vercel + GitHub)
 
-Local play does not change. The live site is two Vercel projects from one GitHub repo: the API (`Mafia web/server`) and the client (`Mafia web/client`). The API uses Supabase Postgres. The client is built with `VITE_API_URL` set to that API origin (no trailing slash).
+Local play does not change. The live site is two Vercel projects from one GitHub repo: the API (`volterisk/server`) and the client (`volterisk/client`). The API uses Supabase Postgres. The client is built with `VITE_API_URL` set to that API origin (no trailing slash).
 
 Create the tables once from PowerShell after `server/.env` contains the Supabase URLs:
 
 ```powershell
-cd "C:\Users\Priyansh\Documents\genesis\Mafia web\server"
+cd "C:\Users\Priyansh\Documents\genesis\volterisk\server"
 npm install
 npm run db:push:supabase
 ```
 
 Copy both URLs from the Supabase Connect dialog into `.env`. `DATABASE_URL` is the transaction pooler (port 6543) plus `pgbouncer=true` and `connection_limit=1`. `DIRECT_URL` is the session pooler (port 5432) with no `pgbouncer`. URL-encode the password. Close that terminal when the push finishes.
 
-Vercel API project: root directory `Mafia web/server`, framework Express, build command `npm run vercel-build`. Environment variables `DATABASE_URL`, `DIRECT_URL`, and a new `JWT_SECRET` (not `iron-hour-local-dev`), for Production and Preview. Open `https://YOUR-API.vercel.app/api/health` and expect `{"ok":true}`.
+Vercel API project: root directory `volterisk/server`, framework Express, build command `npm run vercel-build`. Environment variables `DATABASE_URL`, `DIRECT_URL`, and a new `JWT_SECRET` (not `iron-hour-local-dev`), for Production and Preview. Open `https://YOUR-API.vercel.app/api/health` and expect `{"ok":true}`.
 
-Vercel client project: same repo, root directory `Mafia web/client`, framework Vite. Set `VITE_API_URL` to `https://YOUR-API.vercel.app` before the first deploy. Register on the client URL.
+Vercel client project: same repo, root directory `volterisk/client`, framework Vite. Set `VITE_API_URL` to `https://YOUR-API.vercel.app` before the first deploy. Register on the client URL.

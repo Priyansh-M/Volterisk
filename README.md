@@ -1,1 +1,1 @@
-The game is in [Mafia web](<Mafia web/README.md>).
+The game is in [volterisk](volterisk/README.md).
