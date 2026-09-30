@@ -104,10 +104,11 @@ export function DashboardPage() {
         </div>
         <Panel>
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Total cash on the site</p>
+            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Total money on the site</p>
             <p className="font-mono text-[10px] text-muted">Every 3 days</p>
           </div>
           <p className="mt-2 font-serif text-3xl text-gold">{community ? money(community.totalMoney) : '—'}</p>
+          <p className="mt-1 text-[12px] text-muted">Pocket plus vault for every registered player. The ranking only lists the top 3.</p>
           {community ? <MoneyPlot series={community.series} /> : <p className="mt-6 text-sm text-muted">Drawing the line…</p>}
         </Panel>
       </section>

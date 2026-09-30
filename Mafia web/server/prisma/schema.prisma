@@ -179,6 +179,14 @@ model Heist {
   @@index([targetId, success, createdAt])
 }
 
+model EconomySnapshot {
+  id         String   @id @default(cuid())
+  takenAt    DateTime @default(now())
+  totalMoney Int
+  heisted    Int
+  players    Int
+}
+
 model Transaction {
   id         String   @id @default(cuid())
   type       String
