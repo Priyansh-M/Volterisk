@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChipList, RouletteTable, RouletteWheel, useRoulette } from '../vendor/roulette/index.ts'
 import type { AvailableNumbers, IOnBetParams } from '../vendor/roulette/types.ts'
@@ -49,6 +49,7 @@ export function RoulettePage() {
   const [table, setTable] = useState<TableState | null>(null)
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [ended, setEnded] = useState(false)
+  const confirmed = useRef(false)
   const cash = me?.cash ?? 0
   const cap = table?.cap ?? 0
   const staked = table?.staked ?? 0
@@ -98,15 +99,6 @@ export function RoulettePage() {
   }, [mode, lobby?.id, seenSpin])
 
   useEffect(() => {
-    if (mode !== 'lobby' || !lobby || spinning) return
-    const placed = Object.entries(bets).map(([id, bet]) => ({ id, amount: bet.amount }))
-    const timer = window.setTimeout(() => {
-      void api(`/api/casino/lobby/${lobby.id}/bets`, { method: 'POST', body: JSON.stringify({ bets: placed }) }).catch(() => undefined)
-    }, 400)
-    return () => window.clearTimeout(timer)
-  }, [bets, mode, lobby?.id, spinning])
-
-  useEffect(() => {
     const q = query.trim()
     if (mode !== 'lobby' || q.length < 2) {
       setFound([])
@@ -132,6 +124,11 @@ export function RoulettePage() {
       return
     }
     setError(null)
+    if (confirmed.current && lobby && !lobby.youAreHost) {
+      confirmed.current = false
+      void api(`/api/casino/lobby/${lobby.id}/bets`, { method: 'POST', body: JSON.stringify({ bets: [] }) }).catch(() => undefined)
+      setLobby((room) => room ? { ...room, seats: room.seats.map((seat) => seat.userId === me?.id ? { ...seat, laid: false, bets: [] } : seat) } : room)
+    }
     onBet(chip)(params)
   }
 
@@ -157,7 +154,9 @@ export function RoulettePage() {
     if (lobby && mode === 'lobby') {
       await api(`/api/casino/lobby/${lobby.id}/bets`, { method: 'POST', body: JSON.stringify({ bets: placed }) })
       if (!lobby.youAreHost) {
-        setError('Chips are on the table. The host spins.')
+        confirmed.current = true
+        setLobby((room) => room ? { ...room, seats: room.seats.map((seat) => seat.userId === me?.id ? { ...seat, laid: true, bets: placed } : seat) } : room)
+        setError(null)
         return
       }
       setSpinning(true)
@@ -277,7 +276,7 @@ export function RoulettePage() {
             <p className="font-mono text-sm text-foreground">
               On the felt <span className="text-primary">{money(total)}</span>
             </p>
-            {total > 0 ? <PlacedMark /> : null}
+            {(mode !== 'lobby' || lobby?.youAreHost ? total > 0 : Boolean(lobby?.seats.some((seat) => seat.userId === me?.id && seat.laid))) ? <PlacedMark /> : null}
           </div>
         </div>
       </div>
@@ -288,7 +287,7 @@ export function RoulettePage() {
             {lobby.seats.map((seat) => (
               <li key={seat.userId} className="mt-2 flex flex-wrap items-center gap-2">
                 <span>{seat.username}</span>
-                {seat.laid || (seat.userId === me?.id && total > 0) ? <PlacedMark /> : null}
+                {(seat.userId === me?.id && lobby.youAreHost ? total > 0 || seat.laid : seat.laid) ? <PlacedMark /> : null}
               </li>
             ))}
           </ul>
@@ -327,7 +326,7 @@ export function RoulettePage() {
       ) : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div className="flex gap-2">
-        <button type="button" className="nav-pill cursor-pointer px-4 py-2 text-xs" disabled={spinning || locked} onClick={() => { clearBets(); setError(null) }}>
+        <button type="button" className="nav-pill cursor-pointer px-4 py-2 text-xs" disabled={spinning || locked} onClick={() => { clearBets(); setError(null); if (confirmed.current && lobby && !lobby.youAreHost) { confirmed.current = false; void api(`/api/casino/lobby/${lobby.id}/bets`, { method: 'POST', body: JSON.stringify({ bets: [] }) }) } }}>
           Clear
         </button>
         <button type="button" className="gloss-gold cursor-pointer px-4 py-2 text-xs disabled:opacity-40" disabled={spinning || locked || total < 1 || (lobby && mode === 'lobby' && lobby.seats.some((seat) => seat.userId === me?.id ? false : !seat.laid))} onClick={() => void spin()}>
@@ -356,13 +355,13 @@ function OtherBets({ seats }: { seats: Seat[] }) {
   const [open, setOpen] = useState<string | null>(null)
   if (!seats.length) return null
   return (
-    <div className="min-w-[12rem] flex-1 space-y-2 border border-border bg-background px-3 py-2">
+    <div className="min-w-[12rem] flex-1 space-y-2 border border-primary bg-background px-3 py-2">
       {seats.map((seat) => {
         const bets = seat.bets ?? []
         const shown = open === seat.userId ? bets : bets.slice(0, 3)
         return (
           <div key={seat.userId} className="flex flex-wrap items-center gap-1.5 text-sm">
-            <span className="mr-1">{seat.username}</span>
+            <span className="mr-1 font-semibold text-foreground">{seat.username}</span>
             {shown.map((bet) => (
               <span key={bet.id} className={`inline-flex items-center gap-1 border px-1 py-0.5 font-mono text-[10px] ${betTone(bet.id)}`}>
                 <span className="px-0.5">{bet.id}</span>
