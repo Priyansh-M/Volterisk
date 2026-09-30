@@ -43,10 +43,13 @@ export function LedgerAlerts({
           } catch {
             parsed = {}
           }
-          if (parsed.lobbyId) {
-          setInvite({ id: tableInvite.id, by: parsed.by ?? 'A player', lobbyId: parsed.lobbyId })
-          void import('../pages/RoulettePage.tsx')
-        }
+          const here = new URLSearchParams(window.location.search).get('lobby')
+          if (parsed.lobbyId && parsed.lobbyId !== here) {
+            setInvite({ id: tableInvite.id, by: parsed.by ?? 'A player', lobbyId: parsed.lobbyId })
+            void import('../pages/RoulettePage.tsx')
+          } else if (parsed.lobbyId && parsed.lobbyId === here) {
+            void api(`/api/notifications/${tableInvite.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+          }
         }
         const next = alerts.unlocked[0]
         const report = notes.notifications.find(

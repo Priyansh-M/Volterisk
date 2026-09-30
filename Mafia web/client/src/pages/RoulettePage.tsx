@@ -339,7 +339,7 @@ export function RoulettePage() {
         <button type="button" className="nav-pill cursor-pointer px-4 py-2 text-xs" disabled={spinning || locked} onClick={() => { clearBets(); setError(null); if (confirmed.current && lobby && !lobby.youAreHost) { confirmed.current = false; void api(`/api/casino/lobby/${lobby.id}/bets`, { method: 'POST', body: JSON.stringify({ bets: [] }) }) } }}>
           Clear
         </button>
-        <button type="button" className="gloss-gold cursor-pointer px-4 py-2 text-xs disabled:opacity-40" disabled={spinning || locked || total < 1 || (lobby && mode === 'lobby' && lobby.seats.some((seat) => seat.userId === me?.id ? false : !seat.laid))} onClick={() => void spin()}>
+        <button type="button" className="gloss-gold cursor-pointer px-4 py-2 text-xs disabled:opacity-40" disabled={spinning || locked || total < 1 || Boolean(lobby && mode === 'lobby' && lobby.youAreHost && lobby.seats.some((seat) => seat.userId !== me?.id && !seat.laid))} onClick={() => void spin()}>
           {spinning ? 'Spinning…' : lobby && !lobby.youAreHost ? 'Lay chips' : 'Spin'}
         </button>
       </div>
@@ -373,8 +373,8 @@ function OtherBets({ seats }: { seats: Seat[] }) {
           <div key={seat.userId} className="flex flex-wrap items-center gap-1.5 text-sm">
             <span className="mr-1 font-semibold text-foreground">{seat.username}</span>
             {shown.map((bet) => (
-              <span key={bet.id} className={`inline-flex items-center gap-1 border px-1 py-0.5 font-mono text-[10px] ${betTone(bet.id)}`}>
-                <span className="px-0.5">{bet.id}</span>
+              <span key={bet.id} className="inline-flex items-center gap-1 font-mono text-[10px] text-foreground">
+                <span className={`border px-1 py-0.5 ${betTone(bet.id)}`}>{bet.id}</span>
                 <span>: {bet.amount}</span>
               </span>
             ))}

@@ -185,6 +185,7 @@ export async function invitePlayer(hostId: string, lobbyId: string, targetId: st
   if (!lobby || lobby.hostId !== hostId) throw new GameError(403, "NOT_HOST", "Only the host invites.");
   if (lobby.seats.length + lobby.invites.length >= TABLE_MAX) throw new GameError(409, "TABLE_FULL", "Five is the table limit.");
   if (targetId === hostId) throw new GameError(400, "BAD_INVITE", "You are already seated.");
+  if (lobby.seats.some((seat) => seat.userId === targetId)) return lobbyView(lobbyId, hostId);
   const target = await prisma.user.findFirst({ where: { id: targetId, isBot: false } });
   if (!target) throw new GameError(404, "NO_PLAYER", "No such player.");
   const host = await prisma.user.findUnique({ where: { id: hostId }, select: { username: true } });
