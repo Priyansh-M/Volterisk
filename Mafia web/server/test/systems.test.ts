@@ -405,7 +405,7 @@ describe("reputation", () => {
 
     const me = await request(app).get("/api/me").set(auth(player.token));
     expect(me.body.level).toBe(2);
-    expect(me.body.title).toBe("Corner Fixer");
+    expect(me.body.title).toBe("City Dweller");
 
     const again = await request(app).post("/api/reputation/claim").set(auth(player.token)).send({});
     expect(again.status).toBe(400);

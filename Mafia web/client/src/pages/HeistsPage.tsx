@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { Notice, inputClass } from '../components/ui.tsx'
@@ -65,7 +65,18 @@ export function HeistsPage() {
     }
   }, [])
 
-  const targets = board ? (kind === 'npc' ? board.npc : shownPlayers(board.players, query, pickedId)) : null
+  const previewIds = useMemo(() => {
+    if (!board) return []
+    const copy = [...board.players]
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(Math.random() * (index + 1))
+      const current = copy[index]
+      copy[index] = copy[swap]
+      copy[swap] = current
+    }
+    return copy.slice(0, 3).map((row) => row.userId)
+  }, [board])
+  const targets = board ? (kind === 'npc' ? board.npc : shownPlayers(board.players, query, pickedId, previewIds)) : null
 
   useEffect(() => {
     const name = params.get('player')
@@ -225,7 +236,7 @@ export function HeistsPage() {
               : 'No other player vault is open.'}
         </Notice>
       ) : null}
-      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {targets?.map((row, index) => (
           <Dossier
             key={row.userId}
@@ -294,10 +305,10 @@ export function HeistsPage() {
   )
 }
 
-function shownPlayers(players: Target[], query: string, pickedId: string | null) {
+function shownPlayers(players: Target[], query: string, pickedId: string | null, previewIds: string[]) {
   const needle = query.trim().toLowerCase()
-  if (pickedId) return players.filter((row) => row.userId === pickedId)
-  if (!needle) return players.length > 8 ? [] : players
+  if (pickedId && !needle) return players.filter((row) => row.userId === pickedId)
+  if (!needle) return players.filter((row) => previewIds.includes(row.userId))
   return players.filter((row) => row.username.toLowerCase().includes(needle))
 }
 
@@ -347,7 +358,7 @@ function Dossier({
   const vulnerability = row.vulnerable ? 'HIGH' : 'LOW'
   const location = row.sectorId ? row.sectorId.replace('velmora-', 'SECTOR ').toUpperCase() : 'UNPLACED'
   return (
-    <article className="relative overflow-hidden border border-border bg-card p-5">
+    <article className="relative min-h-[340px] overflow-hidden border border-border bg-card p-6">
       <div className="absolute top-4 right-4 font-mono text-[9px] text-destructive">FILE H-{104 + index}</div>
       <div className="mb-12 flex items-center gap-3">
         <svg viewBox="0 0 24 24" className="h-6 w-6 text-destructive" aria-hidden="true">
@@ -359,7 +370,7 @@ function Dossier({
         </button>
       </div>
       <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>
-      <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{row.username}</h2>
+      <h2 className="mt-1 font-display text-4xl font-semibold uppercase">{row.username}</h2>
       <div className="my-5 grid grid-cols-2 gap-4 border-y border-border py-4">
         <Cell label="Clearance" value={`Level ${row.vaultLevel}`} />
         <Cell label="Estimated wealth" value={row.estimatedWealth ?? '—'} />
@@ -389,7 +400,7 @@ function Dossier({
           <label className="block font-mono text-[9px] uppercase text-muted-foreground">
             Weapon
             <select
-              className={`${inputClass} mt-2 max-w-full`}
+              className={`${inputClass} mt-2 max-w-full py-3 text-base`}
               value={weaponId ?? ''}
               onChange={(event) => onWeapon(event.target.value)}
             >

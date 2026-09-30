@@ -179,10 +179,10 @@ export const RULES = {
   /** Reputation titles. The highest entry a player's level reaches wins. */
   TITLES: [
     { minLevel: 1, title: "Street Operator" },
-    { minLevel: 2, title: "Corner Fixer" },
-    { minLevel: 3, title: "Night Courier" },
-    { minLevel: 4, title: "Block Captain" },
-    { minLevel: 5, title: "Safehouse Broker" },
+    { minLevel: 2, title: "City Dweller" },
+    { minLevel: 3, title: "Expert Negotiator" },
+    { minLevel: 4, title: "Peak Businessman" },
+    { minLevel: 5, title: "Mob Boss" },
     { minLevel: 7, title: "Ward Lieutenant" },
     { minLevel: 10, title: "Vault Specialist" },
     { minLevel: 14, title: "Syndicate Captain" },

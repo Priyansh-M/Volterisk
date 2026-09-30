@@ -229,8 +229,8 @@ export function Shell() {
               <span className={heatLabel === 'High' ? 'text-destructive' : 'text-muted-foreground'}>{heatLabel}</span>
             </NavLink>
             <div className="border-l border-border pl-3 sm:pl-5">
-              <span className="block font-mono text-[8px] uppercase text-muted-foreground">Vault</span>
-              <b className="font-mono text-xs">{money(me.vault.balance)}</b>
+              <span className="block font-mono text-[8px] uppercase text-muted-foreground">Total balance</span>
+              <b className="font-mono text-xs">{money(me.cash + me.vault.balance)}</b>
             </div>
             <NavLink to="/notifications" aria-label="Notifications" className="relative text-foreground no-underline">
               <IconSignal className="h-4 w-4" />

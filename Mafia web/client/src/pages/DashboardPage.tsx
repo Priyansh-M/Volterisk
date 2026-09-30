@@ -24,21 +24,21 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      api<{ heists: HistoryRow[] }>('/api/heists/history'),
-      api<TargetBoard>('/api/heists/targets'),
-      api<WorkBoard>('/api/work/contracts'),
-      api<PassiveBoard>('/api/work/passive'),
-      api<Community>('/api/community'),
-    ])
-      .then(([history, board, work, jobs, world]) => {
-        setRows(history.heists.slice(0, 8))
-        setTargets(board.npc.length + board.players.length)
-        setOpenContracts(work.contracts.filter((row) => row.available && !row.locked).length)
-        setPassive(jobs)
-        setCommunity(world)
-      })
+    api<{ heists: HistoryRow[] }>('/api/heists/history')
+      .then((history) => setRows(history.heists.slice(0, 8)))
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load the center.'))
+    api<TargetBoard>('/api/heists/targets')
+      .then((board) => setTargets(board.npc.length + board.players.length))
+      .catch(() => undefined)
+    api<WorkBoard>('/api/work/contracts')
+      .then((work) => setOpenContracts(work.contracts.filter((row) => row.available && !row.locked).length))
+      .catch(() => undefined)
+    api<PassiveBoard>('/api/work/passive')
+      .then(setPassive)
+      .catch(() => undefined)
+    api<Community>('/api/community')
+      .then(setCommunity)
+      .catch(() => undefined)
   }, [])
 
   if (!me) return null
@@ -51,7 +51,7 @@ export function DashboardPage() {
         <Stat label="Available cash" value={money(me.cash)} gold />
         <Stat label="Vault balance" value={money(me.vault.balance)} gold />
         <Stat label="Equipped weapon" value={me.equippedWeapon?.name ?? '—'} />
-        <Stat label="Active base" value={me.base ? me.base.regionName : '—'} />
+        <Stat label="Square" value={me.base ? squareNumber(me.base.sectorId) : '—'} />
         <Stat label="Heist targets" value={targets === null ? '—' : String(targets)} />
         <Stat label="Open contracts" value={openContracts === null ? '—' : String(openContracts)} />
       </div>
@@ -152,6 +152,12 @@ function MoneyPlot({ series }: { series: { at: string; totalMoney: number }[] })
       ) : null}
     </svg>
   )
+}
+
+function squareNumber(sectorId: string) {
+  const match = sectorId.match(/(\d+)\s*$/)
+  if (!match) return sectorId
+  return String(Number(match[1]))
 }
 
 function Stat({ label, value, gold }: { label: string; value: string; gold?: boolean }) {
