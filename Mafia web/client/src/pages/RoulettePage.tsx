@@ -86,7 +86,10 @@ export function RoulettePage() {
 
   useEffect(() => {
     if (mode !== 'lobby' || !lobby) return
+    let pending = false
     const timer = window.setInterval(() => {
+      if (pending) return
+      pending = true
       api<Lobby>(`/api/casino/lobby/${lobby.id}`)
         .then((room) => {
           setLobby(room)
@@ -104,7 +107,10 @@ export function RoulettePage() {
             setEnded(true)
           }
         })
-    }, 4000)
+        .finally(() => {
+          pending = false
+        })
+    }, 1000)
     return () => window.clearInterval(timer)
   }, [mode, lobby?.id, seenSpin])
 

@@ -24,7 +24,10 @@ export function LedgerAlerts({
 
   useEffect(() => {
     let cancelled = false
+    let busy = false
     async function poll() {
+      if (cancelled || busy) return
+      busy = true
       try {
         const [alerts, notes] = await Promise.all([
           api<{ unlocked: Unlock[]; unclaimed?: number }>('/api/achievements/unannounced'),
@@ -73,13 +76,14 @@ export function LedgerAlerts({
         }
       } catch {
         /* the desk will try again */
+      } finally {
+        busy = false
       }
     }
-        const start = window.setTimeout(() => void poll(), 800)
-        const timer = window.setInterval(() => void poll(), 8000)
+    void poll()
+    const timer = window.setInterval(() => void poll(), 1000)
     return () => {
       cancelled = true
-      window.clearTimeout(start)
       window.clearInterval(timer)
     }
   }, [])
