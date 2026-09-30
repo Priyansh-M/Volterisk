@@ -77,8 +77,7 @@ export async function settleAllHeat(): Promise<void> {
   for (const user of users) await settleHeat(user.id);
 }
 
-export function heistHeatGain(success: boolean, amountStolen: number, roll: number, chance: number): number {
-  if (success) return amountStolen >= RULES.HEAT_HIGH_VALUE_AT ? RULES.HEAT_HIGH_VALUE : RULES.HEAT_SUCCESS;
-  if (roll >= chance + RULES.HEAT_CRITICAL_MISS) return RULES.HEAT_CRITICAL;
-  return RULES.HEAT_FAIL;
+export function heistHeatGain(success: boolean, amountStolen: number): number {
+  if (!success) return RULES.HEAT_FAIL;
+  return amountStolen >= RULES.HEAT_HIGH_VALUE_AT ? RULES.HEAT_HIGH_VALUE : RULES.HEAT_SUCCESS;
 }

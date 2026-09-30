@@ -12,10 +12,15 @@ import {
 import { listNotifications, markNotificationRead } from "../services/notificationService.js";
 import { buyProperty, listProperties, upgradeProperty } from "../services/propertyService.js";
 import { buyShopItem, shopView, upgradeCamera } from "../services/shopService.js";
+import { communityBoard } from "../services/communityService.js";
 import { getLeaderboard } from "../services/userService.js";
 
 export async function leaderboard(_req: Request, res: Response): Promise<void> {
   res.json(await getLeaderboard());
+}
+
+export async function community(_req: Request, res: Response): Promise<void> {
+  res.json(await communityBoard());
 }
 
 export async function notifications(req: Request, res: Response): Promise<void> {

@@ -12,6 +12,7 @@ import {
   buyShop,
   cameraUpgrade,
   claimAchievementReward,
+  community,
   leaderboard,
   notifications,
   properties,
@@ -70,6 +71,7 @@ api.get("/work/passive", requireAuth, asyncHandler(passive));
 api.post("/work/passive/select", requireAuth, asyncHandler(collectPassivePay));
 
 api.get("/leaderboard", requireAuth, asyncHandler(leaderboard));
+api.get("/community", requireAuth, asyncHandler(community));
 api.get("/notifications", requireAuth, asyncHandler(notifications));
 api.post("/notifications/:id/read", requireAuth, asyncHandler(readNotification));
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AssetGlyph } from '../components/AssetGlyph.tsx'
 import { WeaponArt } from '../components/WeaponArt.tsx'
 import { Btn, Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, api, peek } from '../lib/api.ts'
 import { WEAPON_CATALOG } from '../lib/catalog.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
@@ -18,7 +18,7 @@ type Counter = {
 
 export function MarketPage() {
   const { me, refresh } = useAuth()
-  const [arsenal, setArsenal] = useState<Arsenal | null>(null)
+  const [arsenal, setArsenal] = useState<Arsenal | null>(() => peek<Arsenal>('/api/me/weapons'))
   const [counter, setCounter] = useState<Counter | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -27,15 +27,20 @@ export function MarketPage() {
   const [motors, setMotors] = useState<SaleLot[] | null>(null)
 
   async function load() {
-    const [weapons, shop, assets] = await Promise.all([
-      api<Arsenal>('/api/me/weapons'),
-      api<Counter>('/api/shop'),
-      api<{ propertyCatalog: SaleLot[]; vehicleCatalog: SaleLot[] }>('/api/properties'),
-    ])
-    setArsenal(weapons)
-    setCounter(shop)
-    setLots(assets.propertyCatalog)
-    setMotors(assets.vehicleCatalog)
+    const weaponsPromise = api<Arsenal>('/api/me/weapons').then((weapons) => {
+      setArsenal(weapons)
+      return weapons
+    })
+    const shopPromise = api<Counter>('/api/shop').then((shop) => {
+      setCounter(shop)
+      return shop
+    })
+    const assetsPromise = api<{ propertyCatalog: SaleLot[]; vehicleCatalog: SaleLot[] }>('/api/properties').then((assets) => {
+      setLots(assets.propertyCatalog)
+      setMotors(assets.vehicleCatalog)
+      return assets
+    })
+    await Promise.all([weaponsPromise, shopPromise, assetsPromise])
   }
 
   useEffect(() => {
@@ -54,7 +59,7 @@ export function MarketPage() {
         await api('/api/properties/buy', { method: 'POST', body: JSON.stringify({ catalogId: itemId }) })
       }
       await load()
-      await refresh()
+      void refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The stall refused the sale.')
     } finally {
@@ -68,7 +73,7 @@ export function MarketPage() {
     try {
       await api('/api/shop/camera/upgrade', { method: 'POST', body: '{}' })
       await load()
-      await refresh()
+      void refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The camera did not take the upgrade.')
     } finally {
@@ -82,7 +87,7 @@ export function MarketPage() {
     try {
       await api('/api/weapons/equip', { method: 'POST', body: JSON.stringify({ weaponId }) })
       await load()
-      await refresh()
+      void refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not equip that tool.')
     } finally {
@@ -145,8 +150,9 @@ export function MarketPage() {
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {WEAPON_CATALOG.map((item) => {
           const owned = ownedById.get(item.id)
-          const canBuy = nextId === item.id && item.price > 0
-          const locked = !owned && !canBuy && item.price > 0
+          const known = arsenal !== null
+          const canBuy = known && nextId === item.id && item.price > 0
+          const locked = known && !owned && !canBuy && item.price > 0
           return (
             <article key={item.id} className="flex flex-col overflow-hidden rounded-2xl border border-line bg-panel">
               <div className="aspect-[11/7] border-b border-line">
@@ -166,9 +172,10 @@ export function MarketPage() {
                 <p className="mt-1 font-mono text-[10px] tracking-[0.14em] text-muted uppercase">{item.type}</p>
                 <p className="mt-2 flex-1 text-sm text-muted">{item.flavor}</p>
                 <p className="mt-3 font-semibold text-gold">{item.price > 0 ? money(item.price) : 'Issued at signup'}</p>
-                <p className="mt-1 font-mono text-xs text-primary">Attack {item.attacks[0]}–{item.attacks[3]}</p>
+                <p className="mt-1 font-mono text-xs text-primary">Attack {item.attacks[0]}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {owned ? (
+                  {!arsenal ? <p className="text-sm text-muted">Checking your case…</p> : null}
+                  {arsenal && owned ? (
                     owned.equipped ? (
                       <p className="text-sm text-muted">On your person.</p>
                     ) : (

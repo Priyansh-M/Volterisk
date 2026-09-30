@@ -143,7 +143,7 @@ export const RULES = {
     diamond: 250_000,
   } as Record<string, number>,
   HEAT_SUCCESS: 8,
-  HEAT_FAIL: 5,
+  HEAT_FAIL: 15,
   HEAT_HIGH_VALUE: 12,
   HEAT_CRITICAL: 15,
   HEAT_HIGH_VALUE_AT: 50_000,

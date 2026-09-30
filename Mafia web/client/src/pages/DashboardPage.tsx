@@ -5,12 +5,22 @@ import { useAuth } from '../lib/auth.tsx'
 import { money, when } from '../lib/format.ts'
 import type { HistoryRow, TargetBoard, WorkBoard } from '../lib/types.ts'
 
+type Community = {
+  registeredPlayers: number
+  totalMoney: number
+  totalHeisted: number
+  series: { at: string; totalMoney: number }[]
+}
+
+type PassiveBoard = { jobs: { name: string; qualified: boolean; selected: boolean }[] }
+
 export function DashboardPage() {
   const { me } = useAuth()
   const [rows, setRows] = useState<HistoryRow[] | null>(null)
   const [targets, setTargets] = useState<number | null>(null)
   const [openContracts, setOpenContracts] = useState<number | null>(null)
-  const [activeJob, setActiveJob] = useState<string | null>(null)
+  const [passive, setPassive] = useState<PassiveBoard | null>(null)
+  const [community, setCommunity] = useState<Community | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -18,12 +28,15 @@ export function DashboardPage() {
       api<{ heists: HistoryRow[] }>('/api/heists/history'),
       api<TargetBoard>('/api/heists/targets'),
       api<WorkBoard>('/api/work/contracts'),
+      api<PassiveBoard>('/api/work/passive'),
+      api<Community>('/api/community'),
     ])
-      .then(([history, board, work]) => {
+      .then(([history, board, work, jobs, world]) => {
         setRows(history.heists.slice(0, 8))
         setTargets(board.npc.length + board.players.length)
         setOpenContracts(work.contracts.filter((row) => row.available && !row.locked).length)
-        setActiveJob(work.active?.name ?? null)
+        setPassive(jobs)
+        setCommunity(world)
       })
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load the center.'))
   }, [])
@@ -67,18 +80,77 @@ export function DashboardPage() {
         </Panel>
         <div className="space-y-4">
           <Panel>
-            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">On the clock</p>
-            <p className="mt-2 text-sm">{activeJob ?? '—'}</p>
-            <p className="mt-1 text-[12px] text-muted">{activeJob ? 'One live contract.' : 'No contract is running.'}</p>
+            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Passive job</p>
+            <p className="mt-2 text-sm">{me.currentJob ? me.currentJob.name : 'None'}</p>
+            <p className="mt-1 text-[12px] text-muted">
+              {passive === null
+                ? 'Reading the board…'
+                : `${passive.jobs.filter((job) => job.qualified && !job.selected).length} other jobs you can take`}
+            </p>
           </Panel>
           <Panel>
-            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Property income</p>
-            <p className="mt-2 font-serif text-2xl text-muted">—</p>
-            <p className="mt-1 text-[12px] text-muted">No property income is posted.</p>
+            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Heist takings</p>
+            <p className="mt-2 font-serif text-2xl text-gold">{money(me.stats.totalStolen)}</p>
+            <p className="mt-1 text-[12px] text-muted">Money you have taken on successful heists.</p>
           </Panel>
         </div>
       </div>
+      <section className="space-y-3">
+        <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Community</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Registered players" value={community ? String(community.registeredPlayers) : '—'} />
+          <Stat label="Total money on the site" value={community ? money(community.totalMoney) : '—'} gold />
+          <Stat label="Total heisted value" value={community ? money(community.totalHeisted) : '—'} gold />
+        </div>
+        <Panel>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-[10px] tracking-[0.22em] text-muted uppercase">Total cash on the site</p>
+            <p className="font-mono text-[10px] text-muted">Every 3 days</p>
+          </div>
+          <p className="mt-2 font-serif text-3xl text-gold">{community ? money(community.totalMoney) : '—'}</p>
+          {community ? <MoneyPlot series={community.series} /> : <p className="mt-6 text-sm text-muted">Drawing the line…</p>}
+        </Panel>
+      </section>
     </div>
+  )
+}
+
+function MoneyPlot({ series }: { series: { at: string; totalMoney: number }[] }) {
+  const width = 640
+  const height = 220
+  const pad = 28
+  const values = series.map((point) => point.totalMoney)
+  const max = Math.max(...values, 1)
+  const min = 0
+  const coords = series.map((point, index) => {
+    const x = series.length === 1 ? width / 2 : pad + (index / (series.length - 1)) * (width - pad * 2)
+    const y = height - pad - ((point.totalMoney - min) / (max - min)) * (height - pad * 2)
+    return { x, y }
+  })
+  const line = coords.map((point) => `${point.x},${point.y}`).join(' ')
+  const fill = `${pad},${height - pad} ${line} ${coords[coords.length - 1]?.x ?? pad},${height - pad}`
+  const first = series[0]
+  const last = series[series.length - 1]
+  const label = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="mt-4 h-56 w-full" role="img" aria-label="Total money on the site">
+      <polygon points={fill} className="fill-gold/15" />
+      <polyline points={line} fill="none" className="stroke-gold" strokeWidth="2.5" />
+      {coords.map((point) => (
+        <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="3" className="fill-gold" />
+      ))}
+      {first ? (
+        <text x={pad} y={height - 8} className="fill-muted" fontSize="11">
+          {label(first.at)}
+        </text>
+      ) : null}
+      {last && series.length > 1 ? (
+        <text x={width - pad} y={height - 8} textAnchor="end" className="fill-muted" fontSize="11">
+          {label(last.at)}
+        </text>
+      ) : null}
+    </svg>
   )
 }
 

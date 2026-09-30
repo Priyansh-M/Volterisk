@@ -377,7 +377,7 @@ export async function attemptHeist(
               severity: "WARNING",
             });
           }
-          await gainHeat(tx, attackerId, heistHeatGain(false, 0, roll, chance));
+          await gainHeat(tx, attackerId, heistHeatGain(false, 0));
           return {
             ...presentHeist(heist, target.username, owned.weapon.name),
             attack,
@@ -437,7 +437,7 @@ export async function attemptHeist(
             severity: "CRITICAL",
           });
         }
-        await gainHeat(tx, attackerId, heistHeatGain(true, amount, roll, chance));
+        await gainHeat(tx, attackerId, heistHeatGain(true, amount));
         if (
           target.vault.insured &&
           target.vault.insuredUntil &&

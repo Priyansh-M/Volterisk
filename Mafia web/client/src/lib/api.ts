@@ -29,17 +29,26 @@ export function isMissing(err: unknown) {
 
 const memory = new Map<string, unknown>()
 const inflight = new Map<string, Promise<unknown>>()
+let generation = 0
 
 export function peek<T>(path: string): T | null {
   return memory.has(path) ? (memory.get(path) as T) : null
 }
 
+/** Drop cached GETs after a purchase so the next page does not paint an empty stall. */
+export function invalidateGets() {
+  generation += 1
+  memory.clear()
+  inflight.clear()
+}
+
 function fetchGet<T>(path: string): Promise<T> {
   const existing = inflight.get(path) as Promise<T> | undefined
   if (existing) return existing
+  const gen = generation
   const pending = api<T>(path)
     .then((data) => {
-      memory.set(path, data)
+      if (gen === generation) memory.set(path, data)
       return data
     })
     .finally(() => {
@@ -64,6 +73,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (options.body) headers.set('Content-Type', 'application/json')
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  const method = (options.method ?? 'GET').toUpperCase()
+  if (method !== 'GET') invalidateGets()
   const response = await fetch(path, { ...options, headers })
   const data = (await response.json().catch(() => ({}))) as {
     error?: string | { code?: string; message?: string }

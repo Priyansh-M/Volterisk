@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { WeaponArt } from '../components/WeaponArt.tsx'
 import { Btn, Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api, load, peek } from '../lib/api.ts'
+import { ApiError, api, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { WEAPON_CATALOG } from '../lib/catalog.ts'
 import { money } from '../lib/format.ts'
@@ -17,12 +17,15 @@ export function ArsenalPage() {
   const [busy, setBusy] = useState<string | null>(null)
 
   async function reload() {
-    const [weapons, shop] = await Promise.all([
-      load<Arsenal>('/api/me/weapons'),
-      load<{ predictor: { quantity: number } }>('/api/shop'),
-    ])
-    setArsenal(weapons)
-    setPredictors(shop.predictor.quantity)
+    const weaponsPromise = api<Arsenal>('/api/me/weapons').then((weapons) => {
+      setArsenal(weapons)
+      return weapons
+    })
+    const shopPromise = api<{ predictor: { quantity: number } }>('/api/shop').then((shop) => {
+      setPredictors(shop.predictor.quantity)
+      return shop
+    })
+    await Promise.all([weaponsPromise, shopPromise])
   }
 
   useEffect(() => {

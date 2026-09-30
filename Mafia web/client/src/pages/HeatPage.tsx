@@ -3,9 +3,8 @@ import { useAuth } from '../lib/auth.tsx'
 
 const rows = [
   ['Successful heist', '+8'],
-  ['Failed heist', '+5'],
+  ['Failed heist', '+15'],
   ['High-value heist, $50,000 or more taken', '+12'],
-  ['Critical failure, a miss by 30 points or more', '+15'],
   ['Collect an active job', '−10'],
   ['Passive job payday', '−6'],
   ['Every 2 hours, whether you are online or not', '−5'],
@@ -44,7 +43,7 @@ export function HeatPage() {
         </table>
       </section>
       <section className="border border-destructive/40 bg-card p-5 text-sm text-muted-foreground">
-        At midnight GMT, if heat is still above 50, there is a 95% chance the police confiscate the cash in your pocket. The vault is not touched. A high-value heist is one that takes $50,000 or more, and that +12 replaces the usual +8. A critical failure replaces the usual +5.
+        At midnight GMT, if heat is still above 50, there is a 95% chance the police confiscate the cash in your pocket. The vault is not touched. A high-value heist is one that takes $50,000 or more, and that +12 replaces the usual +8. A failed heist is +15.
       </section>
     </div>
   )
