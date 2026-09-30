@@ -10,6 +10,7 @@ import {
   hoursFromNow,
   minutesAgo,
   minutesFromNow,
+  vaultCapacity,
   vaultDefense,
   wealthBandLabel,
   wealthBucket,
@@ -18,6 +19,7 @@ import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { creditCash, debitVault, type Tx } from "./economyService.js";
 import { isStationedNpc, npcWindowStart, NPC_STATIONS, stationForUsername } from "./nightCrew.js";
+import { gainHeat, heistHeatGain } from "./heatService.js";
 import { writeNotification } from "./notificationService.js";
 
 // Future: crew shares would split the take after a successful debit.
@@ -340,7 +342,8 @@ export async function attemptHeist(
         const vaultLevel = target.vault.level;
         const defense = vaultDefense(target.vault.tier, vaultLevel);
         const chance = successChance(attack, defense, target.cameraLevel);
-        const success = rollPercent() <= chance;
+        const roll = rollPercent();
+        const success = roll <= chance;
         const broken = await wearWeapon(tx, owned.id);
 
         if (!success) {
@@ -374,6 +377,7 @@ export async function attemptHeist(
               severity: "WARNING",
             });
           }
+          await gainHeat(tx, attackerId, heistHeatGain(false, 0, roll, chance));
           return {
             ...presentHeist(heist, target.username, owned.weapon.name),
             attack,
@@ -384,7 +388,14 @@ export async function attemptHeist(
           };
         }
 
-        const exposed = exposedBalance(target.vault.balance, target.vault.tier, vaultLevel);
+        const insuredNow =
+          target.vault.insured &&
+          target.vault.insuredUntil !== null &&
+          target.vault.insuredUntil.getTime() > now.getTime();
+        const openVault = target.vault.breached && !insuredNow;
+        const exposed = openVault
+          ? target.vault.balance
+          : exposedBalance(target.vault.balance, target.vault.tier, vaultLevel);
         const amount = heistStealAmount(exposed);
         const debited = await debitVault(tx, targetUserId, amount);
         if (!debited) {
@@ -413,28 +424,35 @@ export async function attemptHeist(
             heistId: heist.id,
           },
         });
+        await tx.vault.update({
+          where: { userId: targetUserId },
+          data: { breached: !insuredNow },
+        });
         if (!target.isBot) {
           await writeNotification(tx, {
             userId: targetUserId,
             heistId: heist.id,
-            title: "Heist Attempted",
+            title: "You were robbed",
             body: JSON.stringify({ by: attacker.username, success: true, amountStolen: amount }),
             severity: "CRITICAL",
           });
         }
+        await gainHeat(tx, attackerId, heistHeatGain(true, amount, roll, chance));
         if (
           target.vault.insured &&
           target.vault.insuredUntil &&
           target.vault.insuredUntil.getTime() > now.getTime()
         ) {
           const cover = Math.floor((amount * RULES.INSURANCE_COVERAGE_PERCENT) / 100);
-          if (cover > 0) {
+          const room = Math.max(0, vaultCapacity(target.vault.tier, vaultLevel) - (target.vault.balance - amount));
+          const paidCover = Math.min(cover, room);
+          if (paidCover > 0) {
             await tx.vault.update({
               where: { userId: targetUserId },
-              data: { balance: { increment: cover } },
+              data: { balance: { increment: paidCover } },
             });
             await tx.transaction.create({
-              data: { type: "insurance_payout", amount: cover, toUserId: targetUserId },
+              data: { type: "insurance_payout", amount: paidCover, toUserId: targetUserId },
             });
           }
         }

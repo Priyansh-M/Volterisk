@@ -20,6 +20,9 @@ model User {
   passivePaidFor   DateTime?
   reputationLevel  Int       @default(1)
   vaultExposedUntil DateTime?
+  heat             Int       @default(0)
+  heatSettledAt    DateTime  @default(now())
+  heatJudgedOn     String?
   starterClaimedAt DateTime?
   createdAt        DateTime  @default(now())
 
@@ -128,6 +131,7 @@ model Vault {
   tier          String    @default("standard")
   insured       Boolean   @default(false)
   insuredUntil  DateTime?
+  breached      Boolean   @default(false)
 }
 
 model Weapon {

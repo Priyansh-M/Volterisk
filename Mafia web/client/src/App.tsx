@@ -5,6 +5,7 @@ import { AchievementsPage } from './pages/AchievementsPage.tsx'
 import { ArsenalPage } from './pages/ArsenalPage.tsx'
 import { CityPage } from './pages/CityPage.tsx'
 import { DashboardPage } from './pages/DashboardPage.tsx'
+import { HeatPage } from './pages/HeatPage.tsx'
 import { HeistsPage } from './pages/HeistsPage.tsx'
 import { LeaderboardPage } from './pages/LeaderboardPage.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/map" element={<MapPage />} />
         <Route path="/city" element={<CityPage />} />
         <Route path="/heists" element={<HeistsPage />} />
+        <Route path="/heat" element={<HeatPage />} />
         <Route path="/vault" element={<VaultPage />} />
         <Route path="/arsenal" element={<ArsenalPage />} />
         <Route path="/market" element={<MarketPage />} />

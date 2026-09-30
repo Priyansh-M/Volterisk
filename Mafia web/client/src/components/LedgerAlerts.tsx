@@ -32,9 +32,12 @@ export function LedgerAlerts({
         onChangeRef.current(notes.notifications.filter((row) => row.read !== true).length)
         if (typeof alerts.unclaimed === 'number') onUnclaimed?.(alerts.unclaimed)
         const next = alerts.unlocked[0]
-        if (next) setUnlock(next)
-        const report = notes.notifications.find((row) => row.read !== true && row.title === 'Heist Attempted')
-        if (report && !next) {
+        const report = notes.notifications.find(
+          (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
+        )
+        const robbed = report?.title === 'You were robbed'
+        if (next && !robbed) setUnlock(next)
+        if (report && (!next || robbed)) {
           let parsed: { by?: string; success?: boolean; amountStolen?: number | null } = {}
           try {
             parsed = JSON.parse(report.body) as typeof parsed
@@ -93,7 +96,7 @@ export function LedgerAlerts({
       ) : heist ? (
         <section className="animate-dossier w-full max-w-md border border-border bg-card p-8 shadow-2xl">
           <p className="font-mono text-[10px] uppercase text-destructive">Incoming report</p>
-          <h2 className="mt-2 font-display text-4xl font-semibold uppercase">Heist Attempted</h2>
+          <h2 className="mt-2 font-display text-4xl font-semibold uppercase">{heist.success ? 'You were robbed' : 'Heist Attempted'}</h2>
           <p className="mt-4 text-sm text-muted-foreground">By</p>
           <p className="font-display text-2xl font-semibold uppercase">{heist.by}</p>
           {heist.success ? (

@@ -29,6 +29,7 @@ export type Profile = {
     effectiveLevel: number
   } | null
   currentJob: { id: string; name: string; payPerDay: number } | null
+  heat?: number
   penalty?: { active: boolean; endsAt: string | null }
   unclaimedAchievements?: number
   cooldownEndsAt: string | null
@@ -205,6 +206,7 @@ export type VaultView = {
   exposed?: number
   secured?: number
   insured?: boolean
+  breached?: boolean
   maxLevel: number
   upgradeCost: number | null
   next?: {

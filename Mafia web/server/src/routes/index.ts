@@ -20,7 +20,7 @@ import {
 } from "../controllers/metaController.js";
 import { claim as claimStarter } from "../controllers/onboardingController.js";
 import { publicPlayer } from "../controllers/playerController.js";
-import { insurance, upgrade as upgradeVault, withdraw } from "../controllers/vaultController.js";
+import { deposit, insurance, upgrade as upgradeVault, withdraw } from "../controllers/vaultController.js";
 import { buy, equip, upgrade as upgradeWeapon } from "../controllers/weaponController.js";
 import { claimReputationLevel, reputation } from "../controllers/reputationController.js";
 import { accept, collect, collectPassivePay, contracts, passive } from "../controllers/workController.js";
@@ -46,6 +46,7 @@ api.get("/heists/history", requireAuth, asyncHandler(history));
 api.post("/vault/upgrade", requireAuth, asyncHandler(upgradeVault));
 api.post("/vault/insurance", requireAuth, asyncHandler(insurance));
 api.post("/vault/withdraw", requireAuth, asyncHandler(withdraw));
+api.post("/vault/deposit", requireAuth, asyncHandler(deposit));
 
 api.post("/weapons/buy", requireAuth, asyncHandler(buy));
 api.post("/weapons/upgrade", requireAuth, asyncHandler(upgradeWeapon));

@@ -10,6 +10,7 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { creditCash } from "./economyService.js";
+import { coolHeat } from "./heatService.js";
 import { ASSETS, assetById } from "./propertyService.js";
 import { writeNotification } from "./notificationService.js";
 import { uniqueConflictText, withSqliteRetry } from "./sqlite.js";
@@ -224,6 +225,7 @@ export async function collectContract(userId: string) {
         throw new GameError(409, "ALREADY_COLLECTED", "That payout was already taken.");
       }
       await creditCash(tx, userId, active.reward);
+      await coolHeat(tx, userId, RULES.HEAT_ACTIVE_WORK);
       await tx.transaction.create({
         data: {
           type: PAYOUT_TYPE,
@@ -297,6 +299,7 @@ export async function settlePassivePay(userId: string): Promise<number> {
     if (!fresh?.passiveJobId || fresh.passiveJobId !== job.id) return;
     if (fresh.passivePaidFor && fresh.passivePaidFor.getTime() >= noon.getTime()) return;
     await creditCash(tx, userId, job.payPerDay);
+    await coolHeat(tx, userId, RULES.HEAT_PASSIVE_DAY);
     await tx.user.update({ where: { id: userId }, data: { passivePaidFor: noon } });
     await tx.transaction.create({
       data: { type: "passive_payday", amount: job.payPerDay, toUserId: userId },

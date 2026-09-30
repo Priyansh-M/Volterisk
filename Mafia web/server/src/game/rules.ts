@@ -8,7 +8,7 @@
  */
 export const RULES = {
   MIN_VAULT_BALANCE: 10_000,
-  TARGET_PROTECTION_HOURS: 12,
+  TARGET_PROTECTION_HOURS: 2,
   /** Attacker lockout after any heist attempt. */
   HEIST_COOLDOWN_MINUTES: 15,
   /** Hard ceiling is 10. rewards.ts clamps to this and never pays more. */
@@ -129,12 +129,31 @@ export const RULES = {
     gold: [60, 68, 76, 84, 85],
     diamond: [105, 109, 110, 111, 165],
   } as Record<string, number[]>,
-  VAULT_CAPACITY: {
-    standard: [50_000, 100_000, 250_000, 500_000, 1_000_000],
-    silver: [1_500_000, 2_000_000, 3_000_000, 4_000_000, 5_000_000],
-    gold: [7_500_000, 10_000_000, 15_000_000, 20_000_000, 30_000_000],
-    diamond: [40_000_000, 55_000_000, 60_000_000, 65_000_000, 70_000_000],
-  } as Record<string, number[]>,
+  /** Storage only. Defense tables are separate and are not derived from these caps. */
+  VAULT_CAPACITY_BASE: {
+    standard: 35_000,
+    silver: 75_000,
+    gold: 165_000,
+    diamond: 2_000_000,
+  } as Record<string, number>,
+  VAULT_CAPACITY_STEP: {
+    standard: 5_000,
+    silver: 10_000,
+    gold: 25_000,
+    diamond: 250_000,
+  } as Record<string, number>,
+  HEAT_SUCCESS: 8,
+  HEAT_FAIL: 5,
+  HEAT_HIGH_VALUE: 12,
+  HEAT_CRITICAL: 15,
+  HEAT_HIGH_VALUE_AT: 50_000,
+  HEAT_CRITICAL_MISS: 30,
+  HEAT_ACTIVE_WORK: 10,
+  HEAT_PASSIVE_DAY: 6,
+  HEAT_DECAY: 5,
+  HEAT_DECAY_HOURS: 2,
+  HEAT_POLICE_AT: 50,
+  HEAT_POLICE_CHANCE: 95,
   /** Percent of the balance a heist cannot touch. Level 1 standard is 0 so a fresh vault is fully exposed. */
   VAULT_SECURED_PERCENT: {
     standard: [0, 15, 25, 35, 45],
@@ -441,8 +460,9 @@ export function vaultDefense(tier: string, level: number): number {
 }
 
 export function vaultCapacity(tier: string, level: number): number {
-  const row = RULES.VAULT_CAPACITY[tier] ?? RULES.VAULT_CAPACITY.standard;
-  return row[vaultIndex(level)] ?? row[0];
+  const base = RULES.VAULT_CAPACITY_BASE[tier] ?? RULES.VAULT_CAPACITY_BASE.standard;
+  const step = RULES.VAULT_CAPACITY_STEP[tier] ?? RULES.VAULT_CAPACITY_STEP.standard;
+  return base + vaultIndex(level) * step;
 }
 
 export function vaultSecuredPercent(tier: string, level: number): number {

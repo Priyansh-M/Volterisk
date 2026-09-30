@@ -18,6 +18,7 @@ function presentVault(vault: {
   tier: string;
   insured: boolean;
   insuredUntil: Date | null;
+  breached?: boolean;
 }) {
   const tier = vault.tier || "standard";
   const level = Math.min(Math.max(vault.level, 1), RULES.VAULT_MAX_LEVEL);
@@ -41,6 +42,7 @@ function presentVault(vault: {
     exposed,
     secured: vault.balance - exposed,
     insured,
+    breached: Boolean(vault.breached) && !insured,
     insuredUntil: vault.insuredUntil?.toISOString() ?? null,
     maxLevel: RULES.VAULT_MAX_LEVEL,
     upgradeCost: upcoming ? upgradeCost : null,
@@ -116,29 +118,55 @@ export async function setInsurance(userId: string, enabled: boolean) {
       data: {
         insured: true,
         insuredUntil: new Date(Date.now() + RULES.INSURANCE_HOURS * 60 * 60 * 1000),
+        breached: false,
       },
     });
     return presentVault(updated);
   });
 }
 
-export async function withdrawVault(userId: string, amount: number) {
+export async function depositVault(userId: string, amount: number | "all") {
   return prisma.$transaction(async (tx) => {
-    const debited = await debitVault(tx, userId, amount);
+    const vault = await tx.vault.findUnique({ where: { userId } });
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    if (!vault || !user) throw new GameError(404, "NOT_FOUND", "Vault not found.");
+    const room = Math.max(0, vaultCapacity(vault.tier || "standard", vault.level) - vault.balance);
+    const requested = amount === "all" ? user.cash : amount;
+    const moved = Math.min(requested, room, user.cash);
+    if (moved <= 0) {
+      throw new GameError(400, "VAULT_FULL", "The vault cannot take any more cash.");
+    }
+    await debitCash(tx, userId, moved);
+    await tx.vault.update({ where: { userId }, data: { balance: { increment: moved } } });
+    await tx.transaction.create({
+      data: { type: "vault_deposit", amount: moved, fromUserId: userId, toUserId: userId },
+    });
+    const freshVault = await tx.vault.findUnique({ where: { userId } });
+    const freshUser = await tx.user.findUnique({ where: { id: userId } });
+    return { balance: freshVault?.balance ?? 0, cash: freshUser?.cash ?? 0, amount: moved };
+  });
+}
+
+export async function withdrawVault(userId: string, amount: number | "all") {
+  return prisma.$transaction(async (tx) => {
+    const vaultRow = await tx.vault.findUnique({ where: { userId } });
+    const moving = amount === "all" ? (vaultRow?.balance ?? 0) : amount;
+    if (moving <= 0) throw new GameError(400, "INSUFFICIENT_FUNDS", "The vault is empty.");
+    const debited = await debitVault(tx, userId, moving);
     if (!debited) {
       throw new GameError(400, "INSUFFICIENT_FUNDS", "The vault does not hold that much.");
     }
-    await creditCash(tx, userId, amount);
+    await creditCash(tx, userId, moving);
     await tx.transaction.create({
       data: {
         type: "vault_withdraw",
-        amount,
+        amount: moving,
         fromUserId: userId,
         toUserId: userId,
       },
     });
     const vault = await tx.vault.findUnique({ where: { userId } });
     const user = await tx.user.findUnique({ where: { id: userId } });
-    return { balance: vault?.balance ?? 0, cash: user?.cash ?? 0, amount };
+    return { balance: vault?.balance ?? 0, cash: user?.cash ?? 0, amount: moving };
   });
 }

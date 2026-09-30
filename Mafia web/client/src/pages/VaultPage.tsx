@@ -49,29 +49,30 @@ export function VaultPage() {
     }
   }
 
-  async function withdraw(event: FormEvent) {
-    event.preventDefault()
+  async function move(kind: 'withdraw' | 'withdraw-all' | 'deposit' | 'deposit-all') {
     setBusy(true)
     setError(null)
     setNote(null)
     const snapshot = me?.cash
+    const path = kind.startsWith('deposit') ? '/api/vault/deposit' : '/api/vault/withdraw'
+    const body = kind.endsWith('all') ? { all: true } : { amount: Number(amount) }
     try {
-      const moved = Number(amount)
-      if (me) applyCash(me.cash + moved)
-      const paid = await api<{ cash: number }>('/api/vault/withdraw', {
-        method: 'POST',
-        body: JSON.stringify({ amount: moved }),
-      })
+      const paid = await api<{ cash: number; amount: number }>(path, { method: 'POST', body: JSON.stringify(body) })
       applyCash(paid.cash)
-      void reload()
+      await reload()
       void refresh()
-      setNote('Moved to cash.')
+      setNote(kind.startsWith('deposit') ? `Deposited ${money(paid.amount)}.` : `Withdrew ${money(paid.amount)}.`)
     } catch (err) {
       if (snapshot != null) applyCash(snapshot)
-      setError(err instanceof ApiError ? err.message : 'Withdraw failed.')
+      setError(err instanceof ApiError ? err.message : 'The vault did not move the cash.')
     } finally {
       setBusy(false)
     }
+  }
+
+  async function withdraw(event: FormEvent) {
+    event.preventDefault()
+    await move('withdraw')
   }
 
   const shown = vault ?? (me ? { balance: me.vault.balance, level: me.vault.level, maxLevel: 5, upgradeCost: null, tier: 'standard', tierLabel: 'Standard Vault' } : null)
@@ -94,10 +95,12 @@ export function VaultPage() {
           <p className="mt-4 text-sm">Secured {shown.secured != null ? money(shown.secured) : '—'} · Exposed {shown.exposed != null ? money(shown.exposed) : '—'}</p>
           {shown.next ? (
             <p className="mt-3 text-sm">
-              Next upgrade: {shown.next.tierLabel} level {shown.next.level} · defense {shown.next.defense}
-              {shown.upgradeCost ? ` · ${money(shown.upgradeCost)}` : ''}
+              Next upgrade: {shown.next.tierLabel} level {shown.next.level} · defense {shown.next.defense} · max capacity {money(shown.next.capacity)}
             </p>
           ) : null}
+          <p className="mt-4 border border-border bg-background px-3 py-3 text-sm text-muted-foreground">
+            One successful robbery leaves the vault open. Until you carry insurance, a later heist can reach the whole balance. Insurance keeps the vault closed: you still cannot be hit again for 2 hours, and the secured share stays shut.
+          </p>
           <div className="mt-4">
             <Btn
               variant={shown.insured ? 'ghost' : 'gold'}
@@ -141,7 +144,7 @@ export function VaultPage() {
             </Btn>
           )}
           <form className="space-y-2" onSubmit={(event) => void withdraw(event)}>
-            <Field label="Withdraw to cash">
+            <Field label="Move between pocket and vault">
               <input
                 className={inputClass}
                 inputMode="numeric"
@@ -149,9 +152,12 @@ export function VaultPage() {
                 onChange={(event) => setAmount(event.target.value)}
               />
             </Field>
-            <Btn type="submit" disabled={busy}>
-              Withdraw
-            </Btn>
+            <div className="flex flex-wrap gap-2">
+              <Btn type="submit" disabled={busy}>Withdraw</Btn>
+              <Btn type="button" disabled={busy} onClick={() => void move('withdraw-all')}>Withdraw all</Btn>
+              <Btn type="button" disabled={busy} onClick={() => void move('deposit')}>Deposit</Btn>
+              <Btn type="button" variant="gold" disabled={busy} onClick={() => void move('deposit-all')}>Deposit all</Btn>
+            </div>
           </form>
           {error ? <Notice tone="danger">{error}</Notice> : null}
           {note ? <Notice tone="ok">{note}</Notice> : null}

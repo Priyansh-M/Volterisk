@@ -4,7 +4,7 @@ import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { ReputationAlert } from './ReputationAlert.tsx'
 import { api, prefetch } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
-import { heatFromJobs, money, remaining } from '../lib/format.ts'
+import { money, remaining } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
 import {
   IconArsenal,
@@ -52,6 +52,7 @@ const links = [
 const pageMeta: Record<string, [string, string]> = {
   '/': ['Operations Center', 'Live overview of your network, assets, and opportunities.'],
   '/heists': ['Heist Intelligence', 'Evaluate targets, exposure, and operational risk.'],
+  '/heat': ['Heat', 'Crime raises it. Work and time bring it down.'],
   '/vault': ['Vault Facility', 'Secure capital and improve protection systems.'],
   '/arsenal': ['Classified Arsenal', 'Inspect and manage registered equipment.'],
   '/market': ['Marketplace', 'Tools, property, and automobiles.'],
@@ -93,8 +94,8 @@ export function Shell() {
   }
 
   if (!me) return null
-  const heat = heatFromJobs(me.stats.successfulHeists, me.stats.failedHeists)
-  const heatLabel = heat < 2 ? 'Low' : heat < 5 ? 'Medium' : 'High'
+  const heat = me.heat ?? 0
+  const heatLabel = heat > 50 ? 'High' : heat > 20 ? 'Medium' : 'Low'
   const initial = me.username.slice(0, 2).toUpperCase()
   const meta = pageMeta[location.pathname] ?? ['Blackledger', 'Private network.']
   const stamp = new Date().toLocaleString('en-GB', {
@@ -151,7 +152,7 @@ export function Shell() {
               </span>
               <span className="text-right">
                 <small className="block font-mono text-[8px] uppercase text-muted-foreground">Location</small>
-                <b className="font-mono text-xs">{me.base ? me.base.regionName : 'Unplaced'}</b>
+                <b className="font-mono text-xs">{me.base ? me.base.name?.trim() || 'Unnamed' : 'Unplaced'}</b>
               </span>
             </div>
           )}
@@ -222,10 +223,11 @@ export function Shell() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-5">
-            <div className="hidden items-center gap-2 text-xs sm:flex">
+            <NavLink to="/heat" className="hidden items-center gap-2 text-xs text-foreground no-underline sm:flex">
               <span className="text-muted-foreground">Heat</span>
-              <b>{heatLabel}</b>
-            </div>
+              <b>{me.heat ?? 0}</b>
+              <span className={heatLabel === 'High' ? 'text-destructive' : 'text-muted-foreground'}>{heatLabel}</span>
+            </NavLink>
             <div className="border-l border-border pl-3 sm:pl-5">
               <span className="block font-mono text-[8px] uppercase text-muted-foreground">Vault</span>
               <b className="font-mono text-xs">{money(me.vault.balance)}</b>

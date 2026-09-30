@@ -59,13 +59,9 @@ export function AchievementsPage() {
             <div className="min-w-0">
               <p className="font-mono text-[10px] uppercase text-muted-foreground">
                 {String(index + 1).padStart(2, '0')}
-                {record.sealed ? ' · locked' : ''}
                 {record.unlocked ? (record.claimed ? ' · claimed' : ' · ready') : ''}
               </p>
-              <h2 className="mt-1 flex items-center gap-2 font-display text-2xl font-semibold uppercase">
-                {record.sealed ? <span aria-hidden="true">🔒</span> : null}
-                {record.name}
-              </h2>
+              <h2 className="mt-1 font-display text-2xl font-semibold uppercase">{record.name}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{record.description}</p>
             </div>
             <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
