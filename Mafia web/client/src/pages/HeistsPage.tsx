@@ -356,17 +356,22 @@ function Dossier({
   onLocate: () => void
 }) {
   const vulnerability = row.vulnerable ? 'HIGH' : 'LOW'
-  const location = row.sectorId ? row.sectorId.replace('velmora-', 'SECTOR ').toUpperCase() : 'UNPLACED'
+  const location = row.locationName?.trim() || 'Unnamed'
   return (
     <article className="relative min-h-[340px] overflow-hidden border border-border bg-card p-6">
       <div className="absolute top-4 right-4 font-mono text-[9px] text-destructive">FILE H-{104 + index}</div>
       <div className="mb-12 flex items-center gap-3">
-        <svg viewBox="0 0 24 24" className="h-6 w-6 text-destructive" aria-hidden="true">
-          <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-        <button type="button" className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary disabled:opacity-40" disabled={!row.sectorId} onClick={onLocate}>
-          Locate
+        <button
+          type="button"
+          className="group flex cursor-pointer items-center gap-3 bg-transparent p-0 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!row.sectorId}
+          onClick={onLocate}
+        >
+          <svg viewBox="0 0 24 24" className="h-6 w-6 text-destructive group-hover:text-primary" aria-hidden="true">
+            <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+          <span className="group-hover:text-primary">Locate</span>
         </button>
       </div>
       <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>

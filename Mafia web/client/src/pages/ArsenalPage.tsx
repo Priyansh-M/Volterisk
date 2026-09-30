@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { WeaponArt } from '../components/WeaponArt.tsx'
 import { Btn, Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api, peek } from '../lib/api.ts'
+import { ApiError, api, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { WEAPON_CATALOG } from '../lib/catalog.ts'
 import { money } from '../lib/format.ts'
@@ -20,11 +20,11 @@ export function ArsenalPage() {
   const [busy, setBusy] = useState<string | null>(null)
 
   async function reload() {
-    const weaponsPromise = api<Arsenal>('/api/me/weapons').then((weapons) => {
+    const weaponsPromise = load<Arsenal>('/api/me/weapons').then((weapons) => {
       setArsenal(weapons)
       return weapons
     })
-    const shopPromise = api<{ predictor: { quantity: number }; camera: { level: number; nextCost: number | null; installed: boolean } }>('/api/shop').then((shop) => {
+    const shopPromise = load<{ predictor: { quantity: number }; camera: { level: number; nextCost: number | null; installed: boolean } }>('/api/shop').then((shop) => {
       setPredictors(shop.predictor.quantity)
       setCamera(shop.camera)
       return shop

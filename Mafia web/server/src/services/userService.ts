@@ -193,6 +193,7 @@ export async function getProfile(userId: string) {
   return {
     id: user.id,
     username: user.username,
+    avatarUrl: user.avatarUrl,
     level,
     title: titleForLevel(level),
     rank: standing?.rank ?? 1,
@@ -315,4 +316,35 @@ export async function getLeaderboard(viewerId?: string) {
       createdAt: row.createdAt.toISOString(),
     })),
   };
+}
+
+const ICONS = new Set(["crest", "crow", "vault", "wire"]);
+
+export async function setAvatar(userId: string, raw: string) {
+  const value = raw.trim();
+  let avatarUrl: string | null = null;
+  if (value) {
+    if (value.startsWith("icon:")) {
+      const mark = value.slice(5);
+      if (!ICONS.has(mark)) throw new GameError(400, "BAD_AVATAR", "That mark is not on the sheet.");
+      avatarUrl = `icon:${mark}`;
+    } else {
+      let url: URL;
+      try {
+        url = new URL(value);
+      } catch {
+        throw new GameError(400, "BAD_AVATAR", "Paste a direct Postimages link.");
+      }
+      const host = url.hostname.toLowerCase();
+      if (url.protocol !== "https:" || (host !== "i.postimg.cc" && host !== "i.postimg.org")) {
+        throw new GameError(400, "BAD_AVATAR", "Use a direct link from i.postimg.cc.");
+      }
+      if (!/\.(png|jpe?g|gif|webp)$/i.test(url.pathname)) {
+        throw new GameError(400, "BAD_AVATAR", "The link should end in the picture file, like avatar.png.");
+      }
+      avatarUrl = url.toString();
+    }
+  }
+  await prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+  return getProfile(userId);
 }

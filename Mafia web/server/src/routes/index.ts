@@ -2,7 +2,7 @@ import { Router } from "express";
 import { login, logout, register } from "../controllers/authController.js";
 import { createHeist, estimate, history, quote, targets } from "../controllers/heistController.js";
 import { bases, claim as claimBase, rename as renameBase } from "../controllers/mapController.js";
-import { me, myVault, myWeapons } from "../controllers/meController.js";
+import { me, myVault, myWeapons, updateAvatar } from "../controllers/meController.js";
 import {
   achievementAlerts,
   achievements,
@@ -35,6 +35,7 @@ api.post("/auth/login", asyncHandler(login));
 api.post("/auth/logout", requireAuth, asyncHandler(logout));
 
 api.get("/me", requireAuth, asyncHandler(me));
+api.post("/me/avatar", requireAuth, asyncHandler(updateAvatar));
 api.get("/me/vault", requireAuth, asyncHandler(myVault));
 api.get("/me/weapons", requireAuth, asyncHandler(myWeapons));
 

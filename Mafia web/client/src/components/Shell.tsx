@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
+import { Portrait } from './Portrait.tsx'
 import { ReputationAlert } from './ReputationAlert.tsx'
 import { api, prefetch } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
@@ -22,16 +23,20 @@ import {
 } from './Icons.tsx'
 
 const warm: Record<string, string[]> = {
-  '/': ['/api/me'],
+  '/': ['/api/me', '/api/heists/history', '/api/heists/targets', '/api/work/contracts', '/api/work/passive', '/api/community'],
   '/heists': ['/api/heists/targets', '/api/me/weapons', '/api/shop'],
   '/assets': ['/api/properties'],
   '/market': ['/api/me/weapons', '/api/shop', '/api/properties'],
   '/arsenal': ['/api/me/weapons', '/api/shop'],
   '/vault': ['/api/me/vault'],
-  '/work': ['/api/work/contracts'],
+  '/work': ['/api/work/contracts', '/api/work/passive'],
   '/reputation': ['/api/reputation'],
   '/map': ['/api/map/bases'],
   '/leaderboard': ['/api/leaderboard'],
+  '/achievements': ['/api/achievements'],
+  '/notifications': ['/api/notifications'],
+  '/profile': ['/api/me'],
+  '/heat': ['/api/me'],
 }
 
 const links = [
@@ -101,7 +106,6 @@ export function Shell() {
   if (!me) return null
   const heat = me.heat ?? 0
   const heatLabel = heat > 50 ? 'High' : heat > 20 ? 'Medium' : 'Low'
-  const initial = me.username.slice(0, 2).toUpperCase()
   const meta = pageMeta[location.pathname] ?? ['Volterisk', 'Private network.']
   const stamp = new Date().toLocaleString('en-GB', {
     day: '2-digit',
@@ -166,7 +170,7 @@ export function Shell() {
         </div>
         <div className={`border-b border-sidebar-border p-4 ${collapsed ? 'lg:px-3' : ''}`}>
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-card font-display text-lg">{initial}</span>
+            <Portrait name={me.username} url={me.avatarUrl} className="h-9 w-9 shrink-0 border border-border bg-card text-sm" />
             {collapsed ? null : (
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{me.username}</p>
@@ -220,17 +224,6 @@ export function Shell() {
           ))}
         </nav>
         <div className="border-t border-sidebar-border p-3">
-          <NavLink
-            to="/notifications"
-            onClick={() => setMobileOpen(false)}
-            className="mb-2 flex h-9 items-center gap-3 px-3 text-xs text-muted-foreground no-underline hover:text-foreground"
-          >
-            <IconSignal className="h-4 w-4" />
-            {collapsed ? null : <span>Notifications</span>}
-            {!collapsed && notices > 0 ? (
-              <span className="ml-auto bg-destructive px-1.5 font-mono text-[8px] text-white">{notices}</span>
-            ) : null}
-          </NavLink>
           <button type="button" className="px-3 font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground" onClick={() => void logout()}>
             {collapsed ? 'Out' : 'Log out'}
           </button>
@@ -266,7 +259,11 @@ export function Shell() {
             </div>
             <NavLink to="/notifications" aria-label="Notifications" className="relative text-foreground no-underline">
               <IconSignal className="h-4 w-4" />
-              {notices > 0 ? <span className="absolute -top-1 -right-1 h-1.5 w-1.5 bg-destructive" /> : null}
+              {notices > 0 ? (
+                <span className="absolute -top-2 -right-2 min-w-[14px] bg-destructive px-0.5 text-center font-mono text-[8px] leading-[14px] text-white">
+                  {notices > 9 ? '9+' : notices}
+                </span>
+              ) : null}
             </NavLink>
           </div>
         </header>

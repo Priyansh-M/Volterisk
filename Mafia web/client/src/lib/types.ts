@@ -14,6 +14,7 @@ export type PlayerBase = {
 export type Profile = {
   id: string
   username: string
+  avatarUrl?: string | null
   level: number
   title: string
   rank: number
@@ -75,6 +76,7 @@ export type Target = {
   vulnerable: boolean
   sectorId?: string | null
   regionName?: string | null
+  locationName?: string | null
   cadence?: 'day' | 'week' | null
   locked?: boolean
 }

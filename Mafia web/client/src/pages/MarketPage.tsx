@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AssetGlyph } from '../components/AssetGlyph.tsx'
 import { WeaponArt } from '../components/WeaponArt.tsx'
 import { Btn, Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api, peek } from '../lib/api.ts'
+import { ApiError, api, load, peek } from '../lib/api.ts'
 import { WEAPON_CATALOG } from '../lib/catalog.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
@@ -27,15 +27,15 @@ export function MarketPage() {
   const [motors, setMotors] = useState<SaleLot[] | null>(null)
 
   async function load() {
-    const weaponsPromise = api<Arsenal>('/api/me/weapons').then((weapons) => {
+    const weaponsPromise = load<Arsenal>('/api/me/weapons').then((weapons) => {
       setArsenal(weapons)
       return weapons
     })
-    const shopPromise = api<Counter>('/api/shop').then((shop) => {
+    const shopPromise = load<Counter>('/api/shop').then((shop) => {
       setCounter(shop)
       return shop
     })
-    const assetsPromise = api<{ propertyCatalog: SaleLot[]; vehicleCatalog: SaleLot[] }>('/api/properties').then((assets) => {
+    const assetsPromise = load<{ propertyCatalog: SaleLot[]; vehicleCatalog: SaleLot[] }>('/api/properties').then((assets) => {
       setLots(assets.propertyCatalog)
       setMotors(assets.vehicleCatalog)
       return assets
@@ -115,7 +115,11 @@ export function MarketPage() {
       </p>
       {counter ? (
         <div className="mb-6 grid gap-4 md:grid-cols-2">
-          <article className="border border-border bg-card p-5">
+          <article className="overflow-hidden border border-border bg-card">
+            <div className="aspect-[11/7] border-b border-border">
+              <AssetGlyph id="predictor" />
+            </div>
+            <div className="p-5">
             <p className="font-mono text-[9px] uppercase text-muted-foreground">Consumable</p>
             <h2 className="font-display text-2xl font-semibold uppercase">{counter.predictor.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">Spend one under Inspect to read the server chance. The roll still happens on the job.</p>
@@ -123,8 +127,13 @@ export function MarketPage() {
             <Btn className="mt-4" variant="gold" disabled={busy !== null || (me !== null && me.cash < counter.predictor.price)} onClick={() => void buy(counter.predictor.id)}>
               {busy === counter.predictor.id ? 'Buying…' : 'Buy'}
             </Btn>
+            </div>
           </article>
-          <article className="border border-border bg-card p-5">
+          <article className="overflow-hidden border border-border bg-card">
+            <div className="aspect-[11/7] border-b border-border">
+              <AssetGlyph id="camera" />
+            </div>
+            <div className="p-5">
             <p className="font-mono text-[9px] uppercase text-muted-foreground">Installed defense</p>
             <h2 className="font-display text-2xl font-semibold uppercase">{counter.camera.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -143,6 +152,7 @@ export function MarketPage() {
                 {busy === counter.camera.id ? 'Buying…' : 'Buy level 1'}
               </Btn>
             )}
+            </div>
           </article>
         </div>
       ) : null}
@@ -155,7 +165,7 @@ export function MarketPage() {
           const canBuy = known && nextId === item.id && item.price > 0
           const locked = known && !owned && !canBuy && item.price > 0
           return (
-            <article key={item.id} className="flex flex-col overflow-hidden rounded-2xl border border-line bg-panel">
+            <article key={item.id} className="flex flex-col overflow-hidden border border-line bg-panel">
               <div className="aspect-[11/7] border-b border-line">
                 <WeaponArt id={item.id} />
               </div>
@@ -233,7 +243,7 @@ function LotGrid({
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {lots.map((lot) => (
         <article key={lot.id} className="border border-border bg-card">
-          <div className="flex h-36 items-center justify-center border-b border-border">
+          <div className="aspect-[11/7] border-b border-border">
             <AssetGlyph id={lot.id} />
           </div>
           <div className="p-5">

@@ -1,19 +1,8 @@
-import type { ReactNode, SVGProps } from 'react'
+import type { ReactNode } from 'react'
+import { InkPlate } from './InkPlate.tsx'
 
-function Frame({ children, ...props }: SVGProps<SVGSVGElement> & { children: ReactNode }) {
-  return (
-    <svg viewBox="0 0 220 140" className="h-full w-full" aria-hidden="true" {...props}>
-      <defs>
-        <linearGradient id="wbg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#232836" />
-          <stop offset="100%" stopColor="#12151c" />
-        </linearGradient>
-      </defs>
-      <rect width="220" height="140" rx="16" fill="url(#wbg)" />
-      <rect x="1" y="1" width="218" height="138" rx="15" fill="none" stroke="rgba(255,255,255,0.06)" />
-      {children}
-    </svg>
-  )
+function Frame({ children }: { children: ReactNode }) {
+  return <InkPlate>{children}</InkPlate>
 }
 
 const ink = '#c9b08a'

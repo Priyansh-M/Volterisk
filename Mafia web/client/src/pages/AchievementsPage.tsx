@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Notice } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, api, load } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 
@@ -21,7 +21,7 @@ export function AchievementsPage() {
   const [busy, setBusy] = useState<string | null>(null)
 
   async function load() {
-    const data = await api<{ achievements: RecordCard[] }>('/api/achievements')
+    const data = await load<{ achievements: RecordCard[] }>('/api/achievements')
     setRows(data.achievements)
   }
 

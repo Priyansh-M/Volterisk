@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Notice, PageTitle, Panel } from '../components/ui.tsx'
-import { ApiError, api, isMissing } from '../lib/api.ts'
+import { ApiError, isMissing, load } from '../lib/api.ts'
 import { when } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
 
@@ -10,7 +10,7 @@ export function NotificationsPage() {
   const [missing, setMissing] = useState(false)
 
   useEffect(() => {
-    api<{ notifications: GameNotice[] }>('/api/notifications')
+    load<{ notifications: GameNotice[] }>('/api/notifications')
       .then((data) => setRows(data.notifications))
       .catch((err: unknown) => {
         if (isMissing(err)) {

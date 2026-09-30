@@ -25,7 +25,6 @@ export function LoginPage() {
         body: JSON.stringify({ username, password }),
       })
       await login(result.token)
-      if (result.user.onboarding.hasBase) sessionStorage.setItem('volterisk-brief', '1')
       navigate(result.user.onboarding.hasBase ? '/' : '/map')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in.')

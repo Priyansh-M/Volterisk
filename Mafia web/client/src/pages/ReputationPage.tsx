@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Btn, Notice } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, api, load } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 
@@ -25,7 +25,7 @@ export function ReputationPage() {
   const [shift, setShift] = useState(false)
 
   async function load() {
-    const data = await api<Reputation>('/api/reputation')
+    const data = await load<Reputation>('/api/reputation')
     setFile(data)
   }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Btn, Notice, PageTitle } from '../components/ui.tsx'
-import { ApiError, api, isMissing } from '../lib/api.ts'
+import { ApiError, api, isMissing, load } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
 import type { WorkBoard } from '../lib/types.ts'
@@ -26,8 +26,8 @@ export function WorkPage() {
 
   async function load() {
     const [data, jobs] = await Promise.all([
-      api<WorkBoard>('/api/work/contracts'),
-      api<{ jobs: PassiveJob[] }>('/api/work/passive'),
+      load<WorkBoard>('/api/work/contracts'),
+      load<{ jobs: PassiveJob[] }>('/api/work/passive'),
     ])
     setBoard(data)
     setPassive(jobs.jobs)

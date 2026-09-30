@@ -100,6 +100,7 @@ type TargetCard = {
   vulnerable: boolean;
   sectorId: string | null;
   regionName: string | null;
+  locationName: string | null;
   cadence: "day" | "week" | null;
   locked: boolean;
 };
@@ -163,6 +164,7 @@ export async function listTargets(attackerId: string) {
               : Boolean(user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()) || !protectedIds.has(user.id),
             sectorId: user.base?.sectorId ?? null,
             regionName: user.base?.regionName ?? null,
+            locationName: user.base?.name?.trim() || null,
             cadence: station?.cadence ?? null,
             locked: gated,
           } satisfies TargetCard,

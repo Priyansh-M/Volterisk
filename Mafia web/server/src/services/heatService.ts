@@ -59,6 +59,14 @@ async function applyHeat(
       heatJudgedOn: stamp,
     },
   });
+  if (cooled.heat <= RULES.HEAT_POLICE_AT && heat > RULES.HEAT_POLICE_AT) {
+    await writeNotification(tx, {
+      userId,
+      title: "Heat is high",
+      body: `Heat is ${heat}. At 12:00 GMT, if it is still above 50, pocket cash can be taken. The vault is not part of that.`,
+      severity: "WARNING",
+    });
+  }
   return heat;
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Notice, PageTitle, Panel } from '../components/ui.tsx'
-import { ApiError, api } from '../lib/api.ts'
+import { ApiError, load } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, when } from '../lib/format.ts'
 import type { HistoryRow, TargetBoard, WorkBoard } from '../lib/types.ts'
@@ -24,19 +24,19 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api<{ heists: HistoryRow[] }>('/api/heists/history')
+    load<{ heists: HistoryRow[] }>('/api/heists/history')
       .then((history) => setRows(history.heists.slice(0, 8)))
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not load the center.'))
-    api<TargetBoard>('/api/heists/targets')
+    load<TargetBoard>('/api/heists/targets')
       .then((board) => setTargets(board.npc.length + board.players.length))
       .catch(() => undefined)
-    api<WorkBoard>('/api/work/contracts')
+    load<WorkBoard>('/api/work/contracts')
       .then((work) => setOpenContracts(work.contracts.filter((row) => row.available && !row.locked).length))
       .catch(() => undefined)
-    api<PassiveBoard>('/api/work/passive')
+    load<PassiveBoard>('/api/work/passive')
       .then(setPassive)
       .catch(() => undefined)
-    api<Community>('/api/community')
+    load<Community>('/api/community')
       .then(setCommunity)
       .catch(() => undefined)
   }, [])

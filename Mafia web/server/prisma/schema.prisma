@@ -11,6 +11,7 @@ model User {
   id               String    @id @default(cuid())
   username         String
   usernameKey      String    @unique
+  avatarUrl        String?
   passwordHash     String
   cash             Int
   tokenVersion     Int       @default(0)
