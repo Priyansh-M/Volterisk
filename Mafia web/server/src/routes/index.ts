@@ -3,7 +3,7 @@ import { login, logout, register } from "../controllers/authController.js";
 import { createHeist, estimate, history, quote, targets } from "../controllers/heistController.js";
 import { bases, claim as claimBase, rename as renameBase } from "../controllers/mapController.js";
 import { me, myVault, myWeapons, removeAccount, updateAvatar, updateName } from "../controllers/meController.js";
-import { spin, table } from "../controllers/casinoController.js";
+import { bets, exitLobby, invite, join, lobby, openLobby, players, spin, table, tableSpin } from "../controllers/casinoController.js";
 import {
   achievementAlerts,
   achievements,
@@ -41,6 +41,14 @@ api.post("/me/name", requireAuth, asyncHandler(updateName));
 api.delete("/me", requireAuth, asyncHandler(removeAccount));
 api.get("/casino/roulette", requireAuth, asyncHandler(table));
 api.post("/casino/roulette", requireAuth, asyncHandler(spin));
+api.get("/players/search", requireAuth, asyncHandler(players));
+api.post("/casino/lobby", requireAuth, asyncHandler(openLobby));
+api.get("/casino/lobby/:id", requireAuth, asyncHandler(lobby));
+api.post("/casino/lobby/:id/invite", requireAuth, asyncHandler(invite));
+api.post("/casino/lobby/:id/join", requireAuth, asyncHandler(join));
+api.post("/casino/lobby/:id/bets", requireAuth, asyncHandler(bets));
+api.post("/casino/lobby/:id/spin", requireAuth, asyncHandler(tableSpin));
+api.post("/casino/lobby/:id/leave", requireAuth, asyncHandler(exitLobby));
 api.get("/me/vault", requireAuth, asyncHandler(myVault));
 api.get("/me/weapons", requireAuth, asyncHandler(myWeapons));
 

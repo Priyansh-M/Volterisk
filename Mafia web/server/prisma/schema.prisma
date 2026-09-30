@@ -221,6 +221,43 @@ model Transaction {
   @@index([createdAt])
 }
 
+model RouletteLobby {
+  id         String    @id @default(cuid())
+  hostId     String
+  createdAt  DateTime  @default(now())
+  lastNumber String?
+  lastSpinAt DateTime?
+  spinToken  Int       @default(0)
+
+  seats   RouletteSeat[]
+  invites RouletteInvite[]
+}
+
+model RouletteSeat {
+  id         String @id @default(cuid())
+  lobbyId    String
+  userId     String @unique
+  betsJson   String @default("[]")
+  resultJson String @default("")
+
+  lobby RouletteLobby @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+
+  @@unique([lobbyId, userId])
+}
+
+model RouletteInvite {
+  id        String   @id @default(cuid())
+  lobbyId   String
+  fromId    String
+  toId      String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+
+  lobby RouletteLobby @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+
+  @@unique([lobbyId, toId])
+}
+
 model Notification {
   id        String   @id @default(cuid())
   userId    String

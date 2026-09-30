@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.ts'
 import { money } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
@@ -18,6 +18,8 @@ export function LedgerAlerts({
   onChangeRef.current = onChange
   const [unlock, setUnlock] = useState<Unlock | null>(null)
   const [heist, setHeist] = useState<HeistNotice | null>(null)
+  const [invite, setInvite] = useState<{ id: string; by: string; lobbyId: string } | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let cancelled = false
@@ -30,6 +32,16 @@ export function LedgerAlerts({
         if (cancelled) return
         onChangeRef.current(notes.notifications.filter((row) => row.read !== true).length)
         if (typeof alerts.unclaimed === 'number') onUnclaimed?.(alerts.unclaimed)
+        const tableInvite = notes.notifications.find((row) => row.read !== true && row.title === 'Roulette invite')
+        if (tableInvite) {
+          let parsed: { by?: string; lobbyId?: string } = {}
+          try {
+            parsed = JSON.parse(tableInvite.body) as typeof parsed
+          } catch {
+            parsed = {}
+          }
+          if (parsed.lobbyId) setInvite({ id: tableInvite.id, by: parsed.by ?? 'A player', lobbyId: parsed.lobbyId })
+        }
         const next = alerts.unlocked[0]
         const report = notes.notifications.find(
           (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
@@ -75,11 +87,41 @@ export function LedgerAlerts({
     onChange()
   }
 
-  if (!unlock && !heist) return null
+  if (!unlock && !heist && !invite) return null
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/75 p-4">
-      {unlock ? (
+      {invite ? (
+        <section className="animate-dossier w-full max-w-md border border-primary bg-card p-8 text-center shadow-2xl">
+          <p className="font-mono text-[10px] uppercase text-primary">Table</p>
+          <h2 className="mt-3 font-display text-3xl font-semibold uppercase">You have been invited to a round of roulette</h2>
+          <p className="mt-4 text-sm text-muted-foreground">From {invite.by}.</p>
+          <button
+            type="button"
+            className="gloss-gold mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+            onClick={() => {
+              const next = invite
+              setInvite(null)
+              void api(`/api/notifications/${next.id}/read`, { method: 'POST', body: '{}' })
+              void api(`/api/casino/lobby/${next.lobbyId}/join`, { method: 'POST', body: '{}' })
+              navigate(`/casino/roulette?lobby=${encodeURIComponent(next.lobbyId)}`)
+            }}
+          >
+            Sit down
+          </button>
+          <button
+            type="button"
+            className="nav-pill mt-2 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+            onClick={() => {
+              const id = invite.id
+              setInvite(null)
+              void api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' })
+            }}
+          >
+            Not now
+          </button>
+        </section>
+      ) : unlock ? (
         <section className="animate-dossier relative w-full max-w-md border border-primary bg-card p-8 text-center shadow-2xl">
           <button
             type="button"

@@ -18,7 +18,7 @@ import {
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { creditCash, debitVault, type Tx } from "./economyService.js";
-import { isNpcGated, isStationedNpc, npcWindowStart, NPC_STATIONS, openNpcPurse, stationForUsername } from "./nightCrew.js";
+import { isNpcGated, isStationedNpc, NPC_STATIONS, openNpcPurse, stationForUsername } from "./nightCrew.js";
 import { gainHeat, heistHeatGain } from "./heatService.js";
 import { writeNotification } from "./notificationService.js";
 
@@ -103,6 +103,7 @@ type TargetCard = {
   locationName: string | null;
   cadence: "day" | "week" | null;
   locked: boolean;
+  cooldownEndsAt: string | null;
 };
 
 function assertTargetKind(target: { isBot: boolean; username: string }, kind: HeistKind): void {
@@ -131,22 +132,22 @@ export async function listTargets(attackerId: string) {
     select: { targetId: true, createdAt: true },
   });
   const protectedIds = new Set(recentHits.map((row) => row.targetId));
-  const weekStart = npcWindowStart("week");
-  const npcHits = await prisma.heist.findMany({
-    where: { success: true, createdAt: { gt: weekStart } },
+  const npcRecent = await prisma.heist.findMany({
+    where: { attackerId, createdAt: { gt: minutesAgo(RULES.NPC_COOLDOWN_MINUTES) }, target: { isBot: true } },
     select: { targetId: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
   });
+  const npcCool = new Map<string, Date>();
+  for (const hit of npcRecent) {
+    if (!npcCool.has(hit.targetId)) npcCool.set(hit.targetId, hit.createdAt);
+  }
 
   const cards = await Promise.all(
     users
       .filter((user) => user.vault && (stationForUsername(user.username) || user.vault.balance >= RULES.MIN_VAULT_BALANCE))
       .map(async (user) => {
         const station = stationForUsername(user.username);
-        const npcLocked =
-          station !== null &&
-          npcHits.some(
-            (hit) => hit.targetId === user.id && hit.createdAt.getTime() > npcWindowStart(station.cadence).getTime(),
-          );
+        const npcHitAt = station ? npcCool.get(user.id) ?? null : null;
         const purse = station ? await openNpcPurse(attackerId, user.id, user.username, attackerLevel) : null;
         const gated = station ? isNpcGated(user.username, attackerLevel) : false;
         const vaultLevel = purse?.vaultLevel ?? user.vault!.level;
@@ -160,13 +161,14 @@ export async function listTargets(attackerId: string) {
             wealthBucket: wealthBucket(balance),
             estimatedWealth: wealthBandLabel(balance),
             vulnerable: station
-              ? !npcLocked && !gated
+              ? !npcHitAt && !gated
               : Boolean(user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()) || !protectedIds.has(user.id),
             sectorId: user.base?.sectorId ?? null,
             regionName: user.base?.regionName ?? null,
             locationName: user.base?.name?.trim() || null,
             cadence: station?.cadence ?? null,
             locked: gated,
+            cooldownEndsAt: npcHitAt ? minutesFromNow(RULES.NPC_COOLDOWN_MINUTES, npcHitAt).toISOString() : null,
           } satisfies TargetCard,
         };
       }),
@@ -327,14 +329,16 @@ export async function attemptHeist(
         assertTargetKind(target, kind);
 
         const now = new Date();
-        const recentAttempt = await tx.heist.findFirst({
-          where: { attackerId, createdAt: { gt: minutesAgo(RULES.HEIST_COOLDOWN_MINUTES, now) } },
-          orderBy: { createdAt: "desc" },
-        });
-        if (recentAttempt) {
-          throw new GameError(409, "COOLDOWN", "You are still cooling off from the last job.", {
-            cooldownEndsAt: minutesFromNow(RULES.HEIST_COOLDOWN_MINUTES, recentAttempt.createdAt).toISOString(),
+        if (kind === "player") {
+          const recentAttempt = await tx.heist.findFirst({
+            where: { attackerId, createdAt: { gt: minutesAgo(RULES.HEIST_COOLDOWN_MINUTES, now) }, target: { isBot: false } },
+            orderBy: { createdAt: "desc" },
           });
+          if (recentAttempt) {
+            throw new GameError(409, "COOLDOWN", "You are still cooling off from the last job.", {
+              cooldownEndsAt: minutesFromNow(RULES.HEIST_COOLDOWN_MINUTES, recentAttempt.createdAt).toISOString(),
+            });
+          }
         }
 
         const purseBalance = facing.balance ?? target.vault.balance;
@@ -347,13 +351,13 @@ export async function attemptHeist(
           if (!station) {
             throw new GameError(400, "WRONG_TARGET_KIND", "Only the stationed crews are NPC targets.");
           }
-          const since = npcWindowStart(station.cadence, now);
           const already = await tx.heist.findFirst({
-            where: { targetId: targetUserId, success: true, createdAt: { gt: since } },
+            where: { attackerId, targetId: targetUserId, createdAt: { gt: minutesAgo(RULES.NPC_COOLDOWN_MINUTES, now) } },
+            orderBy: { createdAt: "desc" },
           });
           if (already) {
-            throw new GameError(409, "TARGET_PROTECTED", "That crew has already been robbed this window.", {
-              protectionEndsAt: null,
+            throw new GameError(409, "COOLDOWN", "That crew is still cooling off for you.", {
+              cooldownEndsAt: minutesFromNow(RULES.NPC_COOLDOWN_MINUTES, already.createdAt).toISOString(),
             });
           }
         } else {
@@ -382,15 +386,17 @@ export async function attemptHeist(
         const broken = await wearWeapon(tx, owned.id);
 
         if (!success) {
-          const exposedUntil = hoursFromNow(RULES.FAILED_HEIST_EXPOSURE_HOURS, now);
-          const currentExposed = attacker.vaultExposedUntil;
-          await tx.user.update({
-            where: { id: attackerId },
-            data: {
-              vaultExposedUntil:
-                currentExposed && currentExposed.getTime() > exposedUntil.getTime() ? currentExposed : exposedUntil,
-            },
-          });
+          if (kind === "player") {
+            const exposedUntil = hoursFromNow(RULES.FAILED_HEIST_EXPOSURE_HOURS, now);
+            const currentExposed = attacker.vaultExposedUntil;
+            await tx.user.update({
+              where: { id: attackerId },
+              data: {
+                vaultExposedUntil:
+                  currentExposed && currentExposed.getTime() > exposedUntil.getTime() ? currentExposed : exposedUntil,
+              },
+            });
+          }
           const heist = await tx.heist.create({
             data: {
               attackerId,

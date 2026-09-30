@@ -3,6 +3,25 @@
   font-family: var(--font-sans);
 }
 
+.volterisk-roulette .wheel-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.volterisk-roulette .wheel-row .roulette-wheel-container {
+  width: 250px;
+  flex: none;
+  margin-top: 3.25rem;
+  transform: scale(0.78);
+  transform-origin: top left;
+}
+
+.volterisk-roulette .wheel-row .roulette-table-container {
+  flex: 1;
+  min-width: 0;
+}
+
 .volterisk-roulette .roulette-wheel-container,
 .volterisk-roulette .roulette-table-container {
   --red: #8c3a32;

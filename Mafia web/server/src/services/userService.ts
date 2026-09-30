@@ -152,7 +152,7 @@ export async function logoutPlayer(userId: string): Promise<void> {
 
 async function cooldownEndsAt(userId: string): Promise<string | null> {
   const last = await prisma.heist.findFirst({
-    where: { attackerId: userId, createdAt: { gt: minutesAgo(RULES.HEIST_COOLDOWN_MINUTES) } },
+    where: { attackerId: userId, createdAt: { gt: minutesAgo(RULES.HEIST_COOLDOWN_MINUTES) }, target: { isBot: false } },
     orderBy: { createdAt: "desc" },
   });
   if (!last) return null;

@@ -66,7 +66,7 @@ const pageMeta: Record<string, [string, string]> = {
   '/work': ['Contract Board', 'Select underground work by reward, risk, and location.'],
   '/reputation': ['Reputation', ''],
   '/map': ['World Intelligence', 'Monitor territories and inspect the network.'],
-  '/achievements': ['Criminal Record', 'Archived milestones, sealed cases, and distinctions.'],
+  '/achievements': ['Accomplishments', 'Archived milestones, sealed cases, and distinctions.'],
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
   '/leaderboard': ['Intelligence Ranking', 'Current standing across the criminal network.'],
   '/casino/roulette': ['Roulette', 'European wheel. Cash only. Five percent of the total.'],

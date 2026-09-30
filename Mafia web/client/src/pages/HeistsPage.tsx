@@ -243,8 +243,8 @@ export function HeistsPage() {
             row={row}
             index={index}
             open={targetId === row.userId}
-            cooling={cooling}
-            coolLabel={me ? remaining(me.cooldownEndsAt) : ''}
+            cooling={row.cadence ? Boolean(row.cooldownEndsAt && remaining(row.cooldownEndsAt) !== 'Ready') : cooling}
+            coolLabel={row.cadence ? remaining(row.cooldownEndsAt ?? null) : me ? remaining(me.cooldownEndsAt) : ''}
             busy={busy}
             confirming={confirming && targetId === row.userId}
             weapons={weapons}

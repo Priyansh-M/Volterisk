@@ -79,6 +79,7 @@ export type Target = {
   locationName?: string | null
   cadence?: 'day' | 'week' | null
   locked?: boolean
+  cooldownEndsAt?: string | null
 }
 
 /** `player` is the heist kind. The targets payload names that list `players`. */

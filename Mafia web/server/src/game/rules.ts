@@ -11,6 +11,7 @@ export const RULES = {
   TARGET_PROTECTION_HOURS: 2,
   /** Attacker lockout after any heist attempt. */
   HEIST_COOLDOWN_MINUTES: 15,
+  NPC_COOLDOWN_MINUTES: 60,
   /** Hard ceiling is 10. rewards.ts clamps to this and never pays more. */
   HEIST_REWARD_PERCENT: 10,
   STARTING_CASH: 1_000,
@@ -398,7 +399,7 @@ export const RULES = {
     {
       id: "courier-run",
       name: "Courier Run",
-      minLevel: 1,
+      minLevel: 2,
       durationMinutes: 8,
       reward: 3_200,
       risk: "LOW",
@@ -407,7 +408,7 @@ export const RULES = {
     {
       id: "ledger-scrub",
       name: "Ledger Scrub",
-      minLevel: 1,
+      minLevel: 2,
       durationMinutes: 15,
       reward: 6_500,
       risk: "MEDIUM",
@@ -416,7 +417,7 @@ export const RULES = {
     {
       id: "night-unload",
       name: "Night Unload",
-      minLevel: 1,
+      minLevel: 3,
       durationMinutes: 25,
       reward: 11_000,
       risk: "MEDIUM",
@@ -425,7 +426,7 @@ export const RULES = {
     {
       id: "plate-swap",
       name: "Plate Swap",
-      minLevel: 1,
+      minLevel: 3,
       durationMinutes: 12,
       reward: 5_000,
       risk: "LOW",
