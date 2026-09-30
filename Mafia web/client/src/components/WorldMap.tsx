@@ -301,8 +301,8 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
                           width={sector.w}
                           height={sector.h}
                           fill={fill}
-                          stroke={selected ? '#ffffff' : '#1a1a1a'}
-                          strokeWidth={selected ? 3.4 : hot || pin ? 1.8 : 1.25}
+                          stroke={selected ? '#d01212' : '#1a1a1a'}
+                          strokeWidth={selected ? 2.15 : hot || pin ? 1.8 : 1.25}
                           vectorEffect="non-scaling-stroke"
                         />
                         {pin ? (
