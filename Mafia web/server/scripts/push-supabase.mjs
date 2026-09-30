@@ -1,15 +1,17 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { writePostgresSchema } from "./write-postgres-schema.mjs";
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+dotenv.config({ path: path.join(serverRoot, ".env") });
 
 function postgresUrl(name, value) {
   const url = (value ?? "").trim();
   if (url.startsWith("postgres://") || url.startsWith("postgresql://")) return url;
   console.error(
-    `${name} must be a Supabase postgres URL set in this terminal. Do not put it in server/.env (that file is committed, and local play stays on SQLite).`,
+    `${name} must be a Supabase postgres URL in Mafia web/server/.env. Open that file, paste the URL, save, and run this command again.`,
   );
   process.exit(1);
 }

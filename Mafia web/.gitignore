@@ -7,3 +7,5 @@
 **/*.db-wal
 **/*.db-shm
 **/schema.postgres.prisma
+**/.env
+!**/.env.example
