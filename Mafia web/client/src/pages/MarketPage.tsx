@@ -283,10 +283,12 @@ function LotGrid({
             {lot.owned ? (
               <p className="mt-4 text-sm text-success">Held. Upgrade it under Assets.</p>
             ) : (
-              <Btn className="mt-4" variant="gold" disabled={busy !== null || cash < lot.price} onClick={() => onBuy(lot.id)}>
-                {busy === lot.id ? 'Buying…' : `Buy ${money(lot.price)}`}
-              </Btn>
-              {cash < lot.price ? <p className="mt-2 text-xs text-destructive">Not enough cash. Check your vault.</p> : null}
+              <>
+                <Btn className="mt-4" variant="gold" disabled={busy !== null || cash < lot.price} onClick={() => onBuy(lot.id)}>
+                  {busy === lot.id ? 'Buying…' : `Buy ${money(lot.price)}`}
+                </Btn>
+                {cash < lot.price ? <p className="mt-2 text-xs text-destructive">Not enough cash. Check your vault.</p> : null}
+              </>
             )}
           </div>
         </article>

@@ -428,9 +428,9 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
             {focusPin?.name?.trim() || focus.regionName}
           </p>
           <p className="mt-1 text-[12px] text-[#3c3a36]">
-            {focusPin && !focusPin.isYou && !focusPin.isNpc
-              ? focusPin.player.username
-              : `${focus.regionName}`}
+            {focusPin && !focusPin.isYou
+              ? `Held by ${focusPin.player?.username ?? focusPin.name ?? 'a crew'}`
+              : focus.regionName}
           </p>
           {focusPin && card ? (
             <dl className="mt-2 space-y-1 border-t border-[#1c1c1c]/15 pt-2 text-[12px]">
