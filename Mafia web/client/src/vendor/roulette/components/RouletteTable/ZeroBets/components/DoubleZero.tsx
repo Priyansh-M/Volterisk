@@ -1,4 +1,3 @@
-import React from "react";
 import { ACTION_TYPES } from "../../../../constants";
 import type { IRouletteTableContextProps } from "../../../../context";
 import { findChipIcon, shouldRenderChip } from "../../../../helpers";

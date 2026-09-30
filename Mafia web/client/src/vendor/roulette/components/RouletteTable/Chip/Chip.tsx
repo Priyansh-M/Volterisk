@@ -1,8 +1,7 @@
-import React from 'react';
 import type { FC } from 'react';
 
 import './Chip.css';
-import type { BetType, IRouletteTableProps } from '../../../types';
+import type { BetType } from '../../../types';
 
 export interface IChipProps {
   position:

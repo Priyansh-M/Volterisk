@@ -5,16 +5,20 @@ import { fileURLToPath } from "node:url";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const dataDir = path.join(serverRoot, "data");
-fs.mkdirSync(dataDir, { recursive: true });
+
+export function usesPostgres(): boolean {
+  const url = process.env.DATABASE_URL ?? "";
+  return url.startsWith("postgres://") || url.startsWith("postgresql://");
+}
+
+if (!usesPostgres()) {
+  fs.mkdirSync(path.join(serverRoot, "data"), { recursive: true });
+}
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+globalForPrisma.prisma = prisma;
 
 function missingWeaponTable(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";

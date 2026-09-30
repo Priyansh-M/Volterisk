@@ -1,4 +1,3 @@
-import React from 'react';
 import type { FC } from 'react';
 
 import { ACTION_TYPES } from '../../../constants';

@@ -31,6 +31,10 @@ import { asyncHandler } from "./asyncHandler.js";
 
 export const api = Router();
 
+api.get("/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
 api.post("/auth/register", asyncHandler(register));
 api.post("/auth/login", asyncHandler(login));
 api.post("/auth/logout", requireAuth, asyncHandler(logout));

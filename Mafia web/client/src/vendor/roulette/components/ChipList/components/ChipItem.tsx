@@ -1,4 +1,3 @@
-import React from 'react'
 import { classNames } from '../../../libs'
 import "./ChipItem.css";
 import type { IChipListProps } from '../../../types';

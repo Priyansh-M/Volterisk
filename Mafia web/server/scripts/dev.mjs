@@ -19,7 +19,7 @@ const child = spawn(
     "**/*.db",
     "--exclude",
     "**/*.db-*",
-    "src/index.ts",
+    "src/local.ts",
   ],
   { cwd: serverRoot, stdio: "inherit" },
 );

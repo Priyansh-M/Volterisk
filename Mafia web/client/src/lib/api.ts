@@ -68,6 +68,12 @@ export function load<T>(path: string): Promise<T> {
   return fetchGet<T>(path)
 }
 
+function requestUrl(path: string) {
+  const base = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/$/, '')
+  if (!base || /^https?:\/\//i.test(path)) return path
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
   if (options.body) headers.set('Content-Type', 'application/json')
@@ -75,7 +81,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const method = (options.method ?? 'GET').toUpperCase()
   if (method !== 'GET') invalidateGets()
-  const response = await fetch(path, { ...options, headers })
+  const response = await fetch(requestUrl(path), { ...options, headers })
   const data = (await response.json().catch(() => ({}))) as {
     error?: string | { code?: string; message?: string }
     code?: string

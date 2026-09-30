@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import type { FC, MouseEvent } from 'react';
 
 import { ZeroBets } from './ZeroBets';
