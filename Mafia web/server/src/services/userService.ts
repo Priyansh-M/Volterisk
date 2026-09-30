@@ -14,6 +14,7 @@ import {
 import { prisma } from "../prisma.js";
 import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js";
 import { unclaimedCount } from "./achievementService.js";
+import { settlePassivePay } from "./workService.js";
 import { publicProfileFor } from "./publicProfileService.js";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -159,6 +160,7 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 }
 
 export async function getProfile(userId: string) {
+  await settlePassivePay(userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {

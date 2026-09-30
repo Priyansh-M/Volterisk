@@ -255,20 +255,24 @@ export async function collectContract(userId: string) {
 const VEHICLE_IDS = new Set<string>(ASSETS.filter((item) => item.kind === "vehicle").map((item) => item.id));
 
 function passiveRequirement(job: (typeof RULES.PASSIVE_JOBS)[number]): string {
-  const parts = job.requires.map((req) => {
-    if (req.anyVehicle) return `Vehicle level ${req.minLevel} or higher`;
+  const parts = [`Reputation level ${job.minReputation}`];
+  for (const req of job.requires) {
+    if (req.anyVehicle) {
+      parts.push(`Vehicle level ${req.minLevel} or higher`);
+      continue;
+    }
     const name = assetById(req.id ?? "")?.name ?? req.id;
-    return `${name} level ${req.minLevel} or higher`;
-  });
-  const needsBuilding = job.requires.some((req) => req.id && assetById(req.id)?.kind === "property");
-  if (!needsBuilding) parts.unshift("No property");
+    parts.push(`${name} level ${req.minLevel} or higher`);
+  }
   return parts.join(", ");
 }
 
 function passiveQualified(
   owned: { catalogId: string; level: number }[],
   job: (typeof RULES.PASSIVE_JOBS)[number],
+  reputationLevel: number,
 ) {
+  if (reputationLevel < job.minReputation) return false;
   return job.requires.every((req) => {
     if (req.anyVehicle) {
       return owned.some((row) => VEHICLE_IDS.has(row.catalogId) && row.level >= req.minLevel);
@@ -293,7 +297,7 @@ export async function settlePassivePay(userId: string): Promise<number> {
   const noon = latestPaydayNoon();
   if (user.passivePaidFor && user.passivePaidFor.getTime() >= noon.getTime()) return 0;
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
-  if (!passiveQualified(owned, job)) return 0;
+  if (!passiveQualified(owned, job, user.reputationLevel)) return 0;
   await prisma.$transaction(async (tx) => {
     const fresh = await tx.user.findUnique({ where: { id: userId } });
     if (!fresh?.passiveJobId || fresh.passiveJobId !== job.id) return;
@@ -319,16 +323,17 @@ export async function settleAllPassivePay(): Promise<void> {
 export async function listPassiveJobs(userId: string) {
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
   await settlePassivePay(userId);
-  const chosen = await prisma.user.findUnique({ where: { id: userId }, select: { passiveJobId: true } });
+  const chosen = await prisma.user.findUnique({ where: { id: userId }, select: { passiveJobId: true, reputationLevel: true } });
+  const reputationLevel = chosen?.reputationLevel ?? 1;
   return {
     currentJobId: chosen?.passiveJobId ?? null,
     jobs: RULES.PASSIVE_JOBS.map((job) => {
-      const qualified = passiveQualified(owned, job);
+      const qualified = passiveQualified(owned, job, reputationLevel);
       return {
         id: job.id,
         name: job.name,
         payPerDay: job.payPerDay,
-        requirement: job.requires.length === 0 ? "No requirements" : passiveRequirement(job),
+        requirement: passiveRequirement(job),
         qualified,
         selected: chosen?.passiveJobId === job.id,
       };
@@ -339,8 +344,9 @@ export async function listPassiveJobs(userId: string) {
 export async function selectPassiveJob(userId: string, jobId: string) {
   const job = RULES.PASSIVE_JOBS.find((entry) => entry.id === jobId);
   if (!job) throw new GameError(400, "UNKNOWN_CONTRACT", "That passive job is not on the board.");
+  const standing = await prisma.user.findUnique({ where: { id: userId }, select: { reputationLevel: true } });
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
-  if (!passiveQualified(owned, job)) {
+  if (!passiveQualified(owned, job, standing?.reputationLevel ?? 1)) {
     throw new GameError(403, "NOT_QUALIFIED", "You do not meet that job's requirements.");
   }
   await settlePassivePay(userId);

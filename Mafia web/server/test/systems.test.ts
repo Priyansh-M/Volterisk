@@ -334,7 +334,7 @@ describe("work board", () => {
     expect(board.status).toBe(200);
     const volunteer = board.body.jobs.find((job: { id: string }) => job.id === "volunteer");
     const runner = board.body.jobs.find((job: { id: string }) => job.id === "package-runner");
-    expect(volunteer).toMatchObject({ qualified: true, selected: false, payPerDay: 300, requirement: "No requirements" });
+    expect(volunteer).toMatchObject({ qualified: true, selected: false, payPerDay: 300, requirement: "Reputation level 1" });
     expect(runner.qualified).toBe(false);
 
     const locked = await request(app).post("/api/work/passive/select").set(auth(player.token)).send({ jobId: "package-runner" });

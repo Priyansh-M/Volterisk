@@ -183,18 +183,13 @@ export const RULES = {
     { minLevel: 3, title: "Expert Negotiator" },
     { minLevel: 4, title: "Peak Businessman" },
     { minLevel: 5, title: "Mob Boss" },
-    { minLevel: 7, title: "Ward Lieutenant" },
-    { minLevel: 10, title: "Vault Specialist" },
-    { minLevel: 14, title: "Syndicate Captain" },
-    { minLevel: 18, title: "Shadow Underboss" },
-    { minLevel: 25, title: "Iron Hour Kingpin" },
   ] as { minLevel: number; title: string }[],
   /**
    * Reputation is the player level. Claiming a rung pays the reward and
    * raises the level that work and the dossier use. Everyone starts at 1.
    * Level 5 finishes every holding that the earlier rungs left short of level 5.
    */
-  REPUTATION_MAX_LEVEL: 5,
+  REPUTATION_MAX_LEVEL: 10,
   REPUTATION: [
     {
       level: 2,
@@ -244,6 +239,75 @@ export const RULES = {
         { kind: "asset", id: "warehouse", minLevel: 5, label: "Buy a warehouse and raise it to level 5" },
       ],
     },
+    {
+      level: 6,
+      reward: 1_500_000,
+      conditions: [
+        { kind: "asset", id: "dock", minLevel: 1, label: "Buy a dock for the boat" },
+        { kind: "asset", id: "speedboat", minLevel: 1, label: "Own a speedboat" },
+        { kind: "asset", id: "garage", minLevel: 6, label: "Raise your garage to level 6" },
+        { kind: "asset", id: "car", minLevel: 6, label: "Raise your car to level 6" },
+        { kind: "asset", id: "truck", minLevel: 6, label: "Raise your truck to level 6" },
+      ],
+    },
+    {
+      level: 7,
+      reward: 2_500_000,
+      conditions: [
+        { kind: "asset", id: "helipad", minLevel: 1, label: "Buy a helipad" },
+        { kind: "asset", id: "helicopter", minLevel: 1, label: "Own a helicopter" },
+        { kind: "asset", id: "dock", minLevel: 2, label: "Raise your dock to level 2" },
+        { kind: "asset", id: "speedboat", minLevel: 2, label: "Raise your speedboat to level 2" },
+        { kind: "asset", id: "hangar", minLevel: 6, label: "Raise your hangar to level 6" },
+        { kind: "asset", id: "airplane", minLevel: 6, label: "Raise your airplane to level 6" },
+      ],
+    },
+    {
+      level: 8,
+      reward: 4_000_000,
+      conditions: [
+        { kind: "asset", id: "chop-shop", minLevel: 1, label: "Buy a chop shop" },
+        { kind: "asset", id: "armored-van", minLevel: 1, label: "Own an armored van" },
+        { kind: "asset", id: "helipad", minLevel: 3, label: "Raise your helipad to level 3" },
+        { kind: "asset", id: "helicopter", minLevel: 3, label: "Raise your helicopter to level 3" },
+        { kind: "asset", id: "dock", minLevel: 4, label: "Raise your dock to level 4" },
+        { kind: "asset", id: "speedboat", minLevel: 4, label: "Raise your speedboat to level 4" },
+        { kind: "asset", id: "front", minLevel: 7, label: "Raise your front business to level 7" },
+      ],
+    },
+    {
+      level: 9,
+      reward: 6_000_000,
+      conditions: [
+        { kind: "asset", id: "casino", minLevel: 1, label: "Buy a casino" },
+        { kind: "asset", id: "limousine", minLevel: 1, label: "Own a limousine" },
+        { kind: "asset", id: "chop-shop", minLevel: 3, label: "Raise your chop shop to level 3" },
+        { kind: "asset", id: "armored-van", minLevel: 3, label: "Raise your armored van to level 3" },
+        { kind: "asset", id: "warehouse", minLevel: 8, label: "Raise your warehouse to level 8" },
+        { kind: "asset", id: "bike", minLevel: 8, label: "Raise your bike to level 8" },
+      ],
+    },
+    {
+      level: 10,
+      reward: 10_000_000,
+      conditions: [
+        { kind: "asset", id: "estate", minLevel: 1, label: "Buy an estate" },
+        { kind: "asset", id: "yacht", minLevel: 1, label: "Own a yacht" },
+        { kind: "asset", id: "casino", minLevel: 3, label: "Raise your casino to level 3" },
+        { kind: "asset", id: "limousine", minLevel: 3, label: "Raise your limousine to level 3" },
+        { kind: "asset", id: "dock", minLevel: 5, label: "Raise your dock to level 5" },
+        { kind: "asset", id: "helipad", minLevel: 5, label: "Raise your helipad to level 5" },
+        { kind: "asset", id: "chop-shop", minLevel: 5, label: "Raise your chop shop to level 5" },
+        { kind: "asset", id: "speedboat", minLevel: 5, label: "Raise your speedboat to level 5" },
+        { kind: "asset", id: "helicopter", minLevel: 5, label: "Raise your helicopter to level 5" },
+        { kind: "asset", id: "armored-van", minLevel: 5, label: "Raise your armored van to level 5" },
+        { kind: "asset", id: "garage", minLevel: 10, label: "Raise your garage to level 10" },
+        { kind: "asset", id: "car", minLevel: 10, label: "Raise your car to level 10" },
+        { kind: "asset", id: "hangar", minLevel: 10, label: "Raise your hangar to level 10" },
+        { kind: "asset", id: "airplane", minLevel: 10, label: "Raise your airplane to level 10" },
+        { kind: "asset", id: "truck", minLevel: 10, label: "Raise your truck to level 10" },
+      ],
+    },
   ] as {
     level: number;
     reward: number;
@@ -289,19 +353,19 @@ export const RULES = {
   PAPER_TRAIL_COUNT: 100,
   LEADERBOARD_SIZE: 25,
   PASSIVE_JOBS: [
-    { id: "volunteer", name: "Volunteer", payPerDay: 300, requires: [] },
-    { id: "mail-man", name: "Mail Man", payPerDay: 450, requires: [] },
-    { id: "package-runner", name: "Package Runner", payPerDay: 3_200, requires: [{ id: "bike", minLevel: 1 }] },
-    { id: "street-lookout", name: "Street Lookout", payPerDay: 3_400, requires: [{ id: "safehouse", minLevel: 1 }] },
-    { id: "shop-security", name: "Shop Security", payPerDay: 3_600, requires: [{ id: "safehouse", minLevel: 1 }] },
-    { id: "warehouse-loader", name: "Warehouse Loader", payPerDay: 3_800, requires: [{ id: "warehouse", minLevel: 1 }] },
-    { id: "document-runner", name: "Document Runner", payPerDay: 4_200, requires: [{ id: "safehouse", minLevel: 1 }, { id: "bike", minLevel: 1 }] },
-    { id: "night-courier", name: "Night Courier", payPerDay: 4_500, requires: [{ id: "hangar", minLevel: 1 }, { id: "bike", minLevel: 1 }] },
-    { id: "local-transport", name: "Local Transport", payPerDay: 4_800, requires: [{ id: "hangar", minLevel: 1 }, { anyVehicle: true, minLevel: 1 }] },
-    { id: "cash-collection", name: "Cash Collection", payPerDay: 5_200, requires: [{ id: "front", minLevel: 1 }, { anyVehicle: true, minLevel: 1 }] },
-    { id: "delivery-worker", name: "Delivery Worker", payPerDay: 5_500, requires: [{ id: "hangar", minLevel: 2 }, { id: "bike", minLevel: 1 }] },
-    { id: "private-driver", name: "Private Driver", payPerDay: 6_000, requires: [{ id: "hangar", minLevel: 1 }, { id: "car", minLevel: 1 }] },
-  ] as { id: string; name: string; payPerDay: number; requires: { id?: string; anyVehicle?: boolean; minLevel: number }[] }[],
+    { id: "volunteer", name: "Volunteer", payPerDay: 300, minReputation: 1, requires: [] },
+    { id: "mail-man", name: "Mail Man", payPerDay: 450, minReputation: 1, requires: [] },
+    { id: "package-runner", name: "Package Runner", payPerDay: 3_200, minReputation: 1, requires: [{ id: "bike", minLevel: 1 }] },
+    { id: "street-lookout", name: "Street Lookout", payPerDay: 3_400, minReputation: 1, requires: [{ id: "safehouse", minLevel: 1 }] },
+    { id: "shop-security", name: "Shop Security", payPerDay: 3_600, minReputation: 1, requires: [{ id: "safehouse", minLevel: 1 }] },
+    { id: "warehouse-loader", name: "Warehouse Loader", payPerDay: 3_800, minReputation: 1, requires: [{ id: "warehouse", minLevel: 1 }] },
+    { id: "document-runner", name: "Document Runner", payPerDay: 4_200, minReputation: 2, requires: [{ id: "safehouse", minLevel: 2 }, { id: "bike", minLevel: 2 }] },
+    { id: "night-courier", name: "Night Courier", payPerDay: 4_500, minReputation: 2, requires: [{ id: "hangar", minLevel: 2 }, { id: "bike", minLevel: 2 }] },
+    { id: "local-transport", name: "Local Transport", payPerDay: 4_800, minReputation: 2, requires: [{ id: "hangar", minLevel: 2 }, { id: "truck", minLevel: 2 }] },
+    { id: "cash-collection", name: "Cash Collection", payPerDay: 5_200, minReputation: 2, requires: [{ id: "front", minLevel: 2 }, { id: "car", minLevel: 2 }] },
+    { id: "delivery-worker", name: "Delivery Worker", payPerDay: 5_500, minReputation: 3, requires: [{ id: "hangar", minLevel: 3 }, { id: "truck", minLevel: 2 }] },
+    { id: "private-driver", name: "Private Driver", payPerDay: 6_000, minReputation: 3, requires: [{ id: "hangar", minLevel: 3 }, { id: "car", minLevel: 3 }] },
+  ] as { id: string; name: string; payPerDay: number; minReputation: number; requires: { id?: string; anyVehicle?: boolean; minLevel: number }[] }[],
   /** The whole contract pool. Rewards and durations are never taken from the client. */
   WORK_CONTRACTS: [
     {

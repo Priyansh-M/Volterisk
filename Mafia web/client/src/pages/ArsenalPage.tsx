@@ -13,6 +13,9 @@ export function ArsenalPage() {
   const { refresh } = useAuth()
   const [arsenal, setArsenal] = useState<Arsenal | null>(() => peek<Arsenal>('/api/me/weapons'))
   const [predictors, setPredictors] = useState(() => peek<{ predictor: { quantity: number } }>('/api/shop')?.predictor.quantity ?? 0)
+  const [camera, setCamera] = useState<{ level: number; nextCost: number | null; installed: boolean } | null>(
+    () => peek<{ camera: { level: number; nextCost: number | null; installed: boolean } }>('/api/shop')?.camera ?? null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -21,8 +24,9 @@ export function ArsenalPage() {
       setArsenal(weapons)
       return weapons
     })
-    const shopPromise = api<{ predictor: { quantity: number } }>('/api/shop').then((shop) => {
+    const shopPromise = api<{ predictor: { quantity: number }; camera: { level: number; nextCost: number | null; installed: boolean } }>('/api/shop').then((shop) => {
       setPredictors(shop.predictor.quantity)
+      setCamera(shop.camera)
       return shop
     })
     await Promise.all([weaponsPromise, shopPromise])
@@ -31,6 +35,20 @@ export function ArsenalPage() {
   useEffect(() => {
     reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the arsenal.'))
   }, [])
+
+  async function upgradeCamera() {
+    setBusy('security-camera')
+    setError(null)
+    try {
+      await api('/api/shop/camera/upgrade', { method: 'POST', body: '{}' })
+      await reload()
+      await refresh()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The camera did not take the upgrade.')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function act(path: string, weaponId: string, instanceId?: string) {
     setBusy(instanceId ?? weaponId)
@@ -64,7 +82,29 @@ export function ArsenalPage() {
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {!arsenal && !error ? <Notice tone="muted">Unlocking the case…</Notice> : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.length === 0 && predictors < 1 && arsenal ? <Notice tone="muted">The case is empty.</Notice> : null}
+        {cards.length === 0 && predictors < 1 && !camera?.installed && arsenal ? <Notice tone="muted">The case is empty.</Notice> : null}
+        {camera?.installed ? (
+          <article className="flex flex-col border border-line bg-panel">
+            <div className="flex aspect-[11/7] items-center justify-center border-b border-line bg-panel-2 font-display text-5xl text-primary">SC</div>
+            <div className="flex flex-1 flex-col p-4">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="font-serif text-xl tracking-wide">Security Camera</h2>
+                <span className="text-[10px] tracking-[0.16em] text-ok uppercase">Installed</span>
+              </div>
+              <p className="mt-1 text-sm text-muted">Level {camera.level}</p>
+              <p className="mt-2 flex-1 text-sm text-muted">
+                Attackers lose {camera.level} points of success chance before the roll is clamped between 8% and 92%. An upgrade adds 1 level and costs 1.5× the previous price.
+              </p>
+              {camera.nextCost != null ? (
+                <Btn className="mt-4" variant="gold" disabled={busy !== null} onClick={() => void upgradeCamera()}>
+                  {busy === 'security-camera' ? 'Upgrading…' : `Upgrade ${money(camera.nextCost)}`}
+                </Btn>
+              ) : (
+                <p className="mt-4 text-sm text-muted">Level 40. The camera is capped.</p>
+              )}
+            </div>
+          </article>
+        ) : null}
         {predictors > 0 ? (
           <article className="flex flex-col border border-line bg-panel">
             <div className="flex aspect-[11/7] items-center justify-center border-b border-line bg-panel-2 font-display text-5xl text-primary">EP</div>

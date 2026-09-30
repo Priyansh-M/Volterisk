@@ -15,6 +15,16 @@ export const ASSETS = [
   { id: "bike", name: "Bike", price: 20_000, kind: "vehicle", note: "Fast through the alleys." },
   { id: "truck", name: "Truck", price: 75_000, kind: "vehicle", note: "Hauls a job that will not fit in a trunk." },
   { id: "airplane", name: "Airplane", price: 90_000, kind: "vehicle", note: "Leaves the city before the sirens do." },
+  { id: "dock", name: "Dock", price: 120_000, kind: "property", note: "A berth for anything that leaves by water." },
+  { id: "speedboat", name: "Speedboat", price: 110_000, kind: "vehicle", note: "Fast off the dock and hard to follow." },
+  { id: "helipad", name: "Helipad", price: 180_000, kind: "property", note: "A marked roof for a short flight." },
+  { id: "helicopter", name: "Helicopter", price: 200_000, kind: "vehicle", note: "Lifts off without a runway." },
+  { id: "chop-shop", name: "Chop Shop", price: 250_000, kind: "property", note: "A bay that takes plates off in the dark." },
+  { id: "armored-van", name: "Armored Van", price: 220_000, kind: "vehicle", note: "A box on wheels that shrugs off small arms." },
+  { id: "casino", name: "Casino", price: 400_000, kind: "property", note: "Tables, chips, and a back room." },
+  { id: "limousine", name: "Limousine", price: 350_000, kind: "vehicle", note: "A long car for a quiet passenger." },
+  { id: "estate", name: "Estate", price: 750_000, kind: "property", note: "Grounds, a gate, and no neighbors." },
+  { id: "yacht", name: "Yacht", price: 800_000, kind: "vehicle", note: "Leaves the harbor with the books aboard." },
 ] as const;
 
 export type AssetKind = (typeof ASSETS)[number]["kind"];

@@ -128,7 +128,8 @@ export function MarketPage() {
             <p className="font-mono text-[9px] uppercase text-muted-foreground">Installed defense</p>
             <h2 className="font-display text-2xl font-semibold uppercase">{counter.camera.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Level {counter.camera.level || '—'} cuts an attacker&apos;s chance by that many points before the clamp.
+              Each level subtracts that many points from an attacker&apos;s success chance, before the roll is clamped between 8% and 92%. Level 1 is −1. An upgrade adds 1 level and costs 1.5× the previous price, up to level 40.
+              {counter.camera.installed ? ` Yours is level ${counter.camera.level}, so attackers lose ${counter.camera.level} points.` : ''}
             </p>
             <p className="mt-3 font-mono text-sm text-primary">
               {counter.camera.nextCost == null ? 'Capped' : money(counter.camera.nextCost)}

@@ -29,6 +29,32 @@ export function AssetGlyph({ id }: { id: string }) {
       </svg>
     )
   }
+  if (id === 'speedboat' || id === 'yacht') {
+    return (
+      <svg viewBox="0 0 64 64" className={common} aria-hidden="true">
+        <path d="M8 36h40l8 6H14z" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M24 36V22h4l10 14" fill="none" stroke="currentColor" strokeWidth="2" />
+      </svg>
+    )
+  }
+  if (id === 'helicopter') {
+    return (
+      <svg viewBox="0 0 64 64" className={common} aria-hidden="true">
+        <path d="M14 28h36M30 28v8h14l6 6H26" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M32 42v8M24 50h16" fill="none" stroke="currentColor" strokeWidth="2" />
+      </svg>
+    )
+  }
+  if (id === 'armored-van' || id === 'limousine') {
+    return (
+      <svg viewBox="0 0 64 64" className={common} aria-hidden="true">
+        <path d="M6 40V26h36v14" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M42 32h10l6 8v4H42" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="16" cy="44" r="4" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="46" cy="44" r="4" fill="none" stroke="currentColor" strokeWidth="2" />
+      </svg>
+    )
+  }
   if (id === 'airplane') {
     return (
       <svg viewBox="0 0 64 64" className={common} aria-hidden="true">
