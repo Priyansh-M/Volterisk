@@ -37,6 +37,24 @@ function hits(id: string, number: number): boolean {
   return false;
 }
 
+function utcDay(now = new Date()) {
+  return now.toISOString().slice(0, 10);
+}
+
+function liveCap(cash: number, vault: number) {
+  return Math.floor((cash + vault) * 0.05);
+}
+
+export async function rouletteStatus(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { vault: true } });
+  if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
+  const day = utcDay();
+  const fresh = user.rouletteDay !== day;
+  const cap = fresh ? liveCap(user.cash, user.vault.balance) : user.rouletteCap;
+  const staked = fresh ? 0 : user.rouletteStaked;
+  return { cap, staked, locked: cap > 0 && staked >= cap, day };
+}
+
 export async function spinRoulette(userId: string, rawBets: { id?: unknown; amount?: unknown }[]) {
   if (!Array.isArray(rawBets) || rawBets.length === 0 || rawBets.length > 40) {
     throw new GameError(400, "BAD_BETS", "Place at least one chip before the spin.");
@@ -55,21 +73,41 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { id: userId }, include: { vault: true } });
     if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
-    const cap = Math.floor((user.cash + user.vault.balance) * 0.05);
-    if (stake > cap) {
-      throw new GameError(400, "OVER_CAP", `A spin can stake at most 5% of your total. That cap is ${cap}.`);
+    const day = utcDay();
+    const fresh = user.rouletteDay !== day;
+    const cap = fresh ? liveCap(user.cash, user.vault.balance) : user.rouletteCap;
+    const already = fresh ? 0 : user.rouletteStaked;
+    if (cap <= 0 || already >= cap) {
+      throw new GameError(409, "TABLE_CLOSED", "The day's allowance is spent. Come back tomorrow.");
+    }
+    if (already + stake > cap) {
+      throw new GameError(400, "OVER_CAP", `That spin passes today's cap of ${cap}. ${cap - already} is left.`);
     }
     if (stake > user.cash) {
       throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough cash. Check your vault.");
     }
     await debitCash(tx, userId, stake);
+    await tx.user.update({
+      where: { id: userId },
+      data: { rouletteDay: day, rouletteCap: cap, rouletteStaked: already + stake },
+    });
     const number = randomInt(0, 37);
     const returned = bets.reduce((sum, bet) => sum + (hits(bet.id, number) ? bet.amount * bet.payout : 0), 0);
     if (returned > 0) await creditCash(tx, userId, returned);
     await tx.transaction.create({
       data: { type: "roulette", amount: stake, fromUserId: userId },
     });
-    const fresh = await tx.user.findUnique({ where: { id: userId }, select: { cash: true } });
-    return { number: String(number), stake, returned, cash: fresh?.cash ?? 0, cap };
+    const after = await tx.user.findUnique({ where: { id: userId }, select: { cash: true, rouletteStaked: true, rouletteCap: true } });
+    const staked = after?.rouletteStaked ?? already + stake;
+    const heldCap = after?.rouletteCap ?? cap;
+    return {
+      number: String(number),
+      stake,
+      returned,
+      cash: after?.cash ?? 0,
+      cap: heldCap,
+      staked,
+      locked: staked >= heldCap,
+    };
   });
 }

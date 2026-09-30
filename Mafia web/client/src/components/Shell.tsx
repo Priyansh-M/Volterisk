@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { Portrait } from './Portrait.tsx'
@@ -71,6 +71,15 @@ const pageMeta: Record<string, [string, string]> = {
   '/leaderboard': ['Intelligence Ranking', 'Current standing across the criminal network.'],
   '/casino/roulette': ['Roulette', 'European wheel. Cash only. Five percent of the total.'],
   '/notifications': ['Incoming Reports', 'Security alerts and operational updates.'],
+}
+
+function CashIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <rect x="3" y="6" width="18" height="12" rx="1.5" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  )
 }
 
 export function Shell() {
@@ -193,6 +202,7 @@ export function Shell() {
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           {links.map((link) => (
+            <Fragment key={link.to}>
             <NavLink
               key={link.to}
               to={link.to}
@@ -219,31 +229,41 @@ export function Shell() {
                 </span>
               ) : null}
             </NavLink>
+            {link.to === '/work' ? (
+              <Fragment>
+                <button
+                  type="button"
+                  className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs ${
+                    location.pathname.startsWith('/casino')
+                      ? 'border-primary bg-accent text-foreground'
+                      : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
+                  }`}
+                  onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
+                  onFocus={() => void import('../pages/RoulettePage.tsx')}
+                  onClick={() => setCasinoOpen((open) => !open)}
+                >
+                  <CashIcon className="h-4 w-4 shrink-0" />
+                  {collapsed ? null : <span className="flex-1">Casino</span>}
+                  {collapsed ? null : <span className="text-[10px]">{casinoOpen ? '−' : '+'}</span>}
+                </button>
+                {casinoOpen && !collapsed ? (
+                  <NavLink
+                    to="/casino/roulette"
+                    onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      `mb-0.5 flex h-9 items-center gap-3 border-l-2 pl-10 text-left text-xs no-underline ${
+                        isActive ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`
+                    }
+                  >
+                    Roulette
+                  </NavLink>
+                ) : null}
+              </Fragment>
+            ) : null}
+            </Fragment>
           ))}
-          <button
-            type="button"
-            className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs ${
-              location.pathname.startsWith('/casino')
-                ? 'border-primary bg-accent text-foreground'
-                : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
-            }`}
-            onClick={() => setCasinoOpen((open) => !open)}
-          >
-            <IconBoard className="h-4 w-4 shrink-0" />
-            {collapsed ? null : <span className="flex-1">Casino</span>}
-            {collapsed ? null : <span className="font-mono text-[10px]">{casinoOpen ? '−' : '+'}</span>}
-          </button>
-          {casinoOpen && !collapsed ? (
-            <NavLink
-              to="/casino/roulette"
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                `mb-0.5 flex h-8 items-center pl-10 text-xs no-underline ${isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`
-              }
-            >
-              Roulette
-            </NavLink>
-          ) : null}
         </nav>
         <div className="border-t border-sidebar-border p-3">
           <button type="button" className="px-3 font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground" onClick={() => void logout()}>

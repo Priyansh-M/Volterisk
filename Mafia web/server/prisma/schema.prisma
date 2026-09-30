@@ -25,6 +25,9 @@ model User {
   heatSettledAt    DateTime  @default(now())
   heatJudgedOn     String?
   starterClaimedAt DateTime?
+  rouletteDay      String?
+  rouletteStaked   Int       @default(0)
+  rouletteCap      Int       @default(0)
   createdAt        DateTime  @default(now())
 
   vault          Vault?
