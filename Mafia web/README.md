@@ -15,7 +15,7 @@ Two terminals, from the repo root.
 ```powershell
 cd "Mafia web\server"
 npm install
-npx prisma migrate deploy
+npm run db:push
 npm run db:seed
 npm run dev
 ```
