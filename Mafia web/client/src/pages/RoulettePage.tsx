@@ -19,7 +19,7 @@ const SEEN = 'volterisk-roulette-rules'
 
 type TableState = { cap: number; staked: number; locked: boolean }
 type Verdict = { number: string; returned: number; stake: number }
-type Seat = { userId: string; username: string; laid: boolean }
+type Seat = { userId: string; username: string; laid: boolean; bets: { id: string; amount: number }[] }
 type Lobby = {
   id: string
   hostName: string
@@ -96,6 +96,15 @@ export function RoulettePage() {
     }, 4000)
     return () => window.clearInterval(timer)
   }, [mode, lobby?.id, seenSpin])
+
+  useEffect(() => {
+    if (mode !== 'lobby' || !lobby || spinning) return
+    const placed = Object.entries(bets).map(([id, bet]) => ({ id, amount: bet.amount }))
+    const timer = window.setTimeout(() => {
+      void api(`/api/casino/lobby/${lobby.id}/bets`, { method: 'POST', body: JSON.stringify({ bets: placed }) }).catch(() => undefined)
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [bets, mode, lobby?.id, spinning])
 
   useEffect(() => {
     const q = query.trim()
@@ -263,11 +272,12 @@ export function RoulettePage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
           <ChipList chips={chips} selectedChip={chip} onChipPressed={setChip} />
+          {lobby && mode === 'lobby' ? <OtherBets seats={lobby.seats.filter((seat) => seat.userId !== me?.id)} /> : null}
           <div className="flex flex-col items-end gap-2">
             <p className="font-mono text-sm text-foreground">
               On the felt <span className="text-primary">{money(total)}</span>
             </p>
-            {total > 0 ? <span className="border border-primary bg-primary/15 px-2 py-1 font-mono text-[11px] tracking-[0.14em] text-primary">[CHIPS HAVE BEEN PLACED]</span> : null}
+            {total > 0 ? <PlacedMark /> : null}
           </div>
         </div>
       </div>
@@ -278,7 +288,7 @@ export function RoulettePage() {
             {lobby.seats.map((seat) => (
               <li key={seat.userId} className="mt-2 flex flex-wrap items-center gap-2">
                 <span>{seat.username}</span>
-                {seat.laid ? <span className="border border-primary bg-primary/15 px-2 py-1 font-mono text-[11px] tracking-[0.14em] text-primary">[CHIPS HAVE BEEN PLACED]</span> : null}
+                {seat.laid || (seat.userId === me?.id && total > 0) ? <PlacedMark /> : null}
               </li>
             ))}
           </ul>
@@ -320,10 +330,53 @@ export function RoulettePage() {
         <button type="button" className="nav-pill cursor-pointer px-4 py-2 text-xs" disabled={spinning || locked} onClick={() => { clearBets(); setError(null) }}>
           Clear
         </button>
-        <button type="button" className="gloss-gold cursor-pointer px-4 py-2 text-xs disabled:opacity-40" disabled={spinning || locked || (total < 1 && !(lobby && lobby.youAreHost))} onClick={() => void spin()}>
+        <button type="button" className="gloss-gold cursor-pointer px-4 py-2 text-xs disabled:opacity-40" disabled={spinning || locked || total < 1 || (lobby && mode === 'lobby' && lobby.seats.some((seat) => seat.userId === me?.id ? false : !seat.laid))} onClick={() => void spin()}>
           {spinning ? 'Spinning…' : lobby && !lobby.youAreHost ? 'Lay chips' : 'Spin'}
         </button>
       </div>
+    </div>
+  )
+}
+
+function PlacedMark() {
+  return <span className="border border-primary bg-primary/15 px-2 py-1 font-mono text-[11px] tracking-[0.14em] text-primary">[CHIPS HAVE BEEN PLACED]</span>
+}
+
+const REDS = new Set(['1', '3', '5', '7', '9', '12', '14', '16', '18', '19', '21', '23', '25', '27', '30', '32', '34', '36'])
+
+function betTone(id: string) {
+  if (id === '0') return 'border-[#2f6b45] bg-[#1c3a28] text-[#b7e0c4]'
+  if (id === 'RED' || REDS.has(id)) return 'border-[#8c3a32] bg-[#3a1c18] text-[#f0c2bc]'
+  if (id === 'BLACK') return 'border-[#3a342c] bg-[#14110e] text-[#f4efe6]'
+  if (/^\d+$/.test(id)) return 'border-[#3a342c] bg-[#14110e] text-[#f4efe6]'
+  return 'border-primary/50 bg-primary/10 text-primary'
+}
+
+function OtherBets({ seats }: { seats: Seat[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  if (!seats.length) return null
+  return (
+    <div className="min-w-[12rem] flex-1 space-y-2 border border-border bg-background px-3 py-2">
+      {seats.map((seat) => {
+        const bets = seat.bets ?? []
+        const shown = open === seat.userId ? bets : bets.slice(0, 3)
+        return (
+          <div key={seat.userId} className="flex flex-wrap items-center gap-1.5 text-sm">
+            <span className="mr-1">{seat.username}</span>
+            {shown.map((bet) => (
+              <span key={bet.id} className={`inline-flex items-center gap-1 border px-1 py-0.5 font-mono text-[10px] ${betTone(bet.id)}`}>
+                <span className="px-0.5">{bet.id}</span>
+                <span>: {bet.amount}</span>
+              </span>
+            ))}
+            {bets.length > 3 ? (
+              <button type="button" aria-label={open === seat.userId ? 'Show less' : 'See more'} className="cursor-pointer px-1 text-primary" onClick={() => setOpen(open === seat.userId ? null : seat.userId)}>
+                {open === seat.userId ? '▴' : '▾'}
+              </button>
+            ) : null}
+          </div>
+        )
+      })}
     </div>
   )
 }

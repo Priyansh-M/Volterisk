@@ -132,11 +132,23 @@ async function lobbyView(lobbyId: string, viewerId: string) {
     youAreHost: lobby.hostId === viewerId,
     spinToken: lobby.spinToken,
     lastNumber: lobby.lastNumber,
-    seats: lobby.seats.map((seat) => ({
-      userId: seat.userId,
-      username: name.get(seat.userId) ?? "Player",
-      laid: seat.betsJson !== "[]",
-    })),
+    seats: lobby.seats.map((seat) => {
+      let bets: { id: string; amount: number }[] = [];
+      try {
+        const parsed = JSON.parse(seat.betsJson) as { id?: string; amount?: number }[];
+        if (Array.isArray(parsed)) {
+          bets = parsed.filter((row) => row.id && Number(row.amount) > 0).map((row) => ({ id: String(row.id), amount: Number(row.amount) }));
+        }
+      } catch {
+        bets = [];
+      }
+      return {
+        userId: seat.userId,
+        username: name.get(seat.userId) ?? "Player",
+        laid: bets.length > 0,
+        bets,
+      };
+    }),
     invites: lobby.invites.map((row) => ({ userId: row.toId, username: name.get(row.toId) ?? "Player" })),
     yourResult: mine?.resultJson ? (JSON.parse(mine.resultJson) as { number: string; returned: number; stake: number }) : null,
   };
@@ -218,6 +230,15 @@ export async function layBets(userId: string, lobbyId: string, rawBets: { id?: u
 export async function spinTable(hostId: string, lobbyId: string) {
   const lobby = await prisma.rouletteLobby.findUnique({ where: { id: lobbyId }, include: { seats: true } });
   if (!lobby || lobby.hostId !== hostId) throw new GameError(403, "NOT_HOST", "The host spins the wheel.");
+  const waiting = lobby.seats.some((seat) => {
+    try {
+      const bets = JSON.parse(seat.betsJson) as unknown[];
+      return !Array.isArray(bets) || bets.length === 0;
+    } catch {
+      return true;
+    }
+  });
+  if (waiting) throw new GameError(409, "WAITING", "Everyone at the table needs chips down, including you.");
   const number = randomInt(0, 37);
   for (const seat of lobby.seats) {
     const bets = JSON.parse(seat.betsJson) as { id: string; amount: number }[];
