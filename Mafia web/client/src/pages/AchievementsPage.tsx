@@ -20,13 +20,13 @@ export function AchievementsPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  async function load() {
+  async function reload() {
     const data = await load<{ achievements: RecordCard[] }>('/api/achievements')
     setRows(data.achievements)
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The record room is shut.'))
+    reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The record room is shut.'))
   }, [])
 
   async function claim(id: string) {
@@ -35,7 +35,7 @@ export function AchievementsPage() {
     try {
       const paid = await api<{ cash: number }>('/api/achievements/claim', { method: 'POST', body: JSON.stringify({ id }) })
       applyCash(paid.cash)
-      await load()
+      await reload()
       await refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The reward did not clear.')

@@ -24,13 +24,13 @@ export function ReputationPage() {
   const [busy, setBusy] = useState(false)
   const [shift, setShift] = useState(false)
 
-  async function load() {
+  async function reload() {
     const data = await load<Reputation>('/api/reputation')
     setFile(data)
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The standing did not load.'))
+    reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'The standing did not load.'))
   }, [])
 
   async function claim() {

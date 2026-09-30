@@ -26,7 +26,7 @@ export function MarketPage() {
   const [lots, setLots] = useState<SaleLot[] | null>(null)
   const [motors, setMotors] = useState<SaleLot[] | null>(null)
 
-  async function load() {
+  async function reload() {
     const weaponsPromise = load<Arsenal>('/api/me/weapons').then((weapons) => {
       setArsenal(weapons)
       return weapons
@@ -44,7 +44,7 @@ export function MarketPage() {
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the market.'))
+    reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Could not open the market.'))
   }, [])
 
   async function buy(itemId: string) {
@@ -58,7 +58,7 @@ export function MarketPage() {
       } else {
         await api('/api/properties/buy', { method: 'POST', body: JSON.stringify({ catalogId: itemId }) })
       }
-      await load()
+      await reload()
       void refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The stall refused the sale.')
@@ -72,7 +72,7 @@ export function MarketPage() {
     setError(null)
     try {
       await api('/api/shop/camera/upgrade', { method: 'POST', body: '{}' })
-      await load()
+      await reload()
       void refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The camera did not take the upgrade.')
@@ -86,7 +86,7 @@ export function MarketPage() {
     setError(null)
     try {
       await api('/api/weapons/equip', { method: 'POST', body: JSON.stringify({ weaponId }) })
-      await load()
+      await reload()
       void refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not equip that tool.')

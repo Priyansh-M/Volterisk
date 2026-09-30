@@ -24,7 +24,7 @@ export function WorkPage() {
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function load() {
+  async function reload() {
     const [data, jobs] = await Promise.all([
       load<WorkBoard>('/api/work/contracts'),
       load<{ jobs: PassiveJob[] }>('/api/work/passive'),
@@ -35,7 +35,7 @@ export function WorkPage() {
   }
 
   useEffect(() => {
-    load().catch((err: unknown) => {
+    reload().catch((err: unknown) => {
       if (isMissing(err)) {
         setMissing(true)
         setBoard({ active: null, contracts: [] })
@@ -54,7 +54,7 @@ export function WorkPage() {
         method: 'POST',
         body: JSON.stringify({ contractId }),
       })
-      await load()
+      await reload()
       setNote('The job is on the clock.')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The board refused that job.')
@@ -75,7 +75,7 @@ export function WorkPage() {
     try {
       const paid = await api<{ reward: number; cash: number }>('/api/work/contracts/collect', { method: 'POST', body: '{}' })
       applyCash(paid.cash)
-      void load()
+      void reload()
       void refresh()
     } catch (err) {
       applyCash(snapshot)
@@ -97,10 +97,10 @@ export function WorkPage() {
         body: JSON.stringify({ jobId: job.id }),
       })
       setNote(`${picked.name} is your current job. ${money(picked.payPerDay)} lands at 12:00 GMT.`)
-      void load()
+      void reload()
       void refresh()
     } catch (err) {
-      void load()
+      void reload()
       setError(err instanceof ApiError ? err.message : 'That job is not open.')
     } finally {
       setBusy(false)
