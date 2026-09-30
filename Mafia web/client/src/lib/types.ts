@@ -114,6 +114,7 @@ export type HistoryRow = {
 
 export type Leaderboard = {
   richest: { rank: number; username: string; netWorth: number; level?: number; successfulHeists?: number; base?: string | null }[]
+  you?: { rank: number; username: string; netWorth: number; level?: number; successfulHeists?: number; base?: string | null } | null
   heisters: { rank: number; username: string; successfulHeists: number }[]
   largestHeists: {
     rank: number

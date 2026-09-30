@@ -14,20 +14,40 @@ type Row = {
   base: string | null
 }
 
-function toRows(board: Leaderboard): Row[] {
-  return board.richest.map((row) => ({
+function RankRow({ row, mine }: { row: Row; mine: boolean }) {
+  return (
+    <tr className={mine ? 'border-t border-line bg-gold/10 text-gold' : 'border-t border-line'}>
+      <td className="px-3 py-2 tabular-nums">{row.rank}</td>
+      <td className="px-3 py-2">{row.username}</td>
+      <td className="px-3 py-2">{row.level ?? '—'}</td>
+      <td className="px-3 py-2 text-gold">{money(row.netWorth)}</td>
+      <td className="px-3 py-2">{row.heists ?? '—'}</td>
+      <td className="px-3 py-2">{row.base ?? '—'}</td>
+    </tr>
+  )
+}
+
+function toRow(row: Leaderboard['richest'][number]): Row {
+  return {
     rank: row.rank,
     username: row.username,
     netWorth: row.netWorth,
     level: row.level ?? null,
     heists: row.successfulHeists ?? null,
     base: row.base ?? null,
-  }))
+  }
+}
+
+function toRows(board: Leaderboard): { listed: Row[]; you: Row | null } {
+  return {
+    listed: board.richest.map(toRow),
+    you: board.you ? toRow(board.you) : null,
+  }
 }
 
 export function LeaderboardPage() {
   const { me } = useAuth()
-  const [rows, setRows] = useState<Row[] | null>(() => {
+  const [rows, setRows] = useState<{ listed: Row[]; you: Row | null } | null>(() => {
     const board = peek<Leaderboard>('/api/leaderboard')
     return board ? toRows(board) : null
   })
@@ -53,7 +73,7 @@ export function LeaderboardPage() {
   return (
     <div className="space-y-4">
       <PageTitle kicker="Standings">Intelligence ranking</PageTitle>
-      {rows.length === 0 ? <Notice tone="muted">No accounts on the book yet.</Notice> : null}
+      {rows.listed.length === 0 ? <Notice tone="muted">No accounts on the book yet.</Notice> : null}
       <div className="overflow-x-auto border border-line">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-panel text-[10px] tracking-[0.16em] text-muted uppercase">
@@ -67,19 +87,10 @@ export function LeaderboardPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
-              const mine = me?.username === row.username
-              return (
-                <tr key={row.username} className={mine ? 'bg-gold/10 text-gold' : 'border-t border-line'}>
-                  <td className="px-3 py-2 tabular-nums">{row.rank}</td>
-                  <td className="px-3 py-2">{row.username}</td>
-                  <td className="px-3 py-2">{row.level ?? '—'}</td>
-                  <td className="px-3 py-2 text-gold">{money(row.netWorth)}</td>
-                  <td className="px-3 py-2">{row.heists ?? '—'}</td>
-                  <td className="px-3 py-2">{row.base ?? '—'}</td>
-                </tr>
-              )
-            })}
+            {rows.listed.map((row) => (
+              <RankRow key={row.username} row={row} mine={me?.username === row.username} />
+            ))}
+            {rows.you ? <RankRow row={rows.you} mine /> : null}
           </tbody>
         </table>
       </div>

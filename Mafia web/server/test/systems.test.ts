@@ -304,7 +304,7 @@ describe("leaderboard", () => {
 
     const res = await request(app).get("/api/leaderboard").set(auth(player.token));
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(["heisters", "largestHeists", "richest"]);
+    expect(Object.keys(res.body).sort()).toEqual(["heisters", "largestHeists", "richest", "you"]);
     expect(res.body.richest.map((row: { username: string }) => row.username)).toContain(player.username);
     expect(res.body.richest.map((row: { username: string }) => row.username)).not.toContain(bot.username);
     expect(res.body.heisters.map((row: { username: string }) => row.username)).not.toContain(bot.username);

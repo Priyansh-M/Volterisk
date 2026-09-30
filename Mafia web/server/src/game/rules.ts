@@ -287,7 +287,7 @@ export const RULES = {
   INSIDE_JOB_DAYS: 7,
   BIG_SPENDER_CENTS: 1_000_000,
   PAPER_TRAIL_COUNT: 100,
-  LEADERBOARD_SIZE: 3,
+  LEADERBOARD_SIZE: 25,
   PASSIVE_JOBS: [
     { id: "volunteer", name: "Volunteer", payPerDay: 300, requires: [] },
     { id: "mail-man", name: "Mail Man", payPerDay: 450, requires: [] },

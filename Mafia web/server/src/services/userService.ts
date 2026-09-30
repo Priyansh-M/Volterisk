@@ -241,13 +241,13 @@ export async function getProfile(userId: string) {
   };
 }
 
-export async function getLeaderboard() {
+export async function getLeaderboard(viewerId?: string) {
   const users = await prisma.user.findMany({
     where: { isBot: false },
     include: { vault: true, base: true },
   });
   if (users.length === 0) {
-    return { richest: [], heisters: [], largestHeists: [] };
+    return { richest: [], you: null, heisters: [], largestHeists: [] };
   }
   const realIds = users.map((user) => user.id);
 
@@ -257,17 +257,28 @@ export async function getLeaderboard() {
     _count: { _all: true },
   });
   const wins = new Map(grouped.map((row) => [row.attackerId, row._count._all]));
-  const richest = users
+  const ordered = users
     .map((user) => ({
+      id: user.id,
       username: user.username,
       netWorth: user.cash + (user.vault?.balance ?? 0),
       level: user.reputationLevel,
       successfulHeists: wins.get(user.id) ?? 0,
       base: user.base?.regionName ?? null,
     }))
-    .sort((a, b) => b.netWorth - a.netWorth || a.username.localeCompare(b.username))
-    .slice(0, RULES.LEADERBOARD_SIZE)
-    .map((row, index) => ({ rank: index + 1, ...row }));
+    .sort((a, b) => b.netWorth - a.netWorth || a.username.localeCompare(b.username));
+  let placed = 0;
+  let previousWorth: number | null = null;
+  const ranked = ordered.map((row, index) => {
+    if (previousWorth === null || row.netWorth !== previousWorth) {
+      placed = index + 1;
+      previousWorth = row.netWorth;
+    }
+    return { rank: placed, username: row.username, netWorth: row.netWorth, level: row.level, successfulHeists: row.successfulHeists, base: row.base, id: row.id };
+  });
+  const richest = ranked.filter((row) => row.rank <= RULES.LEADERBOARD_SIZE).map(({ id: _id, ...row }) => row);
+  const viewer = viewerId ? ranked.find((row) => row.id === viewerId) : undefined;
+  const you = viewer && viewer.rank > RULES.LEADERBOARD_SIZE ? (({ id: _id, ...row }) => row)(viewer) : null;
 
   const names = new Map(users.map((user) => [user.id, user.username]));
   const heisters = grouped
@@ -292,6 +303,7 @@ export async function getLeaderboard() {
 
   return {
     richest,
+    you,
     heisters,
     largestHeists: biggest.map((row, index) => ({
       rank: index + 1,

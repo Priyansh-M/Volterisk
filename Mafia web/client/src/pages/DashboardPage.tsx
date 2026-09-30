@@ -108,7 +108,7 @@ export function DashboardPage() {
             <p className="font-mono text-[10px] text-muted">Every 3 days</p>
           </div>
           <p className="mt-2 font-serif text-3xl text-gold">{community ? money(community.totalMoney) : '—'}</p>
-          <p className="mt-1 text-[12px] text-muted">Pocket plus vault for every registered player. The ranking only lists the top 3.</p>
+          <p className="mt-1 text-[12px] text-muted">Pocket plus vault for every registered player. The ranking lists the top 25, and anyone tied on the last rung.</p>
           {community ? <MoneyPlot series={community.series} /> : <p className="mt-6 text-sm text-muted">Drawing the line…</p>}
         </Panel>
       </section>
