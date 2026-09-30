@@ -43,7 +43,10 @@ export function LedgerAlerts({
           } catch {
             parsed = {}
           }
-          if (parsed.lobbyId) setInvite({ id: tableInvite.id, by: parsed.by ?? 'A player', lobbyId: parsed.lobbyId })
+          if (parsed.lobbyId) {
+          setInvite({ id: tableInvite.id, by: parsed.by ?? 'A player', lobbyId: parsed.lobbyId })
+          void import('../pages/RoulettePage.tsx')
+        }
         }
         const next = alerts.unlocked[0]
         const report = notes.notifications.find(
@@ -69,8 +72,8 @@ export function LedgerAlerts({
         /* the desk will try again */
       }
     }
-    const start = window.setTimeout(() => void poll(), 1500)
-    const timer = window.setInterval(() => void poll(), 30000)
+        const start = window.setTimeout(() => void poll(), 800)
+        const timer = window.setInterval(() => void poll(), 8000)
     return () => {
       cancelled = true
       window.clearTimeout(start)
@@ -120,9 +123,11 @@ export function LedgerAlerts({
             onClick={() => {
               const next = invite
               setInvite(null)
-              void api(`/api/notifications/${next.id}/read`, { method: 'POST', body: '{}' })
-              void api(`/api/casino/lobby/${next.lobbyId}/join`, { method: 'POST', body: '{}' })
-              navigate(`/casino/roulette?lobby=${encodeURIComponent(next.lobbyId)}`)
+              void import('../pages/RoulettePage.tsx')
+              void Promise.all([
+                api(`/api/notifications/${next.id}/read`, { method: 'POST', body: '{}' }),
+                api(`/api/casino/lobby/${next.lobbyId}/join`, { method: 'POST', body: '{}' }),
+              ]).finally(() => navigate(`/casino/roulette?lobby=${encodeURIComponent(next.lobbyId)}`))
             }}
           >
             Sit down

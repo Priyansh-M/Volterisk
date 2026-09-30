@@ -71,7 +71,17 @@ export function RoulettePage() {
         setSeenSpin(room.spinToken)
         setMode('lobby')
       })
-      .catch(() => setMode('ask'))
+      .catch(() => {
+        window.setTimeout(() => {
+          api<Lobby>(`/api/casino/lobby/${joined}`)
+            .then((room) => {
+              setLobby(room)
+              setSeenSpin(room.spinToken)
+              setMode('lobby')
+            })
+            .catch(() => setMode('ask'))
+        }, 250)
+      })
   }, [joined])
 
   useEffect(() => {
@@ -271,7 +281,7 @@ export function RoulettePage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
           <ChipList chips={chips} selectedChip={chip} onChipPressed={setChip} />
-          {lobby && mode === 'lobby' ? <OtherBets seats={lobby.seats.filter((seat) => seat.userId !== me?.id)} /> : null}
+          {lobby && mode === 'lobby' ? <OtherBets seats={lobby.seats.filter((seat) => seat.userId !== me?.id && seat.laid)} /> : null}
           <div className="flex flex-col items-end gap-2">
             <p className="font-mono text-sm text-foreground">
               On the felt <span className="text-primary">{money(total)}</span>
@@ -282,7 +292,7 @@ export function RoulettePage() {
       </div>
       {lobby && mode === 'lobby' ? (
         <section className="border border-border bg-card p-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Table · {lobby.seats.length}/5 · host {lobby.hostName}</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Table · {lobby.seats.length}/5 · host: {lobby.hostName}</p>
           <ul className="mt-2 text-sm">
             {lobby.seats.map((seat) => (
               <li key={seat.userId} className="mt-2 flex flex-wrap items-center gap-2">
