@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { RouletteLayoutType } from "../types";
+import type { RouletteLayoutType } from "../types";
 import { getRandomRange } from "../utills";
 import wheelRotationConfig from '../config/wheelRotationConfig.json';
 

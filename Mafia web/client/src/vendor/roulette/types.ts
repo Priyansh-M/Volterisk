@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { ImgHTMLAttributes } from 'react';
 import { ACTION_TYPES } from './constants';
 

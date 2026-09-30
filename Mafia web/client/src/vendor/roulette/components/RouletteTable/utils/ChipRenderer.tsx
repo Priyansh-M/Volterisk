@@ -1,9 +1,9 @@
-// @ts-nocheck
-import React, { ReactNode, useContext } from "react";
+import React, { useContext } from "react";
+import type { ReactNode } from "react";
 import { findChipIcon, shouldRenderChip } from "../../../helpers";
 import { Chip } from "../Chip";
 import { RouletteTableContext } from "../../../context";
-import { BetId } from "../../../types";
+import type { BetId } from "../../../types";
 
 interface ChipRendererProps {
     cName: string,

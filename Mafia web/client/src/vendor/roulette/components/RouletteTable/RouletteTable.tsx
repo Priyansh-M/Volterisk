@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import type { FC, MouseEvent } from 'react';
 
@@ -16,7 +15,7 @@ import { classNames } from '../../libs';
 
 import './RouletteTable.css';
 import './RouletteTableCells.css';
-import { BetId, IRouletteTableProps } from '../../types';
+import type { BetId, IRouletteTableProps } from '../../types';
 
 export const RouletteTable: FC<IRouletteTableProps> = ({
   onBet,

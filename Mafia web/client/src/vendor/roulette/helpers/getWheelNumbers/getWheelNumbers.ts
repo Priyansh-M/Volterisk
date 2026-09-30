@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { RouletteLayoutType } from '../../types';
+import type { RouletteLayoutType } from '../../types';
 
 /**
  * Returns the numbers for the roulette wheel in the official order.

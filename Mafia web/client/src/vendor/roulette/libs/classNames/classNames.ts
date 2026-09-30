@@ -1,4 +1,3 @@
-// @ts-nocheck
 const isArray = (item: unknown) => Array.isArray(item);
 
 const isObject = (item: unknown) =>

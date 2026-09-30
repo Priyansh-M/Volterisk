@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Shell } from './components/Shell.tsx'
 import { useAuth } from './lib/auth.tsx'
@@ -18,9 +19,10 @@ import { ProfilePage } from './pages/ProfilePage.tsx'
 import { ReputationPage } from './pages/ReputationPage.tsx'
 import { PropertiesPage } from './pages/PropertiesPage.tsx'
 import { RegisterPage } from './pages/RegisterPage.tsx'
-import { RoulettePage } from './pages/RoulettePage.tsx'
 import { VaultPage } from './pages/VaultPage.tsx'
 import { WorkPage } from './pages/WorkPage.tsx'
+
+const RoulettePage = lazy(() => import('./pages/RoulettePage.tsx').then((mod) => ({ default: mod.RoulettePage })))
 
 function Protected() {
   const { me, loading } = useAuth()
@@ -59,7 +61,7 @@ export default function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
-        <Route path="/casino/roulette" element={<RoulettePage />} />
+        <Route path="/casino/roulette" element={<Suspense fallback={<p className="text-sm text-muted">Opening the wheel…</p>}><RoulettePage /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

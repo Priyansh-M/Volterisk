@@ -1,10 +1,9 @@
-// @ts-nocheck
 import React from "react";
 import { ACTION_TYPES } from "../../../../constants";
-import { IRouletteTableContextProps } from "../../../../context";
+import type { IRouletteTableContextProps } from "../../../../context";
 import { findChipIcon, shouldRenderChip } from "../../../../helpers";
 import { Chip } from "../../Chip";
-import { Chips, RouletteLayoutType } from "../../../../types";
+import type { Chips, RouletteLayoutType } from "../../../../types";
 import { ChipRenderer } from "../../utils/ChipRenderer";
 
 export function DoubleZero({ layoutType, bets, chips }: { layoutType: RouletteLayoutType, bets: IRouletteTableContextProps['bets'], chips: Chips }) {

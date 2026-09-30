@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useContext } from 'react';
 import type { FC } from 'react';
 
@@ -17,7 +16,7 @@ import {
 } from '../../../helpers';
 import { ACTION_TYPES } from '../../../constants';
 import { ChipRenderer } from '../utils/ChipRenderer';
-import { BetId, RouletteLayoutType } from '../../../types';
+import type { BetId, RouletteLayoutType } from '../../../types';
 
 const NUMBERS = Array.from({ length: 36 }, (_, i) => i + 1);
 

@@ -1,9 +1,8 @@
-// @ts-nocheck
 import React from 'react';
 
 import './ChipList.css';
 import ChipItem from './components/ChipItem';
-import { IChipListProps } from '../../types';
+import type { IChipListProps } from '../../types';
 
 export const ChipList: React.FC<IChipListProps> = ({
     chips,

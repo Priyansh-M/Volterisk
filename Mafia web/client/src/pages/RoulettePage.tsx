@@ -4,6 +4,7 @@ import type { AvailableNumbers, IOnBetParams } from '../vendor/roulette/types.ts
 import { ApiError, api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
+import './roulette-skin.css'
 
 const chips = {
   '1': '/roulette/white-chip.png',
@@ -88,7 +89,7 @@ export function RoulettePage() {
           Only 5% of your total can be gambled. Cap {money(cap)}. Cash on hand {money(cash)}. On the felt {money(total)}.
         </p>
       </div>
-      <div className="overflow-x-auto border border-border bg-card p-3">
+      <div className="volterisk-roulette overflow-x-auto border border-border bg-card p-3">
         <RouletteWheel start={spinning} winningBet={winner} layoutType="european" onSpinningEnd={() => { setSpinning(false); clearBets() }} />
         <RouletteTable chips={chips} bets={bets} onBet={place} layoutType="european" readOnly={spinning} />
         <div className="mt-3">

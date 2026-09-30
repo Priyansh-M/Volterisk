@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { useMemo, useState } from "react";
-import { BetId, Bets, IUseRouletteResult } from "../types";
+import type { BetId, Bets, IUseRouletteResult } from "../types";
 import { calculatePayout, getPayloadFromBetId } from "../helpers/payoutCalculator";
 
 export function useRoulette(): IUseRouletteResult {

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { BetType, Chips } from '../../types';
+import type { BetType, Chips } from '../../types';
 
 export const findChipIcon = (bet: BetType, chips: Chips) => {
   if (!bet) return null;

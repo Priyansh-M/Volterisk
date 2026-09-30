@@ -1,9 +1,8 @@
-// @ts-nocheck
 import React, { useContext } from 'react';
 import type { FC } from 'react';
 
 import { RouletteTableContext } from '../../../context';
-import { RouletteLayoutType } from '../../../types';
+import type { RouletteLayoutType } from '../../../types';
 import { DoubleZero, SingleZero } from './components';
 
 interface IZeroBetsProps {

@@ -1,8 +1,7 @@
-// @ts-nocheck
 import { createContext } from 'react';
 import type { MouseEvent } from 'react';
 
-import { Bets, Chips } from '../types';
+import type { Bets, Chips } from '../types';
 
 export interface IRouletteTableContextProps {
   bets: Bets;

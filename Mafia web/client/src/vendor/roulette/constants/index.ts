@@ -1,4 +1,3 @@
-// @ts-nocheck
 export const ACTION_TYPES = {
   0: '0',
   '00': '00',

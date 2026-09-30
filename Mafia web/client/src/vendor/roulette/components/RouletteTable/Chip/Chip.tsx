@@ -1,9 +1,8 @@
-// @ts-nocheck
 import React from 'react';
 import type { FC } from 'react';
 
 import './Chip.css';
-import { BetType, IRouletteTableProps } from '../../../types';
+import type { BetType, IRouletteTableProps } from '../../../types';
 
 export interface IChipProps {
   position:

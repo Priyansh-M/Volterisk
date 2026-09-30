@@ -1,8 +1,7 @@
-// @ts-nocheck
 import React from 'react'
 import { classNames } from '../../../libs'
 import "./ChipItem.css";
-import { IChipListProps } from '../../../types';
+import type { IChipListProps } from '../../../types';
 import { calculateFontSize } from '../utils/chipItem';
 
 interface IChipItemProps {

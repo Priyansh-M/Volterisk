@@ -1,11 +1,10 @@
-// @ts-nocheck
 import React, { useEffect, useState, useRef } from 'react';
 import { calculateDefaultRotation, calculateSpinToRotation, getWheelNumbers } from '../../helpers';
 import { classNames } from '../../libs';
 
 import './RouletteWheel.css';
 import './RouletteWheelNumbers.css';
-import { IRouletteWheelProps } from '../../types';
+import type { IRouletteWheelProps } from '../../types';
 
 export const RouletteWheel: React.FC<IRouletteWheelProps> = ({
   start,

@@ -1,4 +1,3 @@
-// @ts-nocheck
 export function calculateFontSize(value: string, chipSize: number) {
     /*
         When chipSize: 64px, the font-size: 25px, 20px or 17px based on the length of the text.
