@@ -23,7 +23,7 @@ import {
 } from './Icons.tsx'
 
 const warm: Record<string, string[]> = {
-  '/': ['/api/me', '/api/heists/history', '/api/heists/targets', '/api/work/contracts', '/api/work/passive', '/api/community'],
+  '/': ['/api/heists/history', '/api/work/contracts', '/api/community'],
   '/heists': ['/api/heists/targets', '/api/me/weapons', '/api/shop'],
   '/assets': ['/api/properties'],
   '/market': ['/api/me/weapons', '/api/shop', '/api/properties'],
@@ -84,10 +84,6 @@ export function Shell() {
   useEffect(() => {
     if (typeof me?.unclaimedAchievements === 'number') setUnclaimed(me.unclaimedAchievements)
   }, [me?.unclaimedAchievements])
-
-  useEffect(() => {
-    Object.values(warm).flat().forEach(prefetch)
-  }, [])
 
   useEffect(() => {
     if (location.pathname === '/' && sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
