@@ -97,7 +97,7 @@ export function Shell() {
   const heat = me.heat ?? 0
   const heatLabel = heat > 50 ? 'High' : heat > 20 ? 'Medium' : 'Low'
   const initial = me.username.slice(0, 2).toUpperCase()
-  const meta = pageMeta[location.pathname] ?? ['Blackledger', 'Private network.']
+  const meta = pageMeta[location.pathname] ?? ['Volterisk', 'Private network.']
   const stamp = new Date().toLocaleString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -123,7 +123,7 @@ export function Shell() {
             <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-primary font-display text-lg font-bold text-primary">B</span>
             {collapsed ? null : (
               <span>
-                <span className="block font-display text-lg font-semibold uppercase leading-none text-foreground">Blackledger</span>
+                <span className="block font-display text-lg font-semibold uppercase leading-none text-foreground">Volterisk</span>
                 <span className="font-mono text-[8px] uppercase text-muted-foreground">Private network</span>
               </span>
             )}
@@ -218,16 +218,16 @@ export function Shell() {
             <button type="button" className="border border-border px-2 py-1 font-mono text-[10px] uppercase lg:hidden" onClick={() => setMobileOpen(true)}>
               Menu
             </button>
+            <NavLink id="heat-readout" to="/heat" className="flex items-center gap-2 text-xs text-foreground no-underline">
+              <span className="text-muted-foreground">Heat</span>
+              <b>{me.heat ?? 0}</b>
+              <span className={heatLabel === 'High' ? 'text-destructive' : 'text-muted-foreground'}>{heatLabel}</span>
+            </NavLink>
             <div className="hidden items-center gap-2 text-xs text-success sm:flex">
               <span className="h-1.5 w-1.5 bg-success" /> Network online
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-5">
-            <NavLink to="/heat" className="hidden items-center gap-2 text-xs text-foreground no-underline sm:flex">
-              <span className="text-muted-foreground">Heat</span>
-              <b>{me.heat ?? 0}</b>
-              <span className={heatLabel === 'High' ? 'text-destructive' : 'text-muted-foreground'}>{heatLabel}</span>
-            </NavLink>
             <div className="border-l border-border pl-3 sm:pl-5">
               <span className="block font-mono text-[8px] uppercase text-muted-foreground">Total balance</span>
               <b className="font-mono text-xs">{money(me.cash + me.vault.balance)}</b>
@@ -247,7 +247,7 @@ export function Shell() {
         <div className="p-4 md:p-6 xl:p-8">
           <div className="mb-6 flex items-end justify-between border-b border-border pb-5">
             <div>
-              <p className="font-mono text-[9px] uppercase text-primary">Blackledger / {location.pathname === '/' ? 'dashboard' : location.pathname.slice(1)}</p>
+              <p className="font-mono text-[9px] uppercase text-primary">Volterisk / {location.pathname === '/' ? 'dashboard' : location.pathname.slice(1)}</p>
               <h1 className="font-display text-4xl font-semibold uppercase md:text-5xl">{meta[0]}</h1>
               {meta[1] ? <p className="mt-1 max-w-xl text-sm text-muted-foreground">{meta[1]}</p> : null}
             </div>

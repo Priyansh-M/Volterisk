@@ -6,8 +6,10 @@ import { writeNotification } from "./notificationService.js";
 
 const STEP_MS = RULES.HEAT_DECAY_HOURS * 60 * 60 * 1000;
 
-function utcDay(date: Date): string {
-  return date.toISOString().slice(0, 10);
+function latestNoon(now: Date): Date {
+  const noon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0, 0));
+  if (now.getTime() < noon.getTime()) noon.setUTCDate(noon.getUTCDate() - 1);
+  return noon;
 }
 
 function decayed(heat: number, settledAt: Date, now: Date): { heat: number; settledAt: Date } {
@@ -29,9 +31,11 @@ async function applyHeat(
   if (!user || user.isBot) return 0;
   const cooled = decayed(user.heat, user.heatSettledAt, now);
   let heat = Math.max(0, cooled.heat + delta);
-  const today = utcDay(now);
+  const noon = latestNoon(now);
+  const stamp = noon.toISOString();
+  const judged = user.heatJudgedOn && user.heatJudgedOn.length === 10 ? `${user.heatJudgedOn}T00:00:00.000Z` : user.heatJudgedOn;
   let seized = 0;
-  if (user.heatJudgedOn && user.heatJudgedOn < today && heat > RULES.HEAT_POLICE_AT) {
+  if (judged && judged < stamp && heat > RULES.HEAT_POLICE_AT) {
     const roll = randomInt(1, 101);
     if (roll <= RULES.HEAT_POLICE_CHANCE && user.cash > 0) {
       seized = user.cash;
@@ -42,7 +46,7 @@ async function applyHeat(
       await writeNotification(tx, {
         userId,
         title: "Cash seized",
-        body: `Heat ${heat} at the end of the day. The police took ${seized.toLocaleString("en-US")} in cash.`,
+        body: `Heat ${heat} at 12:00 GMT. The police took ${seized.toLocaleString("en-US")} from your pocket. The vault was left alone.`,
         severity: "CRITICAL",
       });
     }
@@ -52,7 +56,7 @@ async function applyHeat(
     data: {
       heat,
       heatSettledAt: cooled.settledAt,
-      heatJudgedOn: today,
+      heatJudgedOn: stamp,
     },
   });
   return heat;

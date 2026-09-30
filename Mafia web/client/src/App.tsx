@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage.tsx'
 import { HeatPage } from './pages/HeatPage.tsx'
 import { HeistsPage } from './pages/HeistsPage.tsx'
 import { LeaderboardPage } from './pages/LeaderboardPage.tsx'
+import { HomePage } from './pages/HomePage.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { MapPage } from './pages/MapPage.tsx'
 import { MarketPage } from './pages/MarketPage.tsx'
@@ -29,7 +30,7 @@ function Protected() {
       </div>
     )
   }
-  if (!me) return <Navigate to="/login" replace />
+  if (!me) return <Navigate to="/welcome" replace />
   if (!me.onboarding.hasClaimedStarter || !me.onboarding.hasBase) return <OnboardingPage />
   return <Shell />
 }
@@ -37,6 +38,7 @@ function Protected() {
 export default function App() {
   return (
     <Routes>
+      <Route path="/welcome" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route element={<Protected />}>

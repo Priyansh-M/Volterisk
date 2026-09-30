@@ -132,7 +132,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
         {onboarding ? null : (
           <aside className="border border-line bg-panel p-4">
             <p className="text-[10px] tracking-[0.22em] text-muted uppercase">World intelligence</p>
-            <h2 className="mt-1 font-serif text-xl tracking-[0.12em]">VELMORA</h2>
+            <h2 className="mt-1 font-serif text-xl tracking-[0.12em]">VOLTERISK</h2>
             <dl className="mt-4 space-y-2 text-sm">
               <Intel label="Sectors" value={String(SECTORS.length)} />
               <Intel label="Occupied" value={pins ? String(pins.length) : '—'} />

@@ -13,12 +13,12 @@ export type Landmass = {
   label: Pt
 }
 
-/** Paper chart bounds. The coastline is traced from the Velmora plate. */
+/** Paper chart bounds. The coastline is the Volterisk plate. */
 export const WORLD = { width: 520, height: 760 }
 
 const velmora: Landmass = {
   id: 'velmora',
-  name: 'Velmora',
+  name: 'Volterisk',
   step: 22,
   label: [300, 340],
   polygon: [
@@ -99,13 +99,13 @@ const velmora: Landmass = {
 
 export const LANDMASSES: Landmass[] = [velmora]
 
-/** Nothing sits outside the Velmora outline. */
+/** Nothing sits outside the Volterisk outline. */
 export const ISLANDS: Pt[][] = []
 
 export const SEA_LABELS: { name: string; at: Pt }[] = []
 
 /**
- * Five points on Velmora. Night-crew stations use the sectors these resolve to.
+ * Five points on Volterisk. Night-crew stations use the sectors these resolve to.
  * The server stores the same sector ids so the squares stay occupied.
  */
 export const NPC_STATION_MARKS = [

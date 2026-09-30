@@ -206,7 +206,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#efe6d4]">
           <div className="text-center">
             <p className="font-mono text-[10px] tracking-[0.22em] text-[#6d6860] uppercase">Loading the chart</p>
-            <p className="mt-2 font-display text-3xl font-semibold uppercase text-[#1c1c1c]">Velmora</p>
+            <p className="mt-2 font-display text-3xl font-semibold uppercase text-[#1c1c1c]">Volterisk</p>
           </div>
         </div>
       ) : null}
@@ -371,7 +371,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
       </svg>
 
       <div className="pointer-events-none absolute bottom-3 left-3 border border-[#1c1c1c]/30 bg-[#f7f4ee]/90 px-2.5 py-2 text-[#1c1c1c]">
-        <p className="font-serif text-[13px] tracking-[0.22em]">VELMORA</p>
+        <p className="font-serif text-[13px] tracking-[0.22em]">VOLTERISK</p>
         <p className="mt-1 text-[10px] tracking-[0.16em] uppercase">{SECTORS.length} sectors</p>
         <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">{LANDMASSES[0]?.regions.length ?? 0} regions</p>
         <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">Continent</p>
