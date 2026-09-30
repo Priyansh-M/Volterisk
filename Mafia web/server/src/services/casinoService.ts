@@ -246,7 +246,18 @@ export async function leaveLobby(userId: string, lobbyId: string) {
   const lobby = await prisma.rouletteLobby.findUnique({ where: { id: lobbyId }, include: { seats: true } });
   if (!lobby) return { ok: true };
   if (lobby.hostId === userId) {
-    await prisma.rouletteLobby.delete({ where: { id: lobbyId } });
+    const others = lobby.seats.filter((seat) => seat.userId !== userId);
+    await prisma.$transaction(async (tx) => {
+      for (const seat of others) {
+        await writeNotification(tx, {
+          userId: seat.userId,
+          title: "Game ended",
+          body: "Game has ended",
+          severity: "INFO",
+        });
+      }
+      await tx.rouletteLobby.delete({ where: { id: lobbyId } });
+    });
     return { ok: true, closed: true };
   }
   await prisma.rouletteSeat.deleteMany({ where: { lobbyId, userId } });

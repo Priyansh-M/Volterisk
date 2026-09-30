@@ -19,6 +19,7 @@ export function LedgerAlerts({
   const [unlock, setUnlock] = useState<Unlock | null>(null)
   const [heist, setHeist] = useState<HeistNotice | null>(null)
   const [invite, setInvite] = useState<{ id: string; by: string; lobbyId: string } | null>(null)
+  const [tableEnded, setTableEnded] = useState<string | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -32,6 +33,8 @@ export function LedgerAlerts({
         if (cancelled) return
         onChangeRef.current(notes.notifications.filter((row) => row.read !== true).length)
         if (typeof alerts.unclaimed === 'number') onUnclaimed?.(alerts.unclaimed)
+        const endedNote = notes.notifications.find((row) => row.read !== true && row.title === 'Game ended')
+        if (endedNote) setTableEnded(endedNote.id)
         const tableInvite = notes.notifications.find((row) => row.read !== true && row.title === 'Roulette invite')
         if (tableInvite) {
           let parsed: { by?: string; lobbyId?: string } = {}
@@ -87,11 +90,26 @@ export function LedgerAlerts({
     onChange()
   }
 
-  if (!unlock && !heist && !invite) return null
+  if (!unlock && !heist && !invite && !tableEnded) return null
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/75 p-4">
-      {invite ? (
+      {tableEnded ? (
+        <section className="animate-dossier w-full max-w-md border border-border bg-card p-8 text-center shadow-2xl">
+          <h2 className="font-display text-4xl font-semibold uppercase">Game has ended</h2>
+          <button
+            type="button"
+            className="gloss-gold mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+            onClick={() => {
+              const id = tableEnded
+              setTableEnded(null)
+              void api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' })
+            }}
+          >
+            Close
+          </button>
+        </section>
+      ) : invite ? (
         <section className="animate-dossier w-full max-w-md border border-primary bg-card p-8 text-center shadow-2xl">
           <p className="font-mono text-[10px] uppercase text-primary">Table</p>
           <h2 className="mt-3 font-display text-3xl font-semibold uppercase">You have been invited to a round of roulette</h2>

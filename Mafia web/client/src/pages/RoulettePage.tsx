@@ -48,6 +48,7 @@ export function RoulettePage() {
   const [rules, setRules] = useState(() => sessionStorage.getItem(SEEN) !== '1')
   const [table, setTable] = useState<TableState | null>(null)
   const [verdict, setVerdict] = useState<Verdict | null>(null)
+  const [ended, setEnded] = useState(false)
   const cash = me?.cash ?? 0
   const cap = table?.cap ?? 0
   const staked = table?.staked ?? 0
@@ -85,7 +86,13 @@ export function RoulettePage() {
             if (room.yourResult) setVerdict(room.yourResult)
           }
         })
-        .catch(() => undefined)
+        .catch((err: unknown) => {
+          if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
+            setLobby(null)
+            setMode('ask')
+            setEnded(true)
+          }
+        })
     }, 4000)
     return () => window.clearInterval(timer)
   }, [mode, lobby?.id, seenSpin])
@@ -177,6 +184,16 @@ export function RoulettePage() {
 
   return (
     <div className="relative space-y-4">
+      {ended ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-background/80 p-4">
+          <section className="w-full max-w-md border border-border bg-card p-8 text-center">
+            <h2 className="font-display text-4xl font-semibold uppercase">Game has ended</h2>
+            <button type="button" className="gloss-gold mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={() => setEnded(false)}>
+              Close
+            </button>
+          </section>
+        </div>
+      ) : null}
       {mode === 'ask' ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/80 p-4">
           <section className="w-full max-w-md border border-primary bg-card p-6 text-center">
@@ -246,9 +263,12 @@ export function RoulettePage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
           <ChipList chips={chips} selectedChip={chip} onChipPressed={setChip} />
-          <p className="font-mono text-sm text-foreground">
-            On the felt <span className="text-primary">{money(total)}</span>
-          </p>
+          <div className="flex flex-col items-end gap-2">
+            <p className="font-mono text-sm text-foreground">
+              On the felt <span className="text-primary">{money(total)}</span>
+            </p>
+            {total > 0 ? <span className="border border-primary bg-primary/15 px-2 py-1 font-mono text-[11px] tracking-[0.14em] text-primary">[CHIPS HAVE BEEN PLACED]</span> : null}
+          </div>
         </div>
       </div>
       {lobby && mode === 'lobby' ? (
@@ -256,10 +276,14 @@ export function RoulettePage() {
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Table · {lobby.seats.length}/5 · host {lobby.hostName}</p>
           <ul className="mt-2 text-sm">
             {lobby.seats.map((seat) => (
-              <li key={seat.userId}>{seat.username}{seat.laid ? ' · chips down' : ''}</li>
+              <li key={seat.userId} className="mt-2 flex flex-wrap items-center gap-2">
+                <span>{seat.username}</span>
+                {seat.laid ? <span className="border border-primary bg-primary/15 px-2 py-1 font-mono text-[11px] tracking-[0.14em] text-primary">[CHIPS HAVE BEEN PLACED]</span> : null}
+              </li>
             ))}
           </ul>
           {lobby.youAreHost ? (
+            <>
             <div className="relative mt-3 max-w-md">
               <input className={inputClass} value={query} placeholder="Search a player" onChange={(event) => setQuery(event.target.value)} />
               {found.length ? (
@@ -273,6 +297,19 @@ export function RoulettePage() {
                 </ul>
               ) : null}
             </div>
+            <button
+              type="button"
+              className="nav-pill mt-3 cursor-pointer px-4 py-2 text-[11px] tracking-[0.14em] uppercase"
+              onClick={() => {
+                void api(`/api/casino/lobby/${lobby.id}/leave`, { method: 'POST', body: '{}' }).finally(() => {
+                  setLobby(null)
+                  setMode('ask')
+                })
+              }}
+            >
+              End game
+            </button>
+            </>
           ) : (
             <p className="mt-2 text-sm text-muted-foreground">Lay your chips, then wait. The host spins once for the table.</p>
           )}
@@ -283,7 +320,7 @@ export function RoulettePage() {
         <button type="button" className="nav-pill cursor-pointer px-4 py-2 text-xs" disabled={spinning || locked} onClick={() => { clearBets(); setError(null) }}>
           Clear
         </button>
-        <button type="button" className="gloss-gold cursor-pointer px-4 py-2 text-xs disabled:opacity-40" disabled={spinning || locked || total < 1} onClick={() => void spin()}>
+        <button type="button" className="gloss-gold cursor-pointer px-4 py-2 text-xs disabled:opacity-40" disabled={spinning || locked || (total < 1 && !(lobby && lobby.youAreHost))} onClick={() => void spin()}>
           {spinning ? 'Spinning…' : lobby && !lobby.youAreHost ? 'Lay chips' : 'Spin'}
         </button>
       </div>
