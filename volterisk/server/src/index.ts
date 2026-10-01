@@ -18,7 +18,7 @@ async function boot(): Promise<void> {
       throw new Error("Set JWT_SECRET on the Vercel project. The local default cannot be used online.");
     }
     if (!usesPostgres()) {
-      throw new Error("Set DATABASE_URL to the Supabase transaction pooler URL (postgresql://, port 6543).");
+      throw new Error("Set DATABASE_URL to the Supabase pooler URL (postgresql://).");
     }
   }
   if (!usesPostgres()) {

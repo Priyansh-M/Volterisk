@@ -17,7 +17,31 @@ if (!usesPostgres()) {
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+/**
+ * Supabase port 6543 is transaction mode. Prisma interactive transactions, which
+ * register and every cash move use, never finish there, so the button spins.
+ * The same pooler on port 5432 is session mode and can run those transactions.
+ */
+function runtimeDatabaseUrl(): string | undefined {
+  const raw = process.env.DATABASE_URL;
+  if (!process.env.VERCEL || !raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (url.port !== "6543") return raw;
+    url.port = "5432";
+    url.searchParams.delete("pgbouncer");
+    if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "1");
+    url.searchParams.set("connect_timeout", "10");
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
+const databaseUrl = runtimeDatabaseUrl();
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined);
 globalForPrisma.prisma = prisma;
 
 function missingWeaponTable(error: unknown): boolean {

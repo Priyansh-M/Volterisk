@@ -116,6 +116,6 @@ npm install
 npm run db:push:supabase
 ```
 
-Copy both URLs from the Supabase Connect dialog into `server/.env`. `DATABASE_URL` is the transaction pooler (port 6543) plus `pgbouncer=true` and `connection_limit=1`. `DIRECT_URL` is the session pooler (port 5432) with no `pgbouncer`. URL-encode the password (`@` becomes `%40`). Close that terminal when the push finishes.
+Copy both URLs from the Supabase Connect dialog into `server/.env`. `DIRECT_URL` is the session pooler (port 5432). `DATABASE_URL` may be the transaction pooler (port 6543); on Vercel the server switches that to port 5432, because game writes use transactions and port 6543 never finishes them. URL-encode the password (`@` becomes `%40`). Close that terminal when the push finishes.
 
 Vercel project: root directory `volterisk`. Framework preset Other (`vercel.json` sets `"framework": null`). Leave Install Command, Build Command, and Output Directory overrides off so `vercel.json` is used. Environment variables `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` (not `iron-hour-local-dev`), for Production and Preview. Copy them from `server/.env`. Do not set `VITE_API_URL`. Set the variables before the first deploy, because the build reads them. Open `https://YOUR-PROJECT.vercel.app/api/health` and expect `{"ok":true}`, then register on that same origin.
