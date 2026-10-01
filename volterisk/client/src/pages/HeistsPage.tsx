@@ -19,7 +19,7 @@ type Quote = {
 }
 
 export function HeistsPage() {
-  const { me, refresh } = useAuth()
+  const { me, refresh, applyCash } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [query, setQuery] = useState('')
@@ -159,7 +159,8 @@ export function HeistsPage() {
       if (hold > 0) await new Promise((resolve) => window.setTimeout(resolve, hold))
       setResult(heist)
       setConfirming(false)
-      await refresh()
+      if (typeof heist.cash === 'number') applyCash(heist.cash)
+      await refresh().catch(() => undefined)
       const [nextBoard, weaponData] = await Promise.all([
         load<TargetBoard>('/api/heists/targets'),
         load<{ owned: OwnedWeapon[] }>('/api/me/weapons'),

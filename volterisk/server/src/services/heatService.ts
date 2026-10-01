@@ -93,14 +93,38 @@ function judgedMs(value: string | null, createdAt: Date): number {
   return Number.isNaN(parsed) ? createdAt.getTime() : parsed;
 }
 
-async function applyHeat(tx: Tx, userId: string, delta: number, now = new Date()): Promise<number> {
+/** Heat number only. Pocket cash stays put until a scheduled check. */
+async function adjustHeat(tx: Tx, userId: string, delta: number, now = new Date()): Promise<number> {
+  const user = await tx.user.findUnique({ where: { id: userId } });
+  if (!user || user.isBot) return 0;
+  const cooled = decayed(user.heat, user.heatSettledAt, now);
+  const heat = Math.max(0, cooled.heat + delta);
+  await tx.user.update({
+    where: { id: userId },
+    data: { heat, heatSettledAt: cooled.settledAt },
+  });
+  if (cooled.heat <= RULES.HEAT_POLICE_AT && heat > RULES.HEAT_POLICE_AT) {
+    await writeNotification(tx, {
+      userId,
+      title: "Heat is high",
+      body: "Heat is above 50. A heat check takes half the cash in your pocket. Above 100, it takes all of it. The vault is not part of that.",
+      severity: "WARNING",
+    });
+  }
+  return heat;
+}
+
+/** Seizes pocket cash for check times that have already passed. Vault is never touched. */
+async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise<number> {
   const user = await tx.user.findUnique({ where: { id: userId } });
   if (!user || user.isBot) return 0;
   let heat = user.heat;
   let settledAt = user.heatSettledAt;
   let cash = user.cash;
+  let seized = 0;
   let judged = judgedMs(user.heatJudgedOn, user.createdAt);
   const due = checksBetween(judged, now.getTime());
+  if (due.length === 0) return heat;
 
   for (const at of due) {
     const cooled = decayed(heat, settledAt, new Date(at));
@@ -111,6 +135,7 @@ async function applyHeat(tx: Tx, userId: string, delta: number, now = new Date()
     const take = heat > RULES.HEAT_POLICE_WIPE_AT ? cash : Math.floor(cash / 2);
     if (take <= 0) continue;
     cash -= take;
+    seized += take;
     await tx.transaction.create({
       data: { type: "police_seizure", amount: take, fromUserId: userId },
     });
@@ -126,40 +151,35 @@ async function applyHeat(tx: Tx, userId: string, delta: number, now = new Date()
   }
 
   const cooled = decayed(heat, settledAt, now);
-  const before = cooled.heat;
-  heat = Math.max(0, before + delta);
   await tx.user.update({
     where: { id: userId },
     data: {
-      ...(cash !== user.cash ? { cash } : {}),
-      heat,
+      ...(seized > 0 ? { cash: { decrement: seized } } : {}),
+      heat: cooled.heat,
       heatSettledAt: cooled.settledAt,
       heatJudgedOn: new Date(judged).toISOString(),
     },
   });
-  if (before <= RULES.HEAT_POLICE_AT && heat > RULES.HEAT_POLICE_AT) {
-    await writeNotification(tx, {
-      userId,
-      title: "Heat is high",
-      body: "Heat is above 50. A heat check takes half the cash in your pocket. Above 100, it takes all of it. The vault is not part of that.",
-      severity: "WARNING",
-    });
-  }
-  return heat;
+  return cooled.heat;
 }
 
 export async function gainHeat(tx: Tx, userId: string, amount: number): Promise<void> {
   if (amount === 0) return;
-  await applyHeat(tx, userId, amount);
+  await adjustHeat(tx, userId, amount);
 }
 
 export async function coolHeat(tx: Tx, userId: string, amount: number): Promise<void> {
   if (amount <= 0) return;
-  await applyHeat(tx, userId, -amount);
+  await adjustHeat(tx, userId, -amount);
 }
 
 export async function settleHeat(userId: string): Promise<number> {
-  return prisma.$transaction((tx) => applyHeat(tx, userId, 0));
+  return prisma.$transaction((tx) => seizeDueChecks(tx, userId, new Date()));
+}
+
+/** Applies a check that has already passed. Does nothing when no check is due. */
+export async function settleHeatOnTx(tx: Tx, userId: string): Promise<void> {
+  await seizeDueChecks(tx, userId, new Date());
 }
 
 function latestCheckAt(nowMs: number): number | null {
