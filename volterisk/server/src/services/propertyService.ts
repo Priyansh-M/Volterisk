@@ -9,16 +9,16 @@ export const ASSETS = [
   { id: "safehouse", name: "Safehouse", price: 30_000, kind: "property", note: "A rented room with a second stair and no name on the bell." },
   { id: "hangar", name: "Hangar", price: 50_000, kind: "property", note: "Corrugated roof, oil on the concrete, room for a wing." },
   { id: "caravan", name: "Caravan", price: 50_000, kind: "property", note: "A tin house on a hitch. It can be gone by morning." },
-  { id: "warehouse", name: "Warehouse", price: 20_000, kind: "property", note: "Empty floor, a loading dock, and a lock the crew already knows." },
-  { id: "front", name: "Front Business", price: 20_000, kind: "property", note: "A street counter. The books in the drawer are the real stock." },
+  { id: "warehouse", name: "Warehouse", price: 100_000, kind: "property", note: "Empty floor, a loading dock, and a lock the crew already knows." },
+  { id: "front", name: "Front Business", price: 100_000, kind: "property", note: "A street counter. The books in the drawer are the real stock." },
   { id: "car", name: "Car", price: 35_000, kind: "vehicle", note: "A dull sedan. Plates that do not come back to you." },
   { id: "bike", name: "Bike", price: 20_000, kind: "vehicle", note: "Narrow enough for the alleys the sedan will not take." },
   { id: "truck", name: "Truck", price: 75_000, kind: "vehicle", note: "A box that fits a job, a crew, or a safe." },
-  { id: "airplane", name: "Airplane", price: 90_000, kind: "vehicle", note: "Single prop. It needs the hangar and a dark strip." },
+  { id: "airplane", name: "Airplane", price: 135_000, kind: "vehicle", note: "Single prop. It needs the hangar and a dark strip." },
   { id: "dock", name: "Dock", price: 120_000, kind: "property", note: "Pilings, a cleat, and a light that stays off." },
-  { id: "speedboat", name: "Speedboat", price: 110_000, kind: "vehicle", note: "Shallow draft. Off the dock before a car reaches the pier." },
+  { id: "speedboat", name: "Speedboat", price: 165_000, kind: "vehicle", note: "Shallow draft. Off the dock before a car reaches the pier." },
   { id: "helipad", name: "Helipad", price: 180_000, kind: "property", note: "A painted circle on a roof that can take the weight." },
-  { id: "helicopter", name: "Helicopter", price: 200_000, kind: "vehicle", note: "No runway. It still needs the pad and a pilot who does not talk." },
+  { id: "helicopter", name: "Helicopter", price: 300_000, kind: "vehicle", note: "No runway. It still needs the pad and a pilot who does not talk." },
   { id: "chop-shop", name: "Chop Shop", price: 250_000, kind: "property", note: "A bay that takes plates, VINs, and questions off a car." },
   { id: "armored-van", name: "Armored Van", price: 220_000, kind: "vehicle", note: "Thick doors, small windows, slow on a hill." },
   { id: "casino", name: "Casino", price: 400_000, kind: "property", note: "Tables up front. The count happens in the room behind the cage." },
@@ -45,7 +45,8 @@ export function assetUpgradeCost(price: number, currentLevel: number): number | 
     cost = step === 1 ? price / 5 : (price + previous) / 5;
     previous = cost;
   }
-  return Math.round(cost);
+  const priced = Math.round(cost);
+  return currentLevel >= 2 ? priced * 2 : priced;
 }
 
 /** Purchase price plus every upgrade already paid to reach this level. */

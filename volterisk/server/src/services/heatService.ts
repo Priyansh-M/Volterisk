@@ -1,15 +1,81 @@
-import { randomInt } from "node:crypto";
 import { RULES } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import type { Tx } from "./economyService.js";
 import { writeNotification } from "./notificationService.js";
 
 const STEP_MS = RULES.HEAT_DECAY_HOURS * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const GAP_MS = RULES.HEAT_CHECK_GAP_HOURS * 60 * 60 * 1000;
+const SLACK_MS = DAY_MS - RULES.HEAT_CHECKS_PER_DAY * GAP_MS;
 
-function latestNoon(now: Date): Date {
-  const noon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0, 0));
-  if (now.getTime() < noon.getTime()) noon.setUTCDate(noon.getUTCDate() - 1);
-  return noon;
+function dayKey(dayStartMs: number): string {
+  return new Date(dayStartMs).toISOString().slice(0, 10);
+}
+
+function utcDayStart(ms: number): number {
+  const day = new Date(ms);
+  return Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
+}
+
+function mix(seed: number): number {
+  let x = seed >>> 0;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return x >>> 0;
+}
+
+function hashSeed(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Three instants in one UTC day, each at least seven hours from the next, including across midnight. */
+export function heatChecksForUtcDay(dayStartMs: number): number[] {
+  const secret = process.env.JWT_SECRET || "iron-hour-local-dev";
+  let seed = hashSeed(`${secret}:heat:${dayKey(dayStartMs)}`);
+  const next = () => {
+    seed = mix(seed + 0x9e3779b9);
+    return seed / 4294967296;
+  };
+  const extraA = next() * SLACK_MS;
+  const extraB = next() * (SLACK_MS - extraA);
+  const origin = next() * DAY_MS;
+  const raw = [origin, origin + GAP_MS + extraA, origin + GAP_MS * 2 + extraA + extraB].map(
+    (offset) => dayStartMs + (offset % DAY_MS),
+  );
+  raw.sort((a, b) => a - b);
+  return raw;
+}
+
+function checksBetween(afterMs: number, nowMs: number): number[] {
+  if (nowMs <= afterMs) return [];
+  const hits: number[] = [];
+  for (let day = utcDayStart(afterMs) - DAY_MS; day <= nowMs; day += DAY_MS) {
+    for (const at of heatChecksForUtcDay(day)) {
+      if (at > afterMs && at <= nowMs) hits.push(at);
+    }
+  }
+  hits.sort((a, b) => a - b);
+  return hits;
+}
+
+function warningToken(at: number): string {
+  const secret = process.env.JWT_SECRET || "iron-hour-local-dev";
+  return hashSeed(`${secret}:warn:${at}`).toString(16);
+}
+
+/** True only during the minute before a check. The response carries no clock time. */
+export function heatWarning(now = Date.now()): { active: boolean; token: string | null } {
+  const from = now - DAY_MS;
+  const upcoming = checksBetween(from, now + RULES.HEAT_WARNING_MS);
+  const hit = upcoming.find((at) => now >= at - RULES.HEAT_WARNING_MS && now < at);
+  if (!hit) return { active: false, token: null };
+  return { active: true, token: warningToken(hit) };
 }
 
 function decayed(heat: number, settledAt: Date, now: Date): { heat: number; settledAt: Date } {
@@ -21,49 +87,61 @@ function decayed(heat: number, settledAt: Date, now: Date): { heat: number; sett
   };
 }
 
-async function applyHeat(
-  tx: Tx,
-  userId: string,
-  delta: number,
-  now = new Date(),
-): Promise<number> {
+function judgedMs(value: string | null, createdAt: Date): number {
+  if (!value) return createdAt.getTime();
+  const parsed = Date.parse(value.length === 10 ? `${value}T00:00:00.000Z` : value);
+  return Number.isNaN(parsed) ? createdAt.getTime() : parsed;
+}
+
+async function applyHeat(tx: Tx, userId: string, delta: number, now = new Date()): Promise<number> {
   const user = await tx.user.findUnique({ where: { id: userId } });
   if (!user || user.isBot) return 0;
-  const cooled = decayed(user.heat, user.heatSettledAt, now);
-  let heat = Math.max(0, cooled.heat + delta);
-  const noon = latestNoon(now);
-  const stamp = noon.toISOString();
-  const judged = user.heatJudgedOn && user.heatJudgedOn.length === 10 ? `${user.heatJudgedOn}T00:00:00.000Z` : user.heatJudgedOn;
-  let seized = 0;
-  if (judged && judged < stamp && heat > RULES.HEAT_POLICE_AT) {
-    const roll = randomInt(1, 101);
-    if (roll <= RULES.HEAT_POLICE_CHANCE && user.cash > 0) {
-      seized = user.cash;
-      await tx.user.update({ where: { id: userId }, data: { cash: 0 } });
-      await tx.transaction.create({
-        data: { type: "police_seizure", amount: seized, fromUserId: userId },
-      });
-      await writeNotification(tx, {
-        userId,
-        title: "Cash seized",
-        body: `Heat ${heat} at 12:00 GMT. The police took ${seized.toLocaleString("en-US")} from your pocket. The vault was left alone.`,
-        severity: "CRITICAL",
-      });
-    }
+  let heat = user.heat;
+  let settledAt = user.heatSettledAt;
+  let cash = user.cash;
+  let judged = judgedMs(user.heatJudgedOn, user.createdAt);
+  const due = checksBetween(judged, now.getTime());
+
+  for (const at of due) {
+    const cooled = decayed(heat, settledAt, new Date(at));
+    heat = cooled.heat;
+    settledAt = cooled.settledAt;
+    judged = at;
+    if (cash <= 0 || heat <= RULES.HEAT_POLICE_AT) continue;
+    const take = heat > RULES.HEAT_POLICE_WIPE_AT ? cash : Math.floor(cash / 2);
+    if (take <= 0) continue;
+    cash -= take;
+    await tx.transaction.create({
+      data: { type: "police_seizure", amount: take, fromUserId: userId },
+    });
+    await writeNotification(tx, {
+      userId,
+      title: "Cash seized",
+      body:
+        heat > RULES.HEAT_POLICE_WIPE_AT
+          ? `Heat ${heat}. A heat check took every dollar in your pocket. The vault was left alone.`
+          : `Heat ${heat}. A heat check took half the cash in your pocket. The vault was left alone.`,
+      severity: "CRITICAL",
+    });
   }
+
+  const cooled = decayed(heat, settledAt, now);
+  const before = cooled.heat;
+  heat = Math.max(0, before + delta);
   await tx.user.update({
     where: { id: userId },
     data: {
+      ...(cash !== user.cash ? { cash } : {}),
       heat,
       heatSettledAt: cooled.settledAt,
-      heatJudgedOn: stamp,
+      heatJudgedOn: new Date(judged).toISOString(),
     },
   });
-  if (cooled.heat <= RULES.HEAT_POLICE_AT && heat > RULES.HEAT_POLICE_AT) {
+  if (before <= RULES.HEAT_POLICE_AT && heat > RULES.HEAT_POLICE_AT) {
     await writeNotification(tx, {
       userId,
       title: "Heat is high",
-      body: `Heat is ${heat}. At 12:00 GMT, if it is still above 50, pocket cash can be taken. The vault is not part of that.`,
+      body: "Heat is above 50. A heat check takes half the cash in your pocket. Above 100, it takes all of it. The vault is not part of that.",
       severity: "WARNING",
     });
   }
@@ -82,6 +160,18 @@ export async function coolHeat(tx: Tx, userId: string, amount: number): Promise<
 
 export async function settleHeat(userId: string): Promise<number> {
   return prisma.$transaction((tx) => applyHeat(tx, userId, 0));
+}
+
+/** One indexed read. The full settle runs only after a check time has passed. */
+export async function settleHeatIfDue(userId: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isBot: true, createdAt: true, heatJudgedOn: true },
+  });
+  if (!user || user.isBot) return;
+  const due = checksBetween(judgedMs(user.heatJudgedOn, user.createdAt), Date.now());
+  if (due.length === 0) return;
+  await settleHeat(userId);
 }
 
 export async function settleAllHeat(): Promise<void> {

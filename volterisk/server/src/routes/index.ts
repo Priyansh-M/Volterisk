@@ -15,9 +15,11 @@ import {
   claimAchievementReward,
   community,
   leaderboard,
+  heatWarning,
   notifications,
   properties,
   readNotification,
+  readNotifications,
   shop,
 } from "../controllers/metaController.js";
 import { claim as claimStarter } from "../controllers/onboardingController.js";
@@ -41,6 +43,7 @@ api.post("/auth/login", asyncHandler(login));
 api.post("/auth/logout", requireAuth, asyncHandler(logout));
 
 api.get("/me", requireAuth, asyncHandler(me));
+api.get("/heat/warning", requireAuth, asyncHandler(heatWarning));
 api.post("/me/avatar", requireAuth, asyncHandler(updateAvatar));
 api.post("/me/name", requireAuth, asyncHandler(updateName));
 api.delete("/me", requireAuth, asyncHandler(removeAccount));
@@ -92,6 +95,7 @@ api.post("/work/passive/select", requireAuth, asyncHandler(collectPassivePay));
 api.get("/leaderboard", requireAuth, asyncHandler(leaderboard));
 api.get("/community", requireAuth, asyncHandler(community));
 api.get("/notifications", requireAuth, asyncHandler(notifications));
+api.post("/notifications/read", requireAuth, asyncHandler(readNotifications));
 api.post("/notifications/:id/read", requireAuth, asyncHandler(readNotification));
 
 api.get("/achievements", requireAuth, asyncHandler(achievements));

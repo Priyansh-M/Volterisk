@@ -43,7 +43,7 @@ export function HeatPage() {
         </table>
       </section>
       <section className="border border-destructive/40 bg-card p-5 text-sm text-muted-foreground">
-        At 12:00 GMT, if heat is still above 50, there is a 95% chance the police confiscate the cash in your pocket. The vault is not touched. A high-value heist is one that takes $50,000 or more, and that +12 replaces the usual +8. A failed heist is +15.
+        Three heat checks run each day. One minute before a check, a warning opens. Above 50, the check takes half the cash in your pocket. Above 100, it takes all of it. The vault is not touched. A high-value heist is one that takes $50,000 or more, and that +12 replaces the usual +8. A failed heist is +15.
       </section>
     </div>
   )

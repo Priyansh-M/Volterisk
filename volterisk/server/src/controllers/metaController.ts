@@ -9,10 +9,11 @@ import {
   unannouncedAchievements,
   unclaimedCount,
 } from "../services/achievementService.js";
-import { listNotifications, markNotificationRead } from "../services/notificationService.js";
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../services/notificationService.js";
 import { buyProperty, listProperties, upgradeProperty } from "../services/propertyService.js";
 import { buyShopItem, shopView, upgradeCamera } from "../services/shopService.js";
 import { communityBoard } from "../services/communityService.js";
+import { heatWarning as readHeatWarning, settleHeatIfDue } from "../services/heatService.js";
 import { getLeaderboard } from "../services/userService.js";
 
 export async function leaderboard(req: Request, res: Response): Promise<void> {
@@ -27,8 +28,18 @@ export async function notifications(req: Request, res: Response): Promise<void> 
   res.json({ notifications: await listNotifications(currentUserId(req)) });
 }
 
+export async function heatWarning(req: Request, res: Response): Promise<void> {
+  await settleHeatIfDue(currentUserId(req));
+  res.json(readHeatWarning());
+}
+
 const idSchema = z.object({ id: z.string().min(1).max(80) }).strict();
 const shopSchema = z.object({ itemId: z.string().min(1).max(64) }).strict();
+
+export async function readNotifications(req: Request, res: Response): Promise<void> {
+  await markAllNotificationsRead(currentUserId(req));
+  res.json({ ok: true });
+}
 
 export async function readNotification(req: Request, res: Response): Promise<void> {
   const id = z.string().min(1).max(80).parse(req.params.id);

@@ -166,6 +166,7 @@ export type WorkOffer = {
   requirement: string
   difficulty?: string
   requiresProperty?: string | null
+  gearReady?: boolean
   locked: boolean
   available: boolean
   cooldownEndsAt: string | null

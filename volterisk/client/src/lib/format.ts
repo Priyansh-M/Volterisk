@@ -28,6 +28,31 @@ export function heatFromJobs(successful: number, failed: number) {
   return successful + failed
 }
 
+/** Turn stored heist and invite payloads into a sentence. Plain notices pass through. */
+export function noticeText(title: string, body: string): string {
+  const oldHeat = body.match(/^Heat is (\d+)\. At 12:00 GMT, if it is still above 50, pocket cash can be taken\. The vault is not part of that\.$/)
+  if (oldHeat) {
+    return `Heat is ${oldHeat[1]}. A heat check takes half the cash in your pocket. Above 100, it takes all of it. The vault is not part of that.`
+  }
+  const trimmed = body.trim()
+  if (!trimmed.startsWith('{')) return body
+  try {
+    const parsed = JSON.parse(trimmed) as { by?: string; success?: boolean; amountStolen?: number | null }
+    const name = parsed.by?.trim() || 'Someone'
+    if (title === 'You were robbed' || parsed.success === true) {
+      const taken = typeof parsed.amountStolen === 'number' ? money(parsed.amountStolen) : null
+      return taken ? `${name} robbed your vault and took ${taken}.` : `${name} robbed your vault.`
+    }
+    if (title === 'Heist Attempted' || parsed.success === false) {
+      return `${name} tried to rob your vault. The door held. Nothing left.`
+    }
+    if (title === 'Roulette invite') return `${name} invited you to a roulette table.`
+  } catch {
+    return body
+  }
+  return body
+}
+
 export function remaining(iso: string | null) {
   if (!iso) return 'Ready'
   const ms = new Date(iso).getTime() - Date.now()

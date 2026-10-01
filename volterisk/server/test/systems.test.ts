@@ -324,7 +324,8 @@ describe("work board", () => {
     for (const job of RULES.PASSIVE_JOBS) {
       if (job.requires.length === 0) expect(job.payPerDay).toBeGreaterThanOrEqual(300);
       else expect(job.payPerDay).toBeGreaterThanOrEqual(3_000);
-      expect(job.payPerDay).toBeLessThanOrEqual(job.requires.length === 0 ? 500 : 6_000);
+      const payCap = job.requires.length === 0 ? 500 : job.minReputation <= 3 ? 6_000 : 9_000;
+      expect(job.payPerDay).toBeLessThanOrEqual(payCap);
     }
     const sweep = RULES.WORK_CONTRACTS.find((job) => job.id === "street-sweep");
     const drop = RULES.WORK_CONTRACTS.find((job) => job.id === "parcel-drop");

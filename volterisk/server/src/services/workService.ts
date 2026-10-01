@@ -31,6 +31,18 @@ async function playerLevel(userId: string): Promise<number> {
   return user?.reputationLevel ?? 1;
 }
 
+function gearLabel(requires: { id: string; minLevel: number }[] | undefined): string {
+  if (!requires?.length) return "";
+  return requires
+    .map((req) => `${assetById(req.id)?.name ?? req.id} level ${req.minLevel}+`)
+    .join(", ");
+}
+
+function gearMet(owned: { catalogId: string; level: number }[], requires: { id: string; minLevel: number }[] | undefined): boolean {
+  if (!requires?.length) return true;
+  return requires.every((req) => owned.some((row) => row.catalogId === req.id && row.level >= req.minLevel));
+}
+
 function presentActive(run: ContractRun, now: Date) {
   const definition = workContractById(run.contractId);
   return {
@@ -73,6 +85,7 @@ async function notifyIfReady(run: ContractRun | null): Promise<void> {
 export async function listContracts(userId: string) {
   const now = new Date();
   const level = await playerLevel(userId);
+  const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
   const offered = offeredContracts(now);
   const [active, collected] = await Promise.all([
     prisma.contractRun.findUnique({ where: { activeSlot: userId } }),
@@ -100,7 +113,10 @@ export async function listContracts(userId: string) {
     nextAcceptAt: nextAcceptAt ? nextAcceptAt.toISOString() : null,
     contracts: offered.map((contract) => {
       const cooldownEnds = cooldownUntil.get(contract.id) ?? null;
-      const locked = level < contract.minLevel;
+      const levelLocked = level < contract.minLevel;
+      const readyGear = gearMet(owned, contract.requires);
+      const locked = levelLocked || !readyGear;
+      const gear = gearLabel(contract.requires);
       return {
         id: contract.id,
         name: contract.name,
@@ -111,7 +127,8 @@ export async function listContracts(userId: string) {
         difficulty: workDifficulty(contract),
         requiresProperty: contract.requiresProperty ?? null,
         locationLabel: contract.locationLabel,
-        requirement: workRequirementLabel(contract),
+        requirement: gear ? `${workRequirementLabel(contract)}. ${gear}` : workRequirementLabel(contract),
+        gearReady: readyGear,
         locked,
         available: !locked && !cooldownEnds && !active && !nextAcceptAt,
         cooldownEndsAt: cooldownEnds ? cooldownEnds.toISOString() : null,
@@ -138,6 +155,12 @@ export async function acceptContract(userId: string, contractId: string) {
         });
         if (!property) {
           throw new GameError(403, "PROPERTY_REQUIRED", `That job needs a ${definition.requiresProperty}.`);
+        }
+      }
+      if (definition.requires?.length) {
+        const ownedGear = await tx.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
+        if (!gearMet(ownedGear, definition.requires)) {
+          throw new GameError(403, "PROPERTY_REQUIRED", `That job needs ${gearLabel(definition.requires)}.`);
         }
       }
       const onBoard = offeredContracts(now).some((contract) => contract.id === definition.id);

@@ -188,7 +188,7 @@ export function WorkPage() {
             <div className="flex items-center justify-between gap-3 md:justify-end">
               <span className="text-gold">{money(contract.reward)}</span>
               {contract.locked ? (
-                <Btn disabled>Level {contract.minLevel}</Btn>
+                <Btn disabled>{(me?.level ?? 1) < contract.minLevel ? `Level ${contract.minLevel}` : 'Needs gear'}</Btn>
               ) : contract.cooldownEndsAt ? (
                 <Btn disabled>Cooling {remaining(contract.cooldownEndsAt)}</Btn>
               ) : contract.available ? (

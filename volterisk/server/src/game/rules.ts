@@ -87,7 +87,7 @@ export const RULES = {
     { id: "first-entry", name: "First Entry", description: "Establish your first operational base.", reward: 1_000 },
     { id: "clean-hands", name: "Clean Hands", description: "Complete 10 contracts without raising heat.", reward: 5_000 },
     { id: "false-bottom", name: "False Bottom", description: "Upgrade your vault to level 5.", reward: 5_000 },
-    { id: "redacted", name: "Redacted", description: "Requirements remain classified.", reward: 5_000, sealed: true },
+    { id: "redacted", name: "Redacted", description: "Complete 15 successful heists.", reward: 5_000, sealed: true },
   ] as { id: string; name: string; description: string; reward: number; sealed?: boolean }[],
   /** Successful heists required before Redacted unlocks. The client never shows this number. */
   REDACTED_HEIST_GOAL: 15,
@@ -97,25 +97,25 @@ export const RULES = {
    * Keys are the current upgrade level (1, 2, or 3). Level 4 is the cap.
    */
   WEAPON_UPGRADE_COSTS: {
-    "weapon:0001": { 1: 1_500, 2: 3_000, 3: 5_000 },
-    "weapon:0002": { 1: 2_000, 2: 3_500, 3: 6_000 },
-    "weapon:0003": { 1: 3_000, 2: 5_000, 3: 8_000 },
-    "weapon:0004": { 1: 5_000, 2: 8_000, 3: 12_000 },
-    "weapon:0005": { 1: 7_000, 2: 11_000, 3: 16_000 },
-    "weapon:0006": { 1: 10_000, 2: 15_000, 3: 22_000 },
-    "weapon:0007": { 1: 12_000, 2: 18_000, 3: 25_000 },
-    "weapon:0008": { 1: 22_000, 2: 32_000, 3: 45_000 },
-    "weapon:0009": { 1: 28_000, 2: 40_000, 3: 55_000 },
-    "weapon:0010": { 1: 30_000, 2: 45_000, 3: 65_000 },
-    "weapon:0011": { 1: 50_000, 2: 70_000, 3: 95_000 },
-    "weapon:0012": { 1: 65_000, 2: 90_000, 3: 120_000 },
-    "weapon:0013": { 1: 75_000, 2: 110_000, 3: 160_000 },
-    "weapon:0014": { 1: 125_000, 2: 175_000, 3: 240_000 },
-    "weapon:0015": { 1: 180_000, 2: 250_000, 3: 350_000 },
+    "weapon:0001": { 1: 1_500, 2: 6_000, 3: 10_000 },
+    "weapon:0002": { 1: 2_000, 2: 7_000, 3: 12_000 },
+    "weapon:0003": { 1: 3_000, 2: 10_000, 3: 16_000 },
+    "weapon:0004": { 1: 5_000, 2: 16_000, 3: 24_000 },
+    "weapon:0005": { 1: 7_000, 2: 22_000, 3: 32_000 },
+    "weapon:0006": { 1: 10_000, 2: 30_000, 3: 44_000 },
+    "weapon:0007": { 1: 12_000, 2: 36_000, 3: 50_000 },
+    "weapon:0008": { 1: 22_000, 2: 64_000, 3: 90_000 },
+    "weapon:0009": { 1: 28_000, 2: 80_000, 3: 110_000 },
+    "weapon:0010": { 1: 30_000, 2: 90_000, 3: 130_000 },
+    "weapon:0011": { 1: 50_000, 2: 140_000, 3: 190_000 },
+    "weapon:0012": { 1: 65_000, 2: 180_000, 3: 240_000 },
+    "weapon:0013": { 1: 75_000, 2: 220_000, 3: 320_000 },
+    "weapon:0014": { 1: 125_000, 2: 350_000, 3: 480_000 },
+    "weapon:0015": { 1: 180_000, 2: 500_000, 3: 700_000 },
   } as Record<string, Record<number, number>>,
   /**
    * Cash to raise a vault FROM this level to the next.
-   * 1→2 $25,000, 2→3 $75,000, 3→4 $200,000, then the same steep climb through level 10.
+   * Level 1 keeps the original price. Level 2 and above are doubled.
    */
   VAULT_TIERS: ["standard", "silver", "gold", "diamond"] as const,
   VAULT_TIER_LABEL: {
@@ -155,7 +155,11 @@ export const RULES = {
   HEAT_DECAY: 5,
   HEAT_DECAY_HOURS: 2,
   HEAT_POLICE_AT: 50,
-  HEAT_POLICE_CHANCE: 95,
+  HEAT_POLICE_WIPE_AT: 100,
+  /** Three checks per UTC day. The clock stays on the server. */
+  HEAT_CHECKS_PER_DAY: 3,
+  HEAT_CHECK_GAP_HOURS: 7,
+  HEAT_WARNING_MS: 60_000,
   /** Percent of the balance a heist cannot touch. Level 1 standard is 0 so a fresh vault is fully exposed. */
   VAULT_SECURED_PERCENT: {
     standard: [0, 15, 25, 35, 45],
@@ -165,15 +169,15 @@ export const RULES = {
   } as Record<string, number[]>,
   /** Cash to raise a vault one level inside the current tier. */
   VAULT_LEVEL_COSTS: {
-    standard: { 1: 8_000, 2: 18_000, 3: 40_000, 4: 90_000 },
-    silver: { 1: 120_000, 2: 200_000, 3: 320_000, 4: 480_000 },
-    gold: { 1: 700_000, 2: 1_100_000, 3: 1_600_000, 4: 2_200_000 },
-    diamond: { 1: 3_000_000, 2: 4_500_000, 3: 6_000_000, 4: 8_000_000 },
+    standard: { 1: 8_000, 2: 36_000, 3: 80_000, 4: 180_000 },
+    silver: { 1: 120_000, 2: 400_000, 3: 640_000, 4: 960_000 },
+    gold: { 1: 700_000, 2: 2_200_000, 3: 3_200_000, 4: 4_400_000 },
+    diamond: { 1: 3_000_000, 2: 9_000_000, 3: 12_000_000, 4: 16_000_000 },
   } as Record<string, Record<number, number>>,
   VAULT_CONVERSION_COSTS: {
-    standard: 250_000,
-    silver: 1_500_000,
-    gold: 10_000_000,
+    standard: 500_000,
+    silver: 3_000_000,
+    gold: 20_000_000,
   } as Record<string, number>,
   INSURANCE_COVERAGE_PERCENT: 60,
   INSURANCE_PREMIUM: 4_000,
@@ -367,6 +371,12 @@ export const RULES = {
     { id: "cash-collection", name: "Cash Collection", payPerDay: 5_200, minReputation: 2, requires: [{ id: "front", minLevel: 2 }, { id: "car", minLevel: 2 }] },
     { id: "delivery-worker", name: "Delivery Worker", payPerDay: 5_500, minReputation: 3, requires: [{ id: "hangar", minLevel: 3 }, { id: "truck", minLevel: 2 }] },
     { id: "private-driver", name: "Private Driver", payPerDay: 6_000, minReputation: 3, requires: [{ id: "hangar", minLevel: 3 }, { id: "car", minLevel: 3 }] },
+    { id: "front-counter", name: "Front Counter", payPerDay: 6_500, minReputation: 4, requires: [{ id: "front", minLevel: 4 }, { id: "hangar", minLevel: 4 }] },
+    { id: "truck-route", name: "Truck Route", payPerDay: 7_000, minReputation: 4, requires: [{ id: "truck", minLevel: 2 }, { id: "airplane", minLevel: 4 }, { id: "bike", minLevel: 4 }] },
+    { id: "yard-lease", name: "Yard Lease", payPerDay: 7_500, minReputation: 5, requires: [{ id: "hangar", minLevel: 5 }, { id: "front", minLevel: 5 }, { id: "safehouse", minLevel: 5 }] },
+    { id: "convoy-desk", name: "Convoy Desk", payPerDay: 8_000, minReputation: 5, requires: [{ id: "truck", minLevel: 5 }, { id: "airplane", minLevel: 5 }, { id: "caravan", minLevel: 5 }, { id: "warehouse", minLevel: 5 }] },
+    { id: "harbor-watch", name: "Harbor Watch", payPerDay: 8_500, minReputation: 6, requires: [{ id: "hangar", minLevel: 6 }, { id: "dock", minLevel: 2 }, { id: "speedboat", minLevel: 2 }] },
+    { id: "coast-run", name: "Coast Run", payPerDay: 9_000, minReputation: 6, requires: [{ id: "truck", minLevel: 6 }, { id: "car", minLevel: 6 }, { id: "garage", minLevel: 6 }, { id: "speedboat", minLevel: 2 }] },
   ] as { id: string; name: string; payPerDay: number; minReputation: number; requires: { id?: string; anyVehicle?: boolean; minLevel: number }[] }[],
   /** The whole contract pool. Rewards and durations are never taken from the client. */
   WORK_CONTRACTS: [
@@ -396,6 +406,26 @@ export const RULES = {
       reward: 1_400,
       risk: "LOW",
       locationLabel: "Dock Row",
+    },
+    {
+      id: "alley-errand",
+      name: "Alley Errand",
+      minLevel: 1,
+      durationMinutes: 8,
+      reward: 2_100,
+      risk: "LOW",
+      locationLabel: "Copper Street",
+      requires: [{ id: "bike", minLevel: 1 }],
+    },
+    {
+      id: "stoop-watch",
+      name: "Stoop Watch",
+      minLevel: 1,
+      durationMinutes: 11,
+      reward: 2_300,
+      risk: "LOW",
+      locationLabel: "Dock Row",
+      requires: [{ id: "safehouse", minLevel: 1 }],
     },
     {
       id: "courier-run",
@@ -443,6 +473,26 @@ export const RULES = {
       locationLabel: "Exchange Basement",
     },
     {
+      id: "bay-count",
+      name: "Bay Count",
+      minLevel: 2,
+      durationMinutes: 14,
+      reward: 2_100,
+      risk: "LOW",
+      locationLabel: "Marrow Lane Garage",
+      requires: [{ id: "garage", minLevel: 2 }],
+    },
+    {
+      id: "first-fare",
+      name: "First Fare",
+      minLevel: 2,
+      durationMinutes: 16,
+      reward: 2_300,
+      risk: "LOW",
+      locationLabel: "Old Tram Line",
+      requires: [{ id: "car", minLevel: 2 }, { id: "garage", minLevel: 2 }],
+    },
+    {
       id: "bank-shadow",
       name: "Bank Shadow",
       minLevel: 3,
@@ -452,6 +502,26 @@ export const RULES = {
       locationLabel: "Merchant Quarter",
     },
     {
+      id: "wing-check",
+      name: "Wing Check",
+      minLevel: 3,
+      durationMinutes: 20,
+      reward: 9_800,
+      risk: "MEDIUM",
+      locationLabel: "Freeport Annex",
+      requires: [{ id: "hangar", minLevel: 2 }, { id: "airplane", minLevel: 2 }],
+    },
+    {
+      id: "second-shift",
+      name: "Second Shift",
+      minLevel: 3,
+      durationMinutes: 24,
+      reward: 10_600,
+      risk: "MEDIUM",
+      locationLabel: "Copper Street",
+      requires: [{ id: "garage", minLevel: 3 }, { id: "car", minLevel: 3 }, { id: "bike", minLevel: 2 }],
+    },
+    {
       id: "customs-favour",
       name: "Customs Favour",
       minLevel: 4,
@@ -459,6 +529,26 @@ export const RULES = {
       reward: 55_000,
       risk: "HIGH",
       locationLabel: "Freeport Annex",
+    },
+    {
+      id: "counter-skim",
+      name: "Counter Skim",
+      minLevel: 4,
+      durationMinutes: 36,
+      reward: 16_500,
+      risk: "MEDIUM",
+      locationLabel: "Copper Street Counting House",
+      requires: [{ id: "front", minLevel: 4 }, { id: "hangar", minLevel: 4 }],
+    },
+    {
+      id: "load-call",
+      name: "Load Call",
+      minLevel: 4,
+      durationMinutes: 42,
+      reward: 17_500,
+      risk: "MEDIUM",
+      locationLabel: "Pier Fourteen",
+      requires: [{ id: "truck", minLevel: 2 }, { id: "airplane", minLevel: 4 }, { id: "bike", minLevel: 4 }],
     },
     {
       id: "armoured-tail",
@@ -480,6 +570,64 @@ export const RULES = {
       difficulty: "ELITE",
       requiresProperty: "garage",
     },
+    {
+      id: "lot-audit",
+      name: "Lot Audit",
+      minLevel: 5,
+      durationMinutes: 48,
+      reward: 54_000,
+      risk: "HIGH",
+      locationLabel: "Marrow Lane Garage",
+      requires: [
+        { id: "hangar", minLevel: 5 },
+        { id: "front", minLevel: 5 },
+        { id: "safehouse", minLevel: 5 },
+      ],
+    },
+    {
+      id: "yard-convoy",
+      name: "Yard Convoy",
+      minLevel: 5,
+      durationMinutes: 60,
+      reward: 58_000,
+      risk: "HIGH",
+      locationLabel: "Ring Road North",
+      requires: [
+        { id: "truck", minLevel: 5 },
+        { id: "airplane", minLevel: 5 },
+        { id: "caravan", minLevel: 5 },
+        { id: "warehouse", minLevel: 5 },
+      ],
+    },
+    {
+      id: "pier-watch",
+      name: "Pier Watch",
+      minLevel: 6,
+      durationMinutes: 70,
+      reward: 128_000,
+      risk: "HIGH",
+      locationLabel: "Pier Fourteen",
+      requires: [
+        { id: "hangar", minLevel: 6 },
+        { id: "dock", minLevel: 2 },
+        { id: "speedboat", minLevel: 2 },
+      ],
+    },
+    {
+      id: "coast-haul",
+      name: "Coast Haul",
+      minLevel: 6,
+      durationMinutes: 80,
+      reward: 135_000,
+      risk: "HIGH",
+      locationLabel: "Freeport Annex",
+      requires: [
+        { id: "truck", minLevel: 6 },
+        { id: "car", minLevel: 6 },
+        { id: "garage", minLevel: 6 },
+        { id: "speedboat", minLevel: 2 },
+      ],
+    },
   ] as {
     id: string;
     name: string;
@@ -490,6 +638,7 @@ export const RULES = {
     locationLabel: string;
     difficulty?: "EASY" | "MODERATE" | "HARD" | "VERY HARD" | "ELITE";
     requiresProperty?: string;
+    requires?: { id: string; minLevel: number }[];
   }[],
 };
 
@@ -610,7 +759,7 @@ export function cameraUpgradeCost(currentLevel: number): number | null {
   for (let step = 0; step < currentLevel; step += 1) {
     cost = Math.round(cost * 1.5);
   }
-  return cost;
+  return currentLevel >= 2 ? cost * 2 : cost;
 }
 
 export function achievementById(id: string) {

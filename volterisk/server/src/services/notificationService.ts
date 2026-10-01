@@ -36,6 +36,10 @@ export async function writeNotification(client: Tx, input: NotificationInput): P
   }
 }
 
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  await prisma.notification.updateMany({ where: { userId, read: false }, data: { read: true } });
+}
+
 export async function markNotificationRead(userId: string, notificationId: string) {
   const row = await prisma.notification.findFirst({ where: { id: notificationId, userId } });
   if (!row) return null;

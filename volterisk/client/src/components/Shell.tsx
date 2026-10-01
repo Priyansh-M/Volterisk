@@ -92,6 +92,8 @@ export function Shell() {
   const [welcome, setWelcome] = useState(false)
   const [brief, setBrief] = useState(false)
   const [discordInvite, setDiscordInvite] = useState(false)
+  const [heatWarn, setHeatWarn] = useState<string | null>(null)
+  const [heatWarnClosed, setHeatWarnClosed] = useState<string | null>(null)
   const [casinoOpen, setCasinoOpen] = useState(location.pathname.startsWith('/casino'))
 
   useEffect(() => {
@@ -113,6 +115,25 @@ export function Shell() {
     const introOpen = sessionStorage.getItem('volterisk-welcome') === '1' || sessionStorage.getItem('volterisk-brief') === '1'
     setDiscordInvite(!seen && !introOpen && !welcome && !brief)
   }, [me?.id, welcome, brief])
+
+  useEffect(() => {
+    if (!me?.id) return
+    let cancelled = false
+    async function look() {
+      try {
+        const row = await api<{ active: boolean; token: string | null }>('/api/heat/warning')
+        if (!cancelled) setHeatWarn(row.active && row.token ? row.token : null)
+      } catch {
+        if (!cancelled) setHeatWarn(null)
+      }
+    }
+    void look()
+    const timer = window.setInterval(() => void look(), 15000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [me?.id])
 
   function dismissDiscord() {
     if (me?.id) localStorage.setItem(`volterisk-discord:${me.id}`, '1')
@@ -187,7 +208,7 @@ export function Shell() {
               $25,000 is already in your vault. Heat is the number at the top left of the bar. Heists push it up. Work and time bring it down.
             </p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              At 12:00 GMT, if Heat is still above 50, there is a 95% chance the police take every dollar still in your pocket. Money sitting in the vault is not part of that seizure.
+              Three times a day, a heat check can reach the cash in your pocket. Above 50 it takes half. Above 100 it takes all of it. Money sitting in the vault is not part of that. A warning opens one minute before each check.
             </p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               The vault can still be robbed, but it has a door, a capacity, and insurance. Loose cash has none of those. Deposit before you go looking for trouble. Buys, bets, and fees come out of pocket cash only.
@@ -201,6 +222,32 @@ export function Shell() {
               }}
             >
               I understand
+            </button>
+          </section>
+        </div>
+      ) : null}
+      {heatWarn && heatWarn !== heatWarnClosed ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4">
+          <section className="animate-dossier relative w-full max-w-lg border border-destructive bg-card p-8 shadow-2xl">
+            <button
+              type="button"
+              className="absolute top-4 right-4 cursor-pointer font-mono text-sm text-muted-foreground hover:text-foreground"
+              aria-label="Close"
+              onClick={() => setHeatWarnClosed(heatWarn)}
+            >
+              ×
+            </button>
+            <p className="font-mono text-[10px] tracking-[0.2em] text-destructive uppercase">Heat check</p>
+            <h2 className="mt-3 font-display text-3xl font-semibold uppercase">One minute</h2>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">
+              A heat check hits in one minute. Above 50, half the cash in your pocket is taken. Above 100, all of it is taken. The vault is left alone.
+            </p>
+            <button
+              type="button"
+              className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+              onClick={() => setHeatWarnClosed(heatWarn)}
+            >
+              Close
             </button>
           </section>
         </div>
@@ -391,7 +438,7 @@ export function Shell() {
               <span className="block font-mono text-[8px] uppercase text-muted-foreground">Total balance</span>
               <b className="font-mono text-xs">{money(me.cash + me.vault.balance)}</b>
             </div>
-            <NavLink to="/notifications" aria-label="Notifications" className="relative text-foreground no-underline">
+            <NavLink to="/notifications" aria-label="Notifications" className="relative text-foreground no-underline" onClick={() => setNotices(0)}>
               <IconSignal className="h-4 w-4" />
               {notices > 0 ? (
                 <span className="absolute -top-2 -right-2 min-w-[14px] bg-destructive px-0.5 text-center font-mono text-[8px] leading-[14px] text-white">

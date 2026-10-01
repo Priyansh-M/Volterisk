@@ -152,7 +152,7 @@ export async function listAchievements(userId: string) {
       return {
         id: entry.id,
         name: entry.name,
-        description: entry.description,
+        description: entry.id === "redacted" && !row ? "Requirements remain classified." : entry.description,
         reward: entry.reward,
         unlocked: Boolean(row),
         sealed: Boolean(entry.sealed) && !row,
