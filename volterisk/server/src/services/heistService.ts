@@ -390,8 +390,8 @@ export async function attemptHeist(
         const broken = await wearWeapon(tx, owned.id);
 
         if (!success) {
-          if (kind === "player") {
-            const exposedUntil = hoursFromNow(RULES.FAILED_HEIST_EXPOSURE_HOURS, now);
+          const exposedUntil = kind === "player" ? hoursFromNow(RULES.FAILED_HEIST_EXPOSURE_HOURS, now) : null;
+          if (exposedUntil) {
             const currentExposed = attacker.vaultExposedUntil;
             await tx.user.update({
               where: { id: attackerId },
@@ -430,6 +430,12 @@ export async function attemptHeist(
             advantage: attack - defense,
             vaultTier: target.vault.tier,
             broken,
+            penalty: exposedUntil
+              ? {
+                  hours: RULES.FAILED_HEIST_EXPOSURE_HOURS,
+                  endsAt: exposedUntil.toISOString(),
+                }
+              : null,
           };
         }
 

@@ -29,7 +29,7 @@ export async function shopView(userId: string) {
       installed: level > 0,
       maxLevel: RULES.CAMERA_MAX_LEVEL,
       description:
-        "Each level subtracts that many points from an attacker's success chance, before the chance is clamped between 8% and 92%. Level 1 is −1. Each upgrade adds 1 level and costs 1.5× the previous price, up to level 40.",
+        "Each level subtracts that many points from an attacker's success chance by one percent for each level.",
     },
   };
 }

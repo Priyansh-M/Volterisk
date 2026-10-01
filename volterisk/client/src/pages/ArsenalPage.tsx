@@ -100,7 +100,7 @@ export function ArsenalPage() {
               </div>
               <p className="mt-1 text-sm text-muted">Level {camera.level}</p>
               <p className="mt-2 flex-1 text-sm text-muted">
-                Attackers lose {camera.level} points of success chance before the roll is clamped between 8% and 92%. An upgrade adds 1 level and costs 1.5× the previous price.
+                Each level subtracts that many points from an attacker&apos;s success chance by one percent for each level. Yours is level {camera.level}.
               </p>
               {camera.nextCost != null ? (
                 <Btn className="mt-4" variant="gold" disabled={busy !== null} onClick={() => void upgradeCamera()}>

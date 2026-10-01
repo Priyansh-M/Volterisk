@@ -11,7 +11,8 @@ export const RULES = {
   TARGET_PROTECTION_HOURS: 2,
   /** Attacker lockout after any heist attempt. */
   HEIST_COOLDOWN_MINUTES: 15,
-  NPC_COOLDOWN_MINUTES: 60,
+  /** Per crew. A player can hit a different crew while this one is cooling. No vault penalty. */
+  NPC_COOLDOWN_MINUTES: 120,
   /** Hard ceiling is 10. rewards.ts clamps to this and never pays more. */
   HEIST_REWARD_PERCENT: 10,
   STARTING_CASH: 1_000,

@@ -104,6 +104,7 @@ export type HeistResult = {
   attack?: number
   defense?: number
   advantage?: number
+  penalty?: { hours: number; endsAt: string } | null
 }
 
 export type HistoryRow = {

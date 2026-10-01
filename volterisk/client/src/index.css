@@ -120,6 +120,65 @@ select {
   animation: heist-pop 480ms ease-out both;
 }
 
+.heist-reveal {
+  position: fixed;
+  inset: 0;
+}
+
+.heist-reveal-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--color-gold);
+  animation: heist-line 0.6s cubic-bezier(0.83, 0.04, 0, 1.16) both;
+}
+
+.heist-reveal-card {
+  transform-origin: center center;
+  animation: heist-open 0.6s cubic-bezier(0.83, 0.04, 0, 1.16) 0.65s both;
+}
+
+.heist-reveal-card > * {
+  animation: heist-fade 0.5s ease-out 1.3s both;
+}
+
+@keyframes heist-line {
+  0% {
+    width: 0;
+    opacity: 1;
+  }
+  99% {
+    width: 100%;
+    opacity: 1;
+  }
+  100% {
+    width: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes heist-open {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes heist-fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 .rep-bar-fill {
   transition: width 700ms ease;
 }

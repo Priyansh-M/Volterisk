@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Modal } from '../components/ui/Modal.tsx'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { Notice, inputClass } from '../components/ui.tsx'
 import { ApiError, api, load, peek } from '../lib/api.ts'
@@ -36,7 +35,6 @@ export function HeistsPage() {
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [enacting, setEnacting] = useState(false)
   const [result, setResult] = useState<HeistResult | null>(null)
   const targetRef = useRef<string | null>(null)
 
@@ -145,8 +143,8 @@ export function HeistsPage() {
   async function commit() {
     if (!targetId || !selected) return
     setBusy(true)
-    setEnacting(true)
     setError(null)
+    const started = Date.now()
     try {
       const heist = await api<HeistResult & { broken?: boolean }>('/api/heists', {
         method: 'POST',
@@ -157,6 +155,8 @@ export function HeistsPage() {
           kind,
         }),
       })
+      const hold = 1000 - (Date.now() - started)
+      if (hold > 0) await new Promise((resolve) => window.setTimeout(resolve, hold))
       setResult(heist)
       setConfirming(false)
       await refresh()
@@ -170,7 +170,6 @@ export function HeistsPage() {
       setError(err instanceof ApiError ? err.message : 'The job failed to start.')
     } finally {
       setBusy(false)
-      setEnacting(false)
     }
   }
 
@@ -275,12 +274,10 @@ export function HeistsPage() {
         ))}
       </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Modal open={enacting} onClose={() => undefined} code="OP-HEIST" title="Enacting heist" width="sm">
-        <p className="text-sm leading-6 text-muted">The crew is at the door. The ledger is writing the result. Stay on this page.</p>
-      </Modal>
-      {result && !enacting ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/75 p-4">
-          <section className={`animate-heist w-full max-w-md border bg-card p-8 text-center shadow-2xl ${result.success ? 'border-success' : 'border-destructive'}`}>
+      {result ? (
+        <div className="heist-reveal z-[70] flex items-center justify-center bg-background/75 p-4">
+          <span className="heist-reveal-line" aria-hidden="true" />
+          <section className={`heist-reveal-card relative z-[1] w-full max-w-md border bg-card p-8 text-center shadow-2xl ${result.success ? 'border-success' : 'border-destructive'}`}>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">{result.targetUsername}</p>
             <h2 className={`mt-3 font-display text-6xl font-semibold uppercase ${result.success ? 'text-success' : 'text-destructive'}`}>
               {result.success ? 'Success' : 'Failure'}
@@ -298,6 +295,11 @@ export function HeistsPage() {
                 <div className="flex justify-between">
                   <dt className="font-mono text-[10px] uppercase text-muted-foreground">Money Stolen</dt>
                   <dd className="font-mono text-success">{money(result.amountStolen)}</dd>
+                </div>
+              ) : result.penalty ? (
+                <div className="flex justify-between gap-4">
+                  <dt className="font-mono text-[10px] uppercase text-muted-foreground">Penalty</dt>
+                  <dd className="text-right">Vault protection is off for {result.penalty.hours} hour{result.penalty.hours === 1 ? '' : 's'}.</dd>
                 </div>
               ) : null}
             </dl>
@@ -391,7 +393,7 @@ function Dossier({
       </div>
       <p className="mb-5 text-xs leading-5 text-muted-foreground">
         {row.regionName ? `${row.regionName}. ` : ''}
-        {row.cadence === 'day' ? 'This crew can be robbed once a day. ' : row.cadence === 'week' ? 'This crew can be robbed once a week. ' : ''}
+        {row.cadence ? 'This crew cools off for 2 hours after a hit. ' : ''}
         {row.vulnerable ? 'No recent successful hit. The vault is open.' : 'A recent hit is still on the door.'}
       </p>
       <div className="flex gap-2">
@@ -409,10 +411,10 @@ function Dossier({
       </div>
       {open ? (
         <div className="mt-5 border-t border-border pt-4">
-          <label className="block font-mono text-[9px] uppercase text-muted-foreground">
+          <label className="block font-mono text-xs uppercase text-muted-foreground">
             Weapon
             <select
-              className={`${inputClass} mt-2 max-w-full py-3 text-base`}
+              className={`${inputClass} mt-2 max-w-full py-3 text-lg`}
               value={weaponId ?? ''}
               onChange={(event) => onWeapon(event.target.value)}
             >
@@ -458,8 +460,8 @@ function Dossier({
           ) : null}
           {confirming ? (
             <div className="mt-4 flex gap-2">
-              <button type="button" className="gloss-gold h-9 flex-1 cursor-pointer text-xs disabled:opacity-40" disabled={busy || !row.vulnerable || cooling} onClick={onCommit}>
-                {busy ? 'Working…' : 'Confirm job'}
+              <button type="button" className="gloss-gold h-9 flex-1 cursor-pointer text-xs disabled:cursor-not-allowed disabled:bg-[#3a3a3a] disabled:text-[#9a9a9a] disabled:opacity-100" disabled={busy || !row.vulnerable || cooling} onClick={onCommit}>
+                Confirm job
               </button>
               <button type="button" className="nav-pill h-9 cursor-pointer px-3 text-xs" onClick={onCancel}>
                 Back off

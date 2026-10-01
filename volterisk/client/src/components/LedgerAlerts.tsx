@@ -106,8 +106,11 @@ export function LedgerAlerts({
 
   if (!unlock && !heist && !invite && !tableEnded) return null
 
+  const revealHeist = Boolean(heist) && !tableEnded && !invite && !unlock
+
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/75 p-4">
+    <div className={`${revealHeist ? 'heist-reveal' : 'fixed inset-0'} z-[80] flex items-center justify-center bg-background/75 p-4`}>
+      {revealHeist ? <span className="heist-reveal-line" aria-hidden="true" /> : null}
       {tableEnded ? (
         <section className="animate-dossier w-full max-w-md border border-border bg-card p-8 text-center shadow-2xl">
           <h2 className="font-display text-4xl font-semibold uppercase">Game has ended</h2>
@@ -184,7 +187,7 @@ export function LedgerAlerts({
           </Link>
         </section>
       ) : heist ? (
-        <section className="animate-dossier w-full max-w-md border border-border bg-card p-8 shadow-2xl">
+        <section className="heist-reveal-card relative z-[1] w-full max-w-md border border-border bg-card p-8 shadow-2xl">
           <p className="font-mono text-[10px] uppercase text-destructive">Incoming report</p>
           <h2 className="mt-2 font-display text-4xl font-semibold uppercase">{heist.success ? 'You were robbed' : 'Heist Attempted'}</h2>
           <p className="mt-4 text-sm text-muted-foreground">By</p>
