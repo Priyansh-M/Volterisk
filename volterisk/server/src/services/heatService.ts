@@ -46,7 +46,7 @@ export function heatChecksForUtcDay(dayStartMs: number): number[] {
   const extraB = next() * (SLACK_MS - extraA);
   const origin = next() * DAY_MS;
   const raw = [origin, origin + GAP_MS + extraA, origin + GAP_MS * 2 + extraA + extraB].map(
-    (offset) => dayStartMs + (offset % DAY_MS),
+    (offset) => dayStartMs + Math.floor(offset % DAY_MS),
   );
   raw.sort((a, b) => a - b);
   return raw;
@@ -175,11 +175,6 @@ export async function coolHeat(tx: Tx, userId: string, amount: number): Promise<
 
 export async function settleHeat(userId: string): Promise<number> {
   return prisma.$transaction((tx) => seizeDueChecks(tx, userId, new Date()));
-}
-
-/** Applies a check that has already passed. Does nothing when no check is due. */
-export async function settleHeatOnTx(tx: Tx, userId: string): Promise<void> {
-  await seizeDueChecks(tx, userId, new Date());
 }
 
 function latestCheckAt(nowMs: number): number | null {

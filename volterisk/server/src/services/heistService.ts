@@ -19,7 +19,7 @@ import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { creditCash, debitVault, type Tx } from "./economyService.js";
 import { isNpcGated, isStationedNpc, loadNpcPurses, NPC_STATIONS, openNpcPurse, stationForUsername } from "./nightCrew.js";
-import { gainHeat, heistHeatGain, settleHeatOnTx } from "./heatService.js";
+import { gainHeat, heistHeatGain } from "./heatService.js";
 import { writeNotification } from "./notificationService.js";
 
 // Future: crew shares would split the take after a successful debit.
@@ -466,7 +466,6 @@ export async function attemptHeist(
         if (!debited) {
           throw new GameError(409, "VAULT_CHANGED", "The vault shifted before the take landed.");
         }
-        await settleHeatOnTx(tx, attackerId);
         await gainHeat(tx, attackerId, heistHeatGain(true, amount));
         await creditCash(tx, attackerId, amount);
 
