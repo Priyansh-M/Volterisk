@@ -106,7 +106,7 @@ Heist body is only `{ "targetUserId", "weaponId" }`.
 
 ## Publish (Supabase + one Vercel project)
 
-Local play does not change: the API on port 8787, the client on port 4178, with Vite proxying `/api`. The live site is one Vercel project rooted at `volterisk`. It serves the built client from `public/` and the Express API at `/api`. Supabase Postgres is still the database. Leave `VITE_API_URL` unset so the browser calls `/api` on the same origin.
+Local play does not change: the API on port 8787, the client on port 4178, with Vite proxying `/api`. The live site is one Vercel project rooted at `volterisk`. It serves the built client from `client/dist` and the Express API at `/api`. Supabase Postgres is still the database. Leave `VITE_API_URL` unset so the browser calls `/api` on the same origin.
 
 Create the tables once from PowerShell after `server/.env` contains the Supabase URLs:
 
@@ -118,4 +118,4 @@ npm run db:push:supabase
 
 Copy both URLs from the Supabase Connect dialog into `server/.env`. `DATABASE_URL` is the transaction pooler (port 6543) plus `pgbouncer=true` and `connection_limit=1`. `DIRECT_URL` is the session pooler (port 5432) with no `pgbouncer`. URL-encode the password (`@` becomes `%40`). Close that terminal when the push finishes.
 
-Vercel project: root directory `volterisk`. Framework Express. Install, build, and rewrites come from `vercel.json`. Environment variables `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` (not `iron-hour-local-dev`), for Production and Preview. Do not set `VITE_API_URL`. Set the variables before the first deploy, because the build reads them. Open `https://YOUR-PROJECT.vercel.app/api/health` and expect `{"ok":true}`, then register on that same origin.
+Vercel project: root directory `volterisk`. Framework preset Other (`vercel.json` sets `"framework": null`). Leave Install Command, Build Command, and Output Directory overrides off so `vercel.json` is used. Environment variables `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` (not `iron-hour-local-dev`), for Production and Preview. Copy them from `server/.env`. Do not set `VITE_API_URL`. Set the variables before the first deploy, because the build reads them. Open `https://YOUR-PROJECT.vercel.app/api/health` and expect `{"ok":true}`, then register on that same origin.
