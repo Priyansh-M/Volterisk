@@ -84,19 +84,23 @@ export function heistableVaultBalance(balance: number): number {
   return balance >= RULES.MIN_VAULT_BALANCE ? balance : RULES.MIN_VAULT_BALANCE;
 }
 
+let crewReady = false;
+
 /**
  * Inserts any missing night-crew bots. Existing rows keep their cash and vault
  * so a restart does not undo a completed heist.
  */
 export async function ensureNightCrew(): Promise<void> {
+  if (process.env.VERCEL && crewReady) return;
   await ensureWeaponCatalog();
+  const keys = NIGHT_CREW.map((bot) => bot.username.toLowerCase());
+  const existing = await prisma.user.findMany({ where: { usernameKey: { in: keys } } });
+  const byKey = new Map(existing.map((user) => [user.usernameKey, user]));
   for (const bot of NIGHT_CREW) {
     const usernameKey = bot.username.toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { usernameKey } });
-    if (existing) {
-      if (!existing.isBot) {
-        await prisma.user.update({ where: { id: existing.id }, data: { isBot: true } });
-      }
+    const row = byKey.get(usernameKey);
+    if (row) {
+      if (!row.isBot) await prisma.user.update({ where: { id: row.id }, data: { isBot: true } });
       continue;
     }
     await createPlayer({
@@ -109,18 +113,27 @@ export async function ensureNightCrew(): Promise<void> {
     });
   }
   await ensureNpcStations();
+  if (process.env.VERCEL) crewReady = true;
 }
 
 /** Plants the twenty roster squares. Moves a bot onto its square when that square is free. */
 export async function ensureNpcStations(): Promise<void> {
+  const keys = NPC_STATIONS.map((station) => station.username.toLowerCase());
+  const users = await prisma.user.findMany({
+    where: { usernameKey: { in: keys }, isBot: true },
+    include: { base: true },
+  });
+  const byKey = new Map(users.map((user) => [user.usernameKey, user]));
+  const sectors = await prisma.base.findMany({
+    where: { sectorId: { in: NPC_STATIONS.map((station) => station.sectorId) } },
+  });
+  const bySector = new Map(sectors.map((base) => [base.sectorId, base]));
   for (const station of NPC_STATIONS) {
-    const user = await prisma.user.findUnique({
-      where: { usernameKey: station.username.toLowerCase() },
-    });
-    if (!user?.isBot) continue;
-    const owned = await prisma.base.findUnique({ where: { userId: user.id } });
+    const user = byKey.get(station.username.toLowerCase());
+    if (!user) continue;
+    const owned = user.base;
     if (owned?.sectorId === station.sectorId) continue;
-    const taken = await prisma.base.findUnique({ where: { sectorId: station.sectorId } });
+    const taken = bySector.get(station.sectorId);
     if (taken && taken.userId !== user.id) continue;
     if (owned) {
       await prisma.base.update({
@@ -131,9 +144,15 @@ export async function ensureNpcStations(): Promise<void> {
           regionName: station.regionName,
         },
       });
+      bySector.set(station.sectorId, {
+        ...owned,
+        sectorId: station.sectorId,
+        landmassId: station.landmassId,
+        regionName: station.regionName,
+      });
       continue;
     }
-    await prisma.base.create({
+    const created = await prisma.base.create({
       data: {
         userId: user.id,
         sectorId: station.sectorId,
@@ -141,7 +160,47 @@ export async function ensureNpcStations(): Promise<void> {
         regionName: station.regionName,
       },
     });
+    bySector.set(station.sectorId, created);
   }
+}
+
+/** One read for the week's purses, then inserts only the crews that are missing. */
+export async function loadNpcPurses(
+  attackerId: string,
+  npcs: { id: string; username: string }[],
+  attackerLevel: number,
+) {
+  const weekStart = npcWindowStart("week");
+  const ids = npcs.map((npc) => npc.id);
+  const existing = ids.length
+    ? await prisma.npcPurse.findMany({ where: { attackerId, weekStart, npcId: { in: ids } } })
+    : [];
+  const byNpc = new Map(existing.map((row) => [row.npcId, row]));
+  const missing = npcs.filter((npc) => !byNpc.has(npc.id));
+  if (missing.length === 0) return byNpc;
+  try {
+    await prisma.npcPurse.createMany({
+      data: missing.map((npc) => {
+        const offer = npcOffer(attackerLevel, npc.username, weekStart);
+        return {
+          attackerId,
+          npcId: npc.id,
+          weekStart,
+          balance: offer.defaultBalance,
+          defaultBalance: offer.defaultBalance,
+          vaultTier: offer.tier,
+          vaultLevel: offer.vaultLevel,
+        };
+      }),
+    });
+  } catch {
+    /* another request inserted the same week */
+  }
+  const created = await prisma.npcPurse.findMany({
+    where: { attackerId, weekStart, npcId: { in: missing.map((npc) => npc.id) } },
+  });
+  for (const row of created) byNpc.set(row.npcId, row);
+  return byNpc;
 }
 
 /** How many crews step up with the player. The rest stay on a level 1 standard vault. */

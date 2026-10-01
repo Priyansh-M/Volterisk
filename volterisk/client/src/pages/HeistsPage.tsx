@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Modal } from '../components/ui/Modal.tsx'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { Notice, inputClass } from '../components/ui.tsx'
 import { ApiError, api, load, peek } from '../lib/api.ts'
@@ -35,6 +36,7 @@ export function HeistsPage() {
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [enacting, setEnacting] = useState(false)
   const [result, setResult] = useState<HeistResult | null>(null)
   const targetRef = useRef<string | null>(null)
 
@@ -143,6 +145,7 @@ export function HeistsPage() {
   async function commit() {
     if (!targetId || !selected) return
     setBusy(true)
+    setEnacting(true)
     setError(null)
     try {
       const heist = await api<HeistResult & { broken?: boolean }>('/api/heists', {
@@ -167,6 +170,7 @@ export function HeistsPage() {
       setError(err instanceof ApiError ? err.message : 'The job failed to start.')
     } finally {
       setBusy(false)
+      setEnacting(false)
     }
   }
 
@@ -271,7 +275,10 @@ export function HeistsPage() {
         ))}
       </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      {result ? (
+      <Modal open={enacting} onClose={() => undefined} code="OP-HEIST" title="Enacting heist" width="sm">
+        <p className="text-sm leading-6 text-muted">The crew is at the door. The ledger is writing the result. Stay on this page.</p>
+      </Modal>
+      {result && !enacting ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/75 p-4">
           <section className={`animate-heist w-full max-w-md border bg-card p-8 text-center shadow-2xl ${result.success ? 'border-success' : 'border-destructive'}`}>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">{result.targetUsername}</p>

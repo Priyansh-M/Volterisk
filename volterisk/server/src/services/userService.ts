@@ -41,7 +41,10 @@ const LEGACY_WEAPON_MOVES: [string, string][] = [
   ["weapon:0002", "weapon:0004"],
 ];
 
+let catalogReady = false;
+
 export async function ensureWeaponCatalog(): Promise<void> {
+  if (process.env.VERCEL && catalogReady) return;
   const legacy = await prisma.weapon.findUnique({ where: { id: "weapon:0002" } });
   if (legacy?.name === "Lockpick Set") {
     const parked = await prisma.weapon.findMany();
@@ -59,13 +62,18 @@ export async function ensureWeaponCatalog(): Promise<void> {
       await prisma.weapon.delete({ where: { id: from } });
     }
   }
+  const rows = await prisma.weapon.findMany({ select: { id: true, name: true, number: true } });
+  const byId = new Map(rows.map((row) => [row.id, row]));
   for (const weapon of RULES.WEAPONS) {
+    const row = byId.get(weapon.id);
+    if (row && row.name === weapon.name && row.number === weapon.number) continue;
     await prisma.weapon.upsert({
       where: { id: weapon.id },
       update: { name: weapon.name, number: weapon.number },
       create: { id: weapon.id, name: weapon.name, number: weapon.number },
     });
   }
+  if (process.env.VERCEL) catalogReady = true;
 }
 
 export async function createPlayer(input: {

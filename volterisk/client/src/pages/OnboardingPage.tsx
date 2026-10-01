@@ -7,10 +7,12 @@ import { OnboardingChart } from './MapPage.tsx'
 
 export function OnboardingPage() {
   const { me } = useAuth()
-  const [acked, setAcked] = useState(false)
+  const [step, setStep] = useState<'orders' | 'welcome' | 'kit'>('orders')
   if (!me) return null
   if (!me.onboarding.hasClaimedStarter) {
-    return acked ? <Allocation /> : <Initialized name={me.username} onAck={() => setAcked(true)} />
+    if (step === 'orders') return <Initialized name={me.username} onAck={() => setStep('welcome')} />
+    if (step === 'welcome') return <Welcome onContinue={() => setStep('kit')} />
+    return <Allocation />
   }
   return (
     <div className="classified-grid min-h-screen p-4 md:p-6">
@@ -35,6 +37,38 @@ function Initialized({ name, onAck }: { name: string; onAck: () => void }) {
         </dl>
         <button type="button" className="gloss-gold mt-8 cursor-pointer px-6 py-2.5 text-[11px] font-semibold tracking-[0.18em] uppercase" onClick={onAck}>
           Acknowledge orders
+        </button>
+      </section>
+    </div>
+  )
+}
+
+function Welcome({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div className="classified-grid flex min-h-screen items-center justify-center p-6">
+      <section className="w-full max-w-lg border border-line bg-ink/80 p-8">
+        <p className="text-[10px] tracking-[0.28em] text-gold uppercase">Private network</p>
+        <h1 className="mt-3 font-serif text-3xl tracking-[0.14em] text-paper md:text-4xl">WELCOME TO VOLTERISK</h1>
+        <p className="mt-4 text-sm leading-6 text-muted">
+          Three desks pay. Heists, work, and the casino. The rest of the city is where you keep what you take.
+        </p>
+        <dl className="mt-6 space-y-4 text-sm">
+          <div className="border-b border-line pb-3">
+            <dt className="text-[11px] tracking-[0.16em] text-gold uppercase">Heist</dt>
+            <dd className="mt-1 leading-6 text-paper">Pick a stationed crew or another player. Your weapon faces their vault. The chance is decided on the server, then the take, the heat, and a worn-down weapon are written down.</dd>
+          </div>
+          <div className="border-b border-line pb-3">
+            <dt className="text-[11px] tracking-[0.16em] text-gold uppercase">Work</dt>
+            <dd className="mt-1 leading-6 text-paper">Contracts on the board pay cash and cool heat. A passive job, once you qualify, pays at noon GMT.</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] tracking-[0.16em] text-gold uppercase">Casino</dt>
+            <dd className="mt-1 leading-6 text-paper">Roulette takes pocket cash only. The house keeps five percent of the table. A win is still cash, not a vault deposit.</dd>
+          </div>
+        </dl>
+        <p className="mt-5 text-sm leading-6 text-muted">Serious money belongs in the vault. Loose cash is what a bad night can take.</p>
+        <button type="button" className="gloss-gold mt-8 w-full cursor-pointer px-6 py-2.5 text-[11px] font-semibold tracking-[0.18em] uppercase" onClick={onContinue}>
+          Open the ledger
         </button>
       </section>
     </div>

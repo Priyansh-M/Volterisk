@@ -32,27 +32,52 @@ async function crossedRecently(userId: string): Promise<boolean> {
     where: { attackerId: userId, success: true, target: { isBot: false } },
     select: { targetId: true, createdAt: true },
   });
+  if (hits.length === 0) return false;
   const windowMs = RULES.INSIDE_JOB_DAYS * 24 * 60 * 60 * 1000;
-  for (const hit of hits) {
-    const since = new Date(hit.createdAt.getTime() - windowMs);
-    const prior = await prisma.heist.findFirst({
+  const earliest = new Date(Math.min(...hits.map((hit) => hit.createdAt.getTime() - windowMs)));
+  const latest = new Date(Math.max(...hits.map((hit) => hit.createdAt.getTime())));
+  const targetIds = [...new Set(hits.map((hit) => hit.targetId))];
+  const [priorHeists, priorTransfers] = await Promise.all([
+    prisma.heist.findMany({
       where: {
-        createdAt: { gte: since, lt: hit.createdAt },
+        createdAt: { gte: earliest, lt: latest },
         OR: [
-          { attackerId: userId, targetId: hit.targetId },
-          { attackerId: hit.targetId, targetId: userId },
+          { attackerId: userId, targetId: { in: targetIds } },
+          { attackerId: { in: targetIds }, targetId: userId },
         ],
       },
+      select: { attackerId: true, targetId: true, createdAt: true },
+    }),
+    prisma.transaction.findMany({
+      where: {
+        createdAt: { gte: earliest, lt: latest },
+        OR: [
+          { fromUserId: userId, toUserId: { in: targetIds } },
+          { fromUserId: { in: targetIds }, toUserId: userId },
+        ],
+      },
+      select: { fromUserId: true, toUserId: true, createdAt: true },
+    }),
+  ]);
+  for (const hit of hits) {
+    const since = hit.createdAt.getTime() - windowMs;
+    const before = hit.createdAt.getTime();
+    const prior = priorHeists.some((row) => {
+      const at = row.createdAt.getTime();
+      if (at < since || at >= before) return false;
+      return (
+        (row.attackerId === userId && row.targetId === hit.targetId) ||
+        (row.attackerId === hit.targetId && row.targetId === userId)
+      );
     });
     if (prior) return true;
-    const crossed = await prisma.transaction.findFirst({
-      where: {
-        createdAt: { gte: since, lt: hit.createdAt },
-        OR: [
-          { fromUserId: userId, toUserId: hit.targetId },
-          { fromUserId: hit.targetId, toUserId: userId },
-        ],
-      },
+    const crossed = priorTransfers.some((row) => {
+      const at = row.createdAt.getTime();
+      if (at < since || at >= before) return false;
+      return (
+        (row.fromUserId === userId && row.toUserId === hit.targetId) ||
+        (row.fromUserId === hit.targetId && row.toUserId === userId)
+      );
     });
     if (crossed) return true;
   }

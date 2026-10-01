@@ -4,6 +4,7 @@
   "installCommand": "npm install --prefix server --include=dev && npm install --prefix client --include=dev",
   "buildCommand": "npm run vercel-build --prefix server && npm run build --prefix client",
   "outputDirectory": "client/dist",
+  "regions": ["bom1"],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api?__path=$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }

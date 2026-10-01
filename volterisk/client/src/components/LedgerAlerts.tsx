@@ -80,10 +80,11 @@ export function LedgerAlerts({
         busy = false
       }
     }
-    void poll()
-    const timer = window.setInterval(() => void poll(), 1000)
+    const start = window.setTimeout(() => void poll(), 1200)
+    const timer = window.setInterval(() => void poll(), 8000)
     return () => {
       cancelled = true
+      window.clearTimeout(start)
       window.clearInterval(timer)
     }
   }, [])

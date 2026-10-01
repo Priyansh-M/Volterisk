@@ -18,7 +18,7 @@ import {
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { creditCash, debitVault, type Tx } from "./economyService.js";
-import { isNpcGated, isStationedNpc, NPC_STATIONS, openNpcPurse, stationForUsername } from "./nightCrew.js";
+import { isNpcGated, isStationedNpc, loadNpcPurses, NPC_STATIONS, openNpcPurse, stationForUsername } from "./nightCrew.js";
 import { gainHeat, heistHeatGain } from "./heatService.js";
 import { writeNotification } from "./notificationService.js";
 
@@ -142,13 +142,18 @@ export async function listTargets(attackerId: string) {
     if (!npcCool.has(hit.targetId)) npcCool.set(hit.targetId, hit.createdAt);
   }
 
-  const cards = await Promise.all(
-    users
-      .filter((user) => user.vault && (stationForUsername(user.username) || user.vault.balance >= RULES.MIN_VAULT_BALANCE))
-      .map(async (user) => {
+  const stationedUsers = users.filter((user) => user.vault && stationForUsername(user.username));
+  const purses = await loadNpcPurses(
+    attackerId,
+    stationedUsers.map((user) => ({ id: user.id, username: user.username })),
+    attackerLevel,
+  );
+  const cards = users
+    .filter((user) => user.vault && (stationForUsername(user.username) || user.vault.balance >= RULES.MIN_VAULT_BALANCE))
+    .map((user) => {
         const station = stationForUsername(user.username);
         const npcHitAt = station ? npcCool.get(user.id) ?? null : null;
-        const purse = station ? await openNpcPurse(attackerId, user.id, user.username, attackerLevel) : null;
+        const purse = station ? purses.get(user.id) ?? null : null;
         const gated = station ? isNpcGated(user.username, attackerLevel) : false;
         const vaultLevel = purse?.vaultLevel ?? user.vault!.level;
         const balance = purse?.balance ?? user.vault!.balance;
@@ -171,8 +176,7 @@ export async function listTargets(attackerId: string) {
             cooldownEndsAt: npcHitAt ? minutesFromNow(RULES.NPC_COOLDOWN_MINUTES, npcHitAt).toISOString() : null,
           } satisfies TargetCard,
         };
-      }),
-  );
+    });
 
   const stationed = new Set(NPC_STATIONS.map((station) => station.username.toLowerCase()));
   return {

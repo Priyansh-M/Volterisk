@@ -26,11 +26,19 @@ async function boot(): Promise<void> {
     await configureSqlite();
   }
   await ensureNightCrew();
+}
+
+const pending = boot();
+if (process.env.VERCEL) {
+  setReady(pending);
+  void pending.then(() => {
+    void settleAllHeat().catch((error) => console.error("heat", error));
+    void settleAllPassivePay().catch((error) => console.error("passive payday", error));
+  });
+} else {
+  await pending;
   await settleAllHeat().catch((error) => console.error("heat", error));
   await settleAllPassivePay().catch((error) => console.error("passive payday", error));
 }
-
-if (process.env.VERCEL) setReady(boot());
-else await boot();
 
 export default app;
