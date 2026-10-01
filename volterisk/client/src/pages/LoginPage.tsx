@@ -13,7 +13,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (!loading && me) return <Navigate to={me.onboarding.hasBase ? '/' : '/map'} replace />
+  if (!loading && me?.onboarding) return <Navigate to={me.onboarding.hasBase ? '/' : '/map'} replace />
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -24,6 +24,7 @@ export function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       })
+      if (!result.token || !result.user?.onboarding) throw new ApiError('The API did not return a session.', 502)
       await login(result.token)
       navigate(result.user.onboarding.hasBase ? '/' : '/map')
     } catch (err) {

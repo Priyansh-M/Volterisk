@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createApp } from "./app.js";
 import { configureSqlite, ensureDatabase, usesPostgres } from "./prisma.js";
+import { setReady } from "./runtime.js";
 import { ensureNightCrew } from "./services/nightCrew.js";
 import { settleAllHeat } from "./services/heatService.js";
 import { settleAllPassivePay } from "./services/workService.js";
@@ -29,6 +30,7 @@ async function boot(): Promise<void> {
   await settleAllPassivePay().catch((error) => console.error("passive payday", error));
 }
 
-await boot();
+if (process.env.VERCEL) setReady(boot());
+else await boot();
 
 export default app;

@@ -1,16 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "npm install --prefix server --include=dev && npm install --prefix client --include=dev",
-  "buildCommand": "npm run vercel-build --prefix server && npm run build --prefix client",
-  "outputDirectory": "client/dist",
+  "framework": "express",
+  "installCommand": "npm install --prefix server --include=dev && npm install --prefix client --include=dev && npm install",
+  "buildCommand": "npm run vercel-build --prefix server && npm run build --prefix client && node scripts/copy-client.mjs",
   "functions": {
-    "api/**/*.ts": {
+    "src/index.ts": {
       "maxDuration": 60,
-      "includeFiles": "{server/node_modules/.prisma/**,server/node_modules/@prisma/client/**}"
+      "includeFiles": "{public/index.html,server/node_modules/.prisma/**,server/node_modules/@prisma/client/**}"
     }
-  },
-  "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
+  }
 }

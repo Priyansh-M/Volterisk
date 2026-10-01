@@ -82,9 +82,20 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const method = (options.method ?? 'GET').toUpperCase()
   if (method !== 'GET') invalidateGets()
   const response = await fetch(requestUrl(path), { ...options, headers })
-  const data = (await response.json().catch(() => ({}))) as {
+  const text = await response.text()
+  let data: {
     error?: string | { code?: string; message?: string }
     code?: string
+  } = {}
+  if (text) {
+    try {
+      data = JSON.parse(text) as typeof data
+    } catch {
+      throw new ApiError(
+        'The API did not answer. This site reached the page instead of /api.',
+        response.status || 502,
+      )
+    }
   }
   if (!response.ok) {
     const nested = data.error && typeof data.error === 'object' ? data.error : null

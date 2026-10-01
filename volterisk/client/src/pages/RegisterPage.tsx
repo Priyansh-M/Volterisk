@@ -12,7 +12,7 @@ export function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (!loading && me) return <Navigate to={me.onboarding.hasBase ? '/' : '/map'} replace />
+  if (!loading && me?.onboarding) return <Navigate to={me.onboarding.hasBase ? '/' : '/map'} replace />
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -23,6 +23,7 @@ export function RegisterPage() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       })
+      if (!result.token) throw new ApiError('The API did not return a session.', 502)
       await login(result.token)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not open a ledger.')
