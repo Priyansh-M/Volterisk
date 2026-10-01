@@ -207,7 +207,7 @@ export function LedgerAlerts({
             <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">The door held. Nothing left the vault.</p>
           )}
           <button type="button" className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={() => void dismissHeist()}>
-            File the report
+            Continue
           </button>
         </section>
       ) : null}
