@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run vercel-build --prefix server && npm run build --prefix client && node scripts/copy-client.mjs"
+    "build": "npm run vercel-build --prefix server && npm run build --prefix client"
   },
   "dependencies": {
     "express": "^4.21.2"
