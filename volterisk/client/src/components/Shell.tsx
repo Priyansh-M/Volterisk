@@ -91,6 +91,7 @@ export function Shell() {
   const [unclaimed, setUnclaimed] = useState(me?.unclaimedAchievements ?? 0)
   const [welcome, setWelcome] = useState(false)
   const [brief, setBrief] = useState(false)
+  const [discordInvite, setDiscordInvite] = useState(false)
   const [casinoOpen, setCasinoOpen] = useState(location.pathname.startsWith('/casino'))
 
   useEffect(() => {
@@ -105,6 +106,18 @@ export function Shell() {
     }
     if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!me?.id) return
+    const seen = localStorage.getItem(`volterisk-discord:${me.id}`) === '1'
+    const introOpen = sessionStorage.getItem('volterisk-welcome') === '1' || sessionStorage.getItem('volterisk-brief') === '1'
+    setDiscordInvite(!seen && !introOpen && !welcome && !brief)
+  }, [me?.id, welcome, brief])
+
+  function dismissDiscord() {
+    if (me?.id) localStorage.setItem(`volterisk-discord:${me.id}`, '1')
+    setDiscordInvite(false)
+  }
 
   function recount(count?: number) {
     if (typeof count === 'number') {
@@ -130,7 +143,7 @@ export function Shell() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <LedgerAlerts paused={welcome || brief} onChange={recount} onUnclaimed={setUnclaimed} />
+      <LedgerAlerts paused={welcome || brief || discordInvite} onChange={recount} onUnclaimed={setUnclaimed} />
       {welcome && location.pathname === '/' ? (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-background/80 p-4">
           <section className="animate-dossier w-full max-w-lg border border-line bg-ink/90 p-8 shadow-2xl">
@@ -189,6 +202,33 @@ export function Shell() {
             >
               I understand
             </button>
+          </section>
+        </div>
+      ) : null}
+      {discordInvite ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-background/80 p-4">
+          <section className="animate-dossier relative w-full max-w-lg border border-line bg-ink/90 p-8 shadow-2xl">
+            <button
+              type="button"
+              className="absolute top-4 right-4 cursor-pointer font-mono text-sm text-muted-foreground hover:text-foreground"
+              aria-label="Close"
+              onClick={dismissDiscord}
+            >
+              ×
+            </button>
+            <p className="text-[10px] tracking-[0.28em] text-primary uppercase">Private network</p>
+            <h2 className="mt-3 font-display text-3xl font-semibold uppercase">Join the discord</h2>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">Meet your fellow operators.</p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">You can always join later from the small Discord icon above Log out.</p>
+            <a
+              href="https://discord.gg/9H4FtfmBA"
+              target="_blank"
+              rel="noreferrer"
+              className="gloss-gold mt-8 block w-full cursor-pointer px-4 py-2 text-center text-[11px] font-semibold tracking-[0.16em] uppercase no-underline"
+              onClick={dismissDiscord}
+            >
+              Join
+            </a>
           </section>
         </div>
       ) : null}
@@ -312,7 +352,7 @@ export function Shell() {
             rel="noreferrer"
             title="Discord"
             aria-label="Discord"
-            className="mb-2 ml-3 inline-flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground"
+            className="mb-2 ml-3 inline-flex h-8 w-8 items-center justify-center border border-primary text-muted-foreground hover:text-foreground"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
               <path d="M19.27 5.33A17.4 17.4 0 0 0 15 4a.1.1 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.1 16.1 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09A.1.1 0 0 0 9 4a17.4 17.4 0 0 0-4.27 1.33c-.01 0-.02.01-.03.02C1.98 9.42 1.23 13.38 1.6 17.3c0 .02.01.04.03.05A17.9 17.9 0 0 0 6.87 20c.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.01.06.02.09.01a17.9 17.9 0 0 0 5.25-2.65c.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02M8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12m6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12" />
