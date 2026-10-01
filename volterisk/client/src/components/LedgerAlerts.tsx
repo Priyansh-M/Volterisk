@@ -10,9 +10,11 @@ type HeistNotice = { id: string; by: string; success: boolean; amountStolen: num
 export function LedgerAlerts({
   onChange,
   onUnclaimed,
+  paused = false,
 }: {
   onChange: (unread?: number) => void
   onUnclaimed?: (count: number) => void
+  paused?: boolean
 }) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -80,14 +82,15 @@ export function LedgerAlerts({
         busy = false
       }
     }
-    const start = window.setTimeout(() => void poll(), 1200)
+    if (paused) return
+    const start = window.setTimeout(() => void poll(), 400)
     const timer = window.setInterval(() => void poll(), 8000)
     return () => {
       cancelled = true
       window.clearTimeout(start)
       window.clearInterval(timer)
     }
-  }, [])
+  }, [paused])
 
   function ackUnlock(id: string) {
     void api('/api/achievements/ack', { method: 'POST', body: JSON.stringify({ id }) }).catch(() => undefined)

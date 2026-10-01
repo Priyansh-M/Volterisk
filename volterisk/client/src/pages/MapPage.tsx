@@ -78,6 +78,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
       })
       setEstablished(result.base)
       if (firstBase) {
+        sessionStorage.setItem('volterisk-welcome', '1')
         sessionStorage.setItem('volterisk-brief', '1')
         navigate('/')
       }

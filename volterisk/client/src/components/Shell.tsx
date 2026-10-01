@@ -89,6 +89,7 @@ export function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notices, setNotices] = useState(0)
   const [unclaimed, setUnclaimed] = useState(me?.unclaimedAchievements ?? 0)
+  const [welcome, setWelcome] = useState(false)
   const [brief, setBrief] = useState(false)
   const [casinoOpen, setCasinoOpen] = useState(location.pathname.startsWith('/casino'))
 
@@ -97,7 +98,12 @@ export function Shell() {
   }, [me?.unclaimedAchievements])
 
   useEffect(() => {
-    if (location.pathname === '/' && sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
+    if (location.pathname !== '/') return
+    if (sessionStorage.getItem('volterisk-welcome') === '1') {
+      setWelcome(true)
+      return
+    }
+    if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
   }, [location.pathname])
 
   function recount(count?: number) {
@@ -124,8 +130,42 @@ export function Shell() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <LedgerAlerts onChange={recount} onUnclaimed={setUnclaimed} />
-      {brief && location.pathname === '/' ? (
+      <LedgerAlerts paused={welcome || brief} onChange={recount} onUnclaimed={setUnclaimed} />
+      {welcome && location.pathname === '/' ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-background/80 p-4">
+          <section className="animate-dossier w-full max-w-lg border border-line bg-ink/90 p-8 shadow-2xl">
+            <p className="text-[10px] tracking-[0.28em] text-primary uppercase">Private network</p>
+            <h2 className="mt-3 font-display text-3xl font-semibold uppercase">Welcome to Volterisk</h2>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">Dominate the leaderboard with three options.</p>
+            <dl className="mt-6 space-y-4 text-sm">
+              <div className="border-b border-border pb-3">
+                <dt className="font-mono text-[10px] tracking-[0.16em] text-primary uppercase">Heist</dt>
+                <dd className="mt-1 leading-6">Pick a stationed crew or another player. Your weapon faces their vault. The chance is decided on the server, then the take, the heat, and a worn-down weapon are written down.</dd>
+              </div>
+              <div className="border-b border-border pb-3">
+                <dt className="font-mono text-[10px] tracking-[0.16em] text-primary uppercase">Work</dt>
+                <dd className="mt-1 leading-6">Contracts on the board pay cash and cool heat. A passive job, once you qualify, pays at noon GMT.</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[10px] tracking-[0.16em] text-primary uppercase">Casino</dt>
+                <dd className="mt-1 leading-6">Try your luck at the casino, use your cash for the chance to win big sums against the house.</dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              className="gloss-gold mt-8 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+              onClick={() => {
+                sessionStorage.removeItem('volterisk-welcome')
+                setWelcome(false)
+                if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
+              }}
+            >
+              Continue
+            </button>
+          </section>
+        </div>
+      ) : null}
+      {brief && !welcome && location.pathname === '/' ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/80 p-4">
           <section className="animate-dossier w-full max-w-lg border border-primary bg-card p-6 shadow-2xl">
             <p className="font-mono text-[10px] tracking-[0.2em] text-primary uppercase">Before you step onto the chart</p>
