@@ -34,11 +34,13 @@ function hashSeed(input: string): number {
   return h >>> 0;
 }
 
-/** Same seven jobs for every player until the hour changes. */
-function offeredContracts(now: Date) {
+type WorkContract = (typeof RULES.WORK_CONTRACTS)[number];
+
+const BOARD_MS = RULES.WORK_BOARD_ROTATION_MINUTES * 60 * 1000;
+const BOARD_LEAD_MS = 30 * 60 * 1000;
+
+function shuffleContracts(bucket: number): WorkContract[] {
   const pool = RULES.WORK_CONTRACTS;
-  const windowMs = RULES.WORK_BOARD_ROTATION_MINUTES * 60 * 1000;
-  const bucket = Math.floor(now.getTime() / windowMs);
   const secret = process.env.JWT_SECRET || "iron-hour-local-dev";
   let seed = hashSeed(`${secret}:work:${bucket}`);
   const next = () => {
@@ -53,6 +55,23 @@ function offeredContracts(now: Date) {
     order[j] = swap;
   }
   return order.slice(0, Math.min(RULES.WORK_BOARD_SIZE, order.length));
+}
+
+let liveBoard: { startsAt: number; contracts: WorkContract[] } | null = null;
+let nextBoard: { startsAt: number; contracts: WorkContract[] } | null = null;
+
+/** Same seven jobs for every player. The next hour is drawn during the half hour before it starts. */
+function offeredContracts(now: Date) {
+  const startsAt = Math.floor(now.getTime() / BOARD_MS) * BOARD_MS;
+  if (!liveBoard || liveBoard.startsAt !== startsAt) {
+    liveBoard = nextBoard?.startsAt === startsAt ? nextBoard : { startsAt, contracts: shuffleContracts(startsAt / BOARD_MS) };
+    nextBoard = null;
+  }
+  const nextStart = startsAt + BOARD_MS;
+  if (now.getTime() >= nextStart - BOARD_LEAD_MS && nextBoard?.startsAt !== nextStart) {
+    nextBoard = { startsAt: nextStart, contracts: shuffleContracts(nextStart / BOARD_MS) };
+  }
+  return liveBoard.contracts;
 }
 
 async function playerLevel(userId: string): Promise<number> {
@@ -119,8 +138,8 @@ export async function listContracts(userId: string) {
   const [active, collected] = await Promise.all([
     prisma.contractRun.findUnique({ where: { activeSlot: userId } }),
     prisma.contractRun.findMany({
-      where: { userId, collectedAt: { not: null } },
-      orderBy: { collectedAt: "desc" },
+      where: { userId, collectedAt: { gt: minutesAgo(RULES.WORK_CONTRACT_COOLDOWN_MINUTES, now) } },
+      select: { contractId: true, collectedAt: true },
     }),
   ]);
   await notifyIfReady(active);
@@ -325,35 +344,39 @@ export function latestPaydayNoon(now = new Date()): Date {
   return noon;
 }
 
+const passiveFresh = new Map<string, number>();
+
 export async function settlePassivePay(userId: string): Promise<number> {
+  const noon = latestPaydayNoon();
+  if ((passiveFresh.get(userId) ?? 0) >= noon.getTime()) return 0;
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || user.isBot || !user.passiveJobId) return 0;
   const job = RULES.PASSIVE_JOBS.find((entry) => entry.id === user.passiveJobId);
   if (!job) return 0;
-  const noon = latestPaydayNoon();
-  if (user.passivePaidFor && user.passivePaidFor.getTime() >= noon.getTime()) return 0;
+  if (user.passivePaidFor && user.passivePaidFor.getTime() >= noon.getTime()) {
+    passiveFresh.set(userId, noon.getTime());
+    return 0;
+  }
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
   if (!passiveQualified(owned, job, user.reputationLevel)) return 0;
+  let covered = false;
   await prisma.$transaction(async (tx) => {
     const fresh = await tx.user.findUnique({ where: { id: userId } });
     if (!fresh?.passiveJobId || fresh.passiveJobId !== job.id) return;
-    if (fresh.passivePaidFor && fresh.passivePaidFor.getTime() >= noon.getTime()) return;
+    if (fresh.passivePaidFor && fresh.passivePaidFor.getTime() >= noon.getTime()) {
+      covered = true;
+      return;
+    }
     await creditCash(tx, userId, job.payPerDay);
     await coolHeat(tx, userId, RULES.HEAT_PASSIVE_DAY);
     await tx.user.update({ where: { id: userId }, data: { passivePaidFor: noon } });
     await tx.transaction.create({
       data: { type: "passive_payday", amount: job.payPerDay, toUserId: userId },
     });
+    covered = true;
   });
+  if (covered) passiveFresh.set(userId, noon.getTime());
   return job.payPerDay;
-}
-
-export async function settleAllPassivePay(): Promise<void> {
-  const due = await prisma.user.findMany({
-    where: { isBot: false, passiveJobId: { not: null } },
-    select: { id: true },
-  });
-  for (const row of due) await settlePassivePay(row.id);
 }
 
 export async function listPassiveJobs(userId: string) {

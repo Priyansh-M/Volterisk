@@ -239,15 +239,13 @@ export function Shell() {
             </button>
             <p className="font-mono text-[10px] tracking-[0.2em] text-destructive uppercase">Heat check</p>
             <h2 className="mt-3 font-display text-3xl font-semibold uppercase">One minute</h2>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              A heat check hits in one minute. Above 50, half the cash in your pocket is taken. Above 100, all of it is taken. The vault is left alone.
-            </p>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">Heat Check incoming, protect your money ASAP.</p>
             <button
               type="button"
               className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
               onClick={() => setHeatWarnClosed(heatWarn)}
             >
-              Close
+              Continue
             </button>
           </section>
         </div>

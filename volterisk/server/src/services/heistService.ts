@@ -116,7 +116,19 @@ function assertTargetKind(target: { isBot: boolean; username: string }, kind: He
   }
 }
 
+const targetCache = new Map<string, { at: number; npc: TargetCard[]; players: TargetCard[] }>();
+
 export async function listTargets(attackerId: string) {
+  if (process.env.VERCEL) {
+    const hit = targetCache.get(attackerId);
+    if (hit && Date.now() - hit.at < 10_000) return { npc: hit.npc, players: hit.players };
+  }
+  const board = await readTargets(attackerId);
+  if (process.env.VERCEL) targetCache.set(attackerId, { at: Date.now(), ...board });
+  return board;
+}
+
+async function readTargets(attackerId: string) {
   const attacker = await prisma.user.findUnique({ where: { id: attackerId }, select: { reputationLevel: true } });
   const attackerLevel = attacker?.reputationLevel ?? 1;
   const users = await prisma.user.findMany({

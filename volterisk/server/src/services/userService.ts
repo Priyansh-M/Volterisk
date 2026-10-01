@@ -184,19 +184,15 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 export async function getProfile(userId: string) {
   await settleHeatIfDue(userId);
   await settlePassivePay(userId);
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      vault: true,
-      base: true,
-      weapons: { where: { equipped: true }, include: { weapon: true } },
-    },
-  });
-  if (!user || !user.vault) {
-    throw new GameError(404, "NOT_FOUND", "Player not found.");
-  }
-
-  const [won, failed, lost] = await Promise.all([
+  const [user, won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        vault: true,
+        base: true,
+        weapons: { where: { equipped: true }, include: { weapon: true } },
+      },
+    }),
     prisma.heist.aggregate({
       where: { attackerId: userId, success: true },
       _sum: { amountStolen: true },
@@ -207,12 +203,17 @@ export async function getProfile(userId: string) {
       where: { targetId: userId, success: true },
       _sum: { amountStolen: true },
     }),
+    publicProfileFor(userId),
+    unclaimedCount(userId),
+    cooldownEndsAt(userId),
   ]);
+  if (!user || !user.vault) {
+    throw new GameError(404, "NOT_FOUND", "Player not found.");
+  }
 
   const successfulHeists = won._count;
   const level = user.reputationLevel;
   const equipped = user.weapons[0];
-  const standing = await publicProfileFor(userId);
   return {
     id: user.id,
     username: user.username,
@@ -240,7 +241,7 @@ export async function getProfile(userId: string) {
       user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()
         ? { active: true, endsAt: user.vaultExposedUntil.toISOString() }
         : { active: false, endsAt: null },
-    unclaimedAchievements: await unclaimedCount(userId),
+    unclaimedAchievements: unclaimed,
     currentJob: user.passiveJobId
       ? {
           id: user.passiveJobId,
@@ -248,7 +249,7 @@ export async function getProfile(userId: string) {
           payPerDay: RULES.PASSIVE_JOBS.find((job) => job.id === user.passiveJobId)?.payPerDay ?? 0,
         }
       : null,
-    cooldownEndsAt: await cooldownEndsAt(userId),
+    cooldownEndsAt: cooldown,
     onboarding: onboardingStateFrom(user),
     base: user.base
       ? {
@@ -267,13 +268,72 @@ export async function getProfile(userId: string) {
   };
 }
 
+const BOARD_CACHE_MS = 20_000;
+
+type VaultStanding = {
+  rank: number;
+  username: string;
+  netWorth: number;
+  level: number;
+  successfulHeists: number;
+  base: string | null;
+};
+
+type AssetStanding = {
+  rank: number;
+  username: string;
+  assetWorth: number;
+  properties: number;
+  vehicles: number;
+  vaultLabel: string;
+};
+
+let leaderboardCache: {
+  at: number;
+  richest: VaultStanding[];
+  assets: AssetStanding[];
+  heisters: { rank: number; username: string; successfulHeists: number }[];
+  largestHeists: { rank: number; attackerUsername: string; targetUsername: string; amount: number; createdAt: string }[];
+  youById: Map<string, VaultStanding>;
+  assetsYouById: Map<string, AssetStanding>;
+} | null = null;
+
 export async function getLeaderboard(viewerId?: string) {
+  const core = await loadLeaderboard();
+  return {
+    richest: core.richest,
+    you: viewerId ? (core.youById.get(viewerId) ?? null) : null,
+    assets: core.assets,
+    assetsYou: viewerId ? (core.assetsYouById.get(viewerId) ?? null) : null,
+    heisters: core.heisters,
+    largestHeists: core.largestHeists,
+  };
+}
+
+async function loadLeaderboard() {
+  if (process.env.VERCEL && leaderboardCache && Date.now() - leaderboardCache.at < BOARD_CACHE_MS) {
+    return leaderboardCache;
+  }
+  const built = await computeLeaderboard();
+  const cached = { at: Date.now(), ...built };
+  if (process.env.VERCEL) leaderboardCache = cached;
+  return cached;
+}
+
+async function computeLeaderboard() {
   const users = await prisma.user.findMany({
     where: { isBot: false },
     include: { vault: true, base: true, properties: { select: { catalogId: true, level: true } } },
   });
   if (users.length === 0) {
-    return { richest: [], you: null, assets: [], assetsYou: null, heisters: [], largestHeists: [] };
+    return {
+      richest: [],
+      assets: [],
+      heisters: [],
+      largestHeists: [],
+      youById: new Map<string, VaultStanding>(),
+      assetsYouById: new Map<string, AssetStanding>(),
+    };
   }
   const realIds = users.map((user) => user.id);
 
@@ -303,8 +363,12 @@ export async function getLeaderboard(viewerId?: string) {
     return { rank: placed, username: row.username, netWorth: row.netWorth, level: row.level, successfulHeists: row.successfulHeists, base: row.base, id: row.id };
   });
   const richest = ranked.filter((row) => row.rank <= RULES.LEADERBOARD_SIZE).map(({ id: _id, ...row }) => row);
-  const viewer = viewerId ? ranked.find((row) => row.id === viewerId) : undefined;
-  const you = viewer && viewer.rank > RULES.LEADERBOARD_SIZE ? (({ id: _id, ...row }) => row)(viewer) : null;
+  const youById = new Map<string, VaultStanding>();
+  for (const row of ranked) {
+    if (row.rank <= RULES.LEADERBOARD_SIZE) continue;
+    const { id, ...rest } = row;
+    youById.set(id, rest);
+  }
 
   const assetOrdered = users
     .map((user) => {
@@ -334,8 +398,12 @@ export async function getLeaderboard(viewerId?: string) {
     return { rank: assetPlace, ...row };
   });
   const assets = assetRanked.filter((row) => row.rank <= RULES.LEADERBOARD_SIZE).map(({ id: _id, ...row }) => row);
-  const assetViewer = viewerId ? assetRanked.find((row) => row.id === viewerId) : undefined;
-  const assetsYou = assetViewer && assetViewer.rank > RULES.LEADERBOARD_SIZE ? (({ id: _id, ...row }) => row)(assetViewer) : null;
+  const assetsYouById = new Map<string, AssetStanding>();
+  for (const row of assetRanked) {
+    if (row.rank <= RULES.LEADERBOARD_SIZE) continue;
+    const { id, ...rest } = row;
+    assetsYouById.set(id, rest);
+  }
 
   const names = new Map(users.map((user) => [user.id, user.username]));
   const heisters = grouped
@@ -360,9 +428,7 @@ export async function getLeaderboard(viewerId?: string) {
 
   return {
     richest,
-    you,
     assets,
-    assetsYou,
     heisters,
     largestHeists: biggest.map((row, index) => ({
       rank: index + 1,
@@ -371,6 +437,8 @@ export async function getLeaderboard(viewerId?: string) {
       amount: row.amountStolen,
       createdAt: row.createdAt.toISOString(),
     })),
+    youById,
+    assetsYouById,
   };
 }
 

@@ -162,21 +162,45 @@ export async function settleHeat(userId: string): Promise<number> {
   return prisma.$transaction((tx) => applyHeat(tx, userId, 0));
 }
 
-/** One indexed read. The full settle runs only after a check time has passed. */
+function latestCheckAt(nowMs: number): number | null {
+  let latest: number | null = null;
+  for (let day = utcDayStart(nowMs) - DAY_MS; day <= nowMs; day += DAY_MS) {
+    for (const at of heatChecksForUtcDay(day)) {
+      if (at <= nowMs && (latest === null || at > latest)) latest = at;
+    }
+  }
+  return latest;
+}
+
+/** True for a few minutes after a check, so the warning poll can settle once. */
+export function heatNeedsTouch(now = Date.now()): boolean {
+  const at = latestCheckAt(now);
+  return at !== null && now - at <= 3 * 60 * 1000;
+}
+
+const settledPast = new Map<string, number>();
+
+/** One indexed read, and only when a check has passed since this player was last settled. */
 export async function settleHeatIfDue(userId: string): Promise<void> {
+  const now = Date.now();
+  const at = latestCheckAt(now);
+  if (at === null) return;
+  if ((settledPast.get(userId) ?? 0) >= at) return;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { isBot: true, createdAt: true, heatJudgedOn: true },
   });
-  if (!user || user.isBot) return;
-  const due = checksBetween(judgedMs(user.heatJudgedOn, user.createdAt), Date.now());
-  if (due.length === 0) return;
+  if (!user || user.isBot) {
+    settledPast.set(userId, at);
+    return;
+  }
+  const due = checksBetween(judgedMs(user.heatJudgedOn, user.createdAt), now);
+  if (due.length === 0) {
+    settledPast.set(userId, at);
+    return;
+  }
   await settleHeat(userId);
-}
-
-export async function settleAllHeat(): Promise<void> {
-  const users = await prisma.user.findMany({ where: { isBot: false }, select: { id: true } });
-  for (const user of users) await settleHeat(user.id);
+  settledPast.set(userId, at);
 }
 
 export function heistHeatGain(success: boolean, amountStolen: number): number {

@@ -4,8 +4,6 @@ import { createApp } from "./app.js";
 import { configureSqlite, ensureDatabase, usesPostgres } from "./prisma.js";
 import { setReady } from "./runtime.js";
 import { ensureNightCrew } from "./services/nightCrew.js";
-import { settleAllHeat } from "./services/heatService.js";
-import { settleAllPassivePay } from "./services/workService.js";
 
 void express;
 
@@ -31,14 +29,8 @@ async function boot(): Promise<void> {
 const pending = boot();
 if (process.env.VERCEL) {
   setReady(pending);
-  void pending.then(() => {
-    void settleAllHeat().catch((error) => console.error("heat", error));
-    void settleAllPassivePay().catch((error) => console.error("passive payday", error));
-  });
 } else {
   await pending;
-  await settleAllHeat().catch((error) => console.error("heat", error));
-  await settleAllPassivePay().catch((error) => console.error("passive payday", error));
 }
 
 export default app;

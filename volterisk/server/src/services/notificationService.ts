@@ -50,15 +50,6 @@ export async function markNotificationRead(userId: string, notificationId: strin
 }
 
 export async function listNotifications(userId: string) {
-  const stale = await prisma.notification.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    skip: 10,
-    select: { id: true },
-  });
-  if (stale.length > 0) {
-    await prisma.notification.deleteMany({ where: { id: { in: stale.map((row) => row.id) } } });
-  }
   const rows = await prisma.notification.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },

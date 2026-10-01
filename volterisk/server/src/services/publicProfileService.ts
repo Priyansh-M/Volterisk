@@ -23,7 +23,7 @@ export type PublicProfile = {
 let profileCache: { at: number; index: Map<string, PublicProfile> } | null = null;
 
 export async function loadPublicProfiles(): Promise<Map<string, PublicProfile>> {
-  if (process.env.VERCEL && profileCache && Date.now() - profileCache.at < 8_000) return profileCache.index;
+  if (process.env.VERCEL && profileCache && Date.now() - profileCache.at < 30_000) return profileCache.index;
   const index = await computePublicProfiles();
   if (process.env.VERCEL) profileCache = { at: Date.now(), index };
   return index;

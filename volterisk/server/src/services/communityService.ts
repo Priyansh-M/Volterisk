@@ -2,7 +2,16 @@ import { prisma } from "../prisma.js";
 
 const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
 
+let communityCache: { at: number; value: Awaited<ReturnType<typeof readCommunityBoard>> } | null = null;
+
 export async function communityBoard() {
+  if (process.env.VERCEL && communityCache && Date.now() - communityCache.at < 20_000) return communityCache.value;
+  const value = await readCommunityBoard();
+  if (process.env.VERCEL) communityCache = { at: Date.now(), value };
+  return value;
+}
+
+async function readCommunityBoard() {
   const [players, heisted, snaps] = await Promise.all([
     prisma.user.findMany({
       where: { isBot: false },
