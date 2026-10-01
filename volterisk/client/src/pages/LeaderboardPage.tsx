@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Notice, PageTitle } from '../components/ui.tsx'
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { ApiError, load, peek } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
@@ -45,6 +46,39 @@ function toRows(board: Leaderboard): { listed: Row[]; you: Row | null } {
   }
 }
 
+type AssetRow = {
+  rank: number
+  username: string
+  properties: number
+  vehicles: number
+  vault: string
+  assetWorth: number
+}
+
+function toAsset(row: NonNullable<Leaderboard['assets']>[number]): AssetRow {
+  return {
+    rank: row.rank,
+    username: row.username,
+    properties: row.properties,
+    vehicles: row.vehicles,
+    vault: row.vaultLabel,
+    assetWorth: row.assetWorth,
+  }
+}
+
+function AssetRankRow({ row, mine }: { row: AssetRow; mine: boolean }) {
+  return (
+    <tr className={mine ? 'border-t border-line bg-gold/10 text-gold' : 'border-t border-line'}>
+      <td className="px-3 py-2 tabular-nums">{row.rank}</td>
+      <td className="px-3 py-2">{row.username}</td>
+      <td className="px-3 py-2 tabular-nums">{row.properties}</td>
+      <td className="px-3 py-2 tabular-nums">{row.vehicles}</td>
+      <td className="px-3 py-2">{row.vault}</td>
+      <td className="px-3 py-2 text-gold">{money(row.assetWorth)}</td>
+    </tr>
+  )
+}
+
 export function LeaderboardPage() {
   const { me } = useAuth()
   const [rows, setRows] = useState<{ listed: Row[]; you: Row | null } | null>(() => {
@@ -52,12 +86,26 @@ export function LeaderboardPage() {
     return board ? toRows(board) : null
   })
   const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState<'vault' | 'assets'>('vault')
+  const [assets, setAssets] = useState<{ listed: AssetRow[]; you: AssetRow | null }>(() => {
+    const board = peek<Leaderboard>('/api/leaderboard')
+    return {
+      listed: (board?.assets ?? []).map(toAsset),
+      you: board?.assetsYou ? toAsset(board.assetsYou) : null,
+    }
+  })
 
   useEffect(() => {
     let cancelled = false
     load<Leaderboard>('/api/leaderboard')
       .then((board) => {
-        if (!cancelled) setRows(toRows(board))
+        if (!cancelled) {
+          setRows(toRows(board))
+          setAssets({
+            listed: (board.assets ?? []).map(toAsset),
+            you: board.assetsYou ? toAsset(board.assetsYou) : null,
+          })
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not load the board.')
@@ -73,7 +121,19 @@ export function LeaderboardPage() {
   return (
     <div className="space-y-4">
       <PageTitle kicker="Standings">Intelligence ranking</PageTitle>
-      {rows.listed.length === 0 ? <Notice tone="muted">No accounts on the book yet.</Notice> : null}
+      <Tabs value={view} onValueChange={(value) => setView(value as 'vault' | 'assets')}>
+        <TabsList className="h-11 w-fit px-1.5">
+          <TabsTrigger value="vault" className="h-9 min-w-[9.5rem] rounded-sm px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            Vault wealth
+          </TabsTrigger>
+          <TabsTrigger value="assets" className="h-9 min-w-[9.5rem] rounded-sm px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            Assets wealth
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {view === 'vault' && rows.listed.length === 0 ? <Notice tone="muted">No accounts on the book yet.</Notice> : null}
+      {view === 'assets' && assets.listed.length === 0 ? <Notice tone="muted">No accounts on the book yet.</Notice> : null}
+      {view === 'vault' ? (
       <div className="overflow-x-auto border border-line">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-panel text-[10px] tracking-[0.16em] text-muted uppercase">
@@ -94,6 +154,28 @@ export function LeaderboardPage() {
           </tbody>
         </table>
       </div>
+      ) : (
+      <div className="overflow-x-auto border border-line">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="bg-panel text-[10px] tracking-[0.16em] text-muted uppercase">
+            <tr>
+              <th className="px-3 py-2 font-medium">Rank</th>
+              <th className="px-3 py-2 font-medium">Operator</th>
+              <th className="px-3 py-2 font-medium">Properties</th>
+              <th className="px-3 py-2 font-medium">Vehicles</th>
+              <th className="px-3 py-2 font-medium">Vault</th>
+              <th className="px-3 py-2 font-medium">Asset worth</th>
+            </tr>
+          </thead>
+          <tbody>
+            {assets.listed.map((row) => (
+              <AssetRankRow key={row.username} row={row} mine={me?.username === row.username} />
+            ))}
+            {assets.you ? <AssetRankRow row={assets.you} mine /> : null}
+          </tbody>
+        </table>
+      </div>
+      )}
     </div>
   )
 }

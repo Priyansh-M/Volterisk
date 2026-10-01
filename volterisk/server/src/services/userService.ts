@@ -16,6 +16,7 @@ import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js"
 import { unclaimedCount } from "./achievementService.js";
 import { settlePassivePay } from "./workService.js";
 import { publicProfileFor } from "./publicProfileService.js";
+import { assetById, assetMoneySpent } from "./propertyService.js";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -267,10 +268,10 @@ export async function getProfile(userId: string) {
 export async function getLeaderboard(viewerId?: string) {
   const users = await prisma.user.findMany({
     where: { isBot: false },
-    include: { vault: true, base: true },
+    include: { vault: true, base: true, properties: { select: { catalogId: true, level: true } } },
   });
   if (users.length === 0) {
-    return { richest: [], you: null, heisters: [], largestHeists: [] };
+    return { richest: [], you: null, assets: [], assetsYou: null, heisters: [], largestHeists: [] };
   }
   const realIds = users.map((user) => user.id);
 
@@ -303,6 +304,37 @@ export async function getLeaderboard(viewerId?: string) {
   const viewer = viewerId ? ranked.find((row) => row.id === viewerId) : undefined;
   const you = viewer && viewer.rank > RULES.LEADERBOARD_SIZE ? (({ id: _id, ...row }) => row)(viewer) : null;
 
+  const assetOrdered = users
+    .map((user) => {
+      let assetWorth = 0;
+      let properties = 0;
+      let vehicles = 0;
+      for (const owned of user.properties) {
+        const item = assetById(owned.catalogId);
+        if (!item) continue;
+        if (item.kind === "vehicle") vehicles += 1;
+        else properties += 1;
+        assetWorth += assetMoneySpent(item.price, owned.level);
+      }
+      const tier = user.vault?.tier ?? "standard";
+      const vaultLevel = user.vault?.level ?? 1;
+      const vaultLabel = `${tier.charAt(0).toUpperCase()}${tier.slice(1)} Lvl.${vaultLevel}`;
+      return { id: user.id, username: user.username, assetWorth, properties, vehicles, vaultLabel };
+    })
+    .sort((a, b) => b.assetWorth - a.assetWorth || a.username.localeCompare(b.username));
+  let assetPlace = 0;
+  let previousAsset: number | null = null;
+  const assetRanked = assetOrdered.map((row, index) => {
+    if (previousAsset === null || row.assetWorth !== previousAsset) {
+      assetPlace = index + 1;
+      previousAsset = row.assetWorth;
+    }
+    return { rank: assetPlace, ...row };
+  });
+  const assets = assetRanked.filter((row) => row.rank <= RULES.LEADERBOARD_SIZE).map(({ id: _id, ...row }) => row);
+  const assetViewer = viewerId ? assetRanked.find((row) => row.id === viewerId) : undefined;
+  const assetsYou = assetViewer && assetViewer.rank > RULES.LEADERBOARD_SIZE ? (({ id: _id, ...row }) => row)(assetViewer) : null;
+
   const names = new Map(users.map((user) => [user.id, user.username]));
   const heisters = grouped
     .flatMap((row) => {
@@ -327,6 +359,8 @@ export async function getLeaderboard(viewerId?: string) {
   return {
     richest,
     you,
+    assets,
+    assetsYou,
     heisters,
     largestHeists: biggest.map((row, index) => ({
       rank: index + 1,

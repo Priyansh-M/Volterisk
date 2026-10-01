@@ -48,6 +48,15 @@ export function assetUpgradeCost(price: number, currentLevel: number): number | 
   return Math.round(cost);
 }
 
+/** Purchase price plus every upgrade already paid to reach this level. */
+export function assetMoneySpent(price: number, level: number): number {
+  let spent = price;
+  for (let step = 1; step < level; step += 1) {
+    spent += assetUpgradeCost(price, step) ?? 0;
+  }
+  return spent;
+}
+
 function presentOwned(row: { id: string; catalogId: string; level: number }) {
   const item = assetById(row.catalogId);
   const price = item?.price ?? 0;
