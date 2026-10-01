@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { login, logout, register } from "../controllers/authController.js";
+import { login, logout, nameStatus, register } from "../controllers/authController.js";
 import { createHeist, estimate, history, quote, targets } from "../controllers/heistController.js";
 import { bases, claim as claimBase, rename as renameBase } from "../controllers/mapController.js";
 import { me, myVault, myWeapons, removeAccount, updateAvatar, updateName } from "../controllers/meController.js";
@@ -35,6 +35,7 @@ api.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+api.get("/auth/name", asyncHandler(nameStatus));
 api.post("/auth/register", asyncHandler(register));
 api.post("/auth/login", asyncHandler(login));
 api.post("/auth/logout", requireAuth, asyncHandler(logout));

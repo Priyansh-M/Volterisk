@@ -15,11 +15,13 @@ export function clearToken() {
 export class ApiError extends Error {
   status: number
   code?: string
+  issues?: { path: string; message: string }[]
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, issues?: { path: string; message: string }[]) {
     super(message)
     this.status = status
     this.code = code
+    this.issues = issues
   }
 }
 
@@ -86,6 +88,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   let data: {
     error?: string | { code?: string; message?: string }
     code?: string
+    issues?: { path: string; message: string }[]
   } = {}
   if (text) {
     try {
@@ -101,7 +104,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const nested = data.error && typeof data.error === 'object' ? data.error : null
     const message = nested?.message || (typeof data.error === 'string' ? data.error : response.statusText)
     const code = nested?.code || data.code
-    throw new ApiError(message, response.status, code)
+    const detail = data.issues?.find((issue) => issue.message)?.message
+    throw new ApiError(detail || message, response.status, code, data.issues)
   }
   return data as T
 }

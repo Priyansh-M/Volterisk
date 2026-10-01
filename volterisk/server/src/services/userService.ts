@@ -139,6 +139,18 @@ export async function registerPlayer(username: string, password: string) {
   return { token, user: profile };
 }
 
+export async function usernameAvailable(raw: string): Promise<{ available: boolean }> {
+  const username = raw.trim();
+  if (username.length < 3 || username.length > 24 || !NAME_RE.test(username)) {
+    return { available: false };
+  }
+  const taken = await prisma.user.findUnique({
+    where: { usernameKey: username.toLowerCase() },
+    select: { id: true },
+  });
+  return { available: !taken };
+}
+
 export async function loginPlayer(username: string, password: string) {
   const usernameKey = username.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { usernameKey } });
@@ -357,12 +369,12 @@ export async function setAvatar(userId: string, raw: string) {
   return getProfile(userId);
 }
 
-const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 .'-]*$/;
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 .'_-]*$/;
 
 export async function renamePlayer(userId: string, raw: string) {
   const username = raw.trim();
   if (username.length < 3 || username.length > 24 || !NAME_RE.test(username)) {
-    throw new GameError(400, "BAD_NAME", "Use 3 to 24 letters, numbers, spaces, apostrophes, or hyphens.");
+    throw new GameError(400, "BAD_NAME", "Use 3 to 24 letters, numbers, spaces, apostrophes, hyphens, or underscores.");
   }
   try {
     await prisma.user.update({
