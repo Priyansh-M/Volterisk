@@ -1,8 +1,0 @@
-{
-  "framework": "express",
-  "functions": {
-    "src/index.ts": {
-      "maxDuration": 60
-    }
-  }
-}

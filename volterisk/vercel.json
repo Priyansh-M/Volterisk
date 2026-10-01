@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "express",
+  "installCommand": "npm install && npm install --prefix server && npm install --prefix client",
+  "buildCommand": "npm run build",
+  "functions": {
+    "src/index.ts": {
+      "maxDuration": 60,
+      "includeFiles": "{public/index.html,server/node_modules/.prisma/**,server/node_modules/@prisma/client/**}"
+    }
+  },
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

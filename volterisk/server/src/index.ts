@@ -14,7 +14,7 @@ async function boot(): Promise<void> {
   if (process.env.VERCEL) {
     const secret = (process.env.JWT_SECRET ?? "").trim();
     if (!secret || secret === "iron-hour-local-dev") {
-      throw new Error("Set JWT_SECRET on the Vercel API project. The local default cannot be used online.");
+      throw new Error("Set JWT_SECRET on the Vercel project. The local default cannot be used online.");
     }
     if (!usesPostgres()) {
       throw new Error("Set DATABASE_URL to the Supabase transaction pooler URL (postgresql://, port 6543).");

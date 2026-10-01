@@ -38,7 +38,7 @@ Bash is the same with `volterisk/server` and `volterisk/client`.
 - API: http://localhost:8787 (bound to `0.0.0.0`)
 - Client: http://localhost:4178 (bound to `0.0.0.0`, proxies `/api` to the API)
 
-Publishing uses Supabase Postgres and two Vercel projects. Put the Supabase URLs in `server/.env` on your PC. That file is not uploaded to GitHub. The commands are in the Publish section below.
+Publishing uses Supabase Postgres and one Vercel project. Put the Supabase URLs in `server/.env` on your PC. That file is not uploaded to GitHub. The commands are in the Publish section below.
 
 ## Config
 
@@ -104,9 +104,9 @@ Original inline SVG only (wordmark wheel, city map, weapon cards, favicon). No d
 
 Heist body is only `{ "targetUserId", "weaponId" }`.
 
-## Publish (Supabase + Vercel + GitHub)
+## Publish (Supabase + one Vercel project)
 
-Local play does not change. The live site is two Vercel projects from one GitHub repo: the API (`volterisk/server`) and the client (`volterisk/client`). The API uses Supabase Postgres. The client is built with `VITE_API_URL` set to that API origin (no trailing slash).
+Local play does not change: the API on port 8787, the client on port 4178, with Vite proxying `/api`. The live site is one Vercel project rooted at `volterisk`. It serves the built client from `public/` and the Express API at `/api`. Supabase Postgres is still the database. Leave `VITE_API_URL` unset so the browser calls `/api` on the same origin.
 
 Create the tables once from PowerShell after `server/.env` contains the Supabase URLs:
 
@@ -116,8 +116,6 @@ npm install
 npm run db:push:supabase
 ```
 
-Copy both URLs from the Supabase Connect dialog into `.env`. `DATABASE_URL` is the transaction pooler (port 6543) plus `pgbouncer=true` and `connection_limit=1`. `DIRECT_URL` is the session pooler (port 5432) with no `pgbouncer`. URL-encode the password. Close that terminal when the push finishes.
+Copy both URLs from the Supabase Connect dialog into `server/.env`. `DATABASE_URL` is the transaction pooler (port 6543) plus `pgbouncer=true` and `connection_limit=1`. `DIRECT_URL` is the session pooler (port 5432) with no `pgbouncer`. URL-encode the password (`@` becomes `%40`). Close that terminal when the push finishes.
 
-Vercel API project: root directory `volterisk/server`, framework Express, build command `npm run vercel-build`. Environment variables `DATABASE_URL`, `DIRECT_URL`, and a new `JWT_SECRET` (not `iron-hour-local-dev`), for Production and Preview. Open `https://YOUR-API.vercel.app/api/health` and expect `{"ok":true}`.
-
-Vercel client project: same repo, root directory `volterisk/client`, framework Vite. Set `VITE_API_URL` to `https://YOUR-API.vercel.app` before the first deploy. Register on the client URL.
+Vercel project: root directory `volterisk`. Framework Express. Install, build, and rewrites come from `vercel.json`. Environment variables `DATABASE_URL`, `DIRECT_URL`, and `JWT_SECRET` (not `iron-hour-local-dev`), for Production and Preview. Do not set `VITE_API_URL`. Set the variables before the first deploy, because the build reads them. Open `https://YOUR-PROJECT.vercel.app/api/health` and expect `{"ok":true}`, then register on that same origin.

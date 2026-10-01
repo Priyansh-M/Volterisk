@@ -9,3 +9,4 @@
 **/schema.postgres.prisma
 **/.env
 !**/.env.example
+/public/
