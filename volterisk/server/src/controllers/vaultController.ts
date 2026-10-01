@@ -26,12 +26,17 @@ export async function insurance(req: Request, res: Response): Promise<void> {
   res.json(await setInsurance(currentUserId(req), body.enabled));
 }
 
+function movedAmount(body: z.infer<typeof moveSchema>): number | "all" {
+  if ("amount" in body && typeof body.amount === "number") return body.amount;
+  return "all";
+}
+
 export async function withdraw(req: Request, res: Response): Promise<void> {
   const body = moveSchema.parse(req.body ?? {});
-  res.json(await withdrawVault(currentUserId(req), "all" in body ? "all" : body.amount));
+  res.json(await withdrawVault(currentUserId(req), movedAmount(body)));
 }
 
 export async function deposit(req: Request, res: Response): Promise<void> {
   const body = moveSchema.parse(req.body ?? {});
-  res.json(await depositVault(currentUserId(req), "all" in body ? "all" : body.amount));
+  res.json(await depositVault(currentUserId(req), movedAmount(body)));
 }

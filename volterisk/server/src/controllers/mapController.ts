@@ -30,7 +30,11 @@ export async function claim(req: Request, res: Response): Promise<void> {
   const body = claimSchema.parse(req.body ?? {});
   try {
     const userId = currentUserId(req);
-    const claimed = await claimBase(userId, body);
+    const { sectorId, landmassId, regionName, name } = body;
+    if (!sectorId || !landmassId || !regionName) {
+      throw new GameError(400, "VALIDATION", "Map claim is missing a field.");
+    }
+    const claimed = await claimBase(userId, { sectorId, landmassId, regionName, name });
     const unlocked = await syncAchievements(userId);
     res.status(201).json({ ...claimed, unlocked });
   } catch (error) {
