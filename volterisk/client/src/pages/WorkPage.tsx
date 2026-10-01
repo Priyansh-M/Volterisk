@@ -141,9 +141,6 @@ export function WorkPage() {
       ) : null}
       {lane === 'active' ? (<>
       {missing ? <Notice tone="muted">The work board has not been posted.</Notice> : null}
-      {board?.nextAcceptAt ? (
-        <Notice tone="muted">The board waits an hour between active jobs. Next one opens in {remaining(board.nextAcceptAt)}.</Notice>
-      ) : null}
       {!board && !error ? <Notice tone="muted">Reading the board…</Notice> : null}
       {board?.active ? (
         <section className="border border-gold/40 bg-panel p-4">

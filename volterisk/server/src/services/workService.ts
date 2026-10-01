@@ -17,13 +17,42 @@ import { uniqueConflictText, withSqliteRetry } from "./sqlite.js";
 
 const PAYOUT_TYPE = "contract_payout";
 
+function mix(seed: number): number {
+  let x = seed >>> 0;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return x >>> 0;
+}
+
+function hashSeed(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Same seven jobs for every player until the hour changes. */
 function offeredContracts(now: Date) {
   const pool = RULES.WORK_CONTRACTS;
   const windowMs = RULES.WORK_BOARD_ROTATION_MINUTES * 60 * 1000;
   const bucket = Math.floor(now.getTime() / windowMs);
-  const start = bucket % pool.length;
-  const count = Math.min(RULES.WORK_BOARD_SIZE, pool.length);
-  return Array.from({ length: count }, (_, index) => pool[(start + index) % pool.length]);
+  const secret = process.env.JWT_SECRET || "iron-hour-local-dev";
+  let seed = hashSeed(`${secret}:work:${bucket}`);
+  const next = () => {
+    seed = mix(seed + 0x9e3779b9);
+    return seed / 4294967296;
+  };
+  const order = [...pool];
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(next() * (i + 1));
+    const swap = order[i]!;
+    order[i] = order[j]!;
+    order[j] = swap;
+  }
+  return order.slice(0, Math.min(RULES.WORK_BOARD_SIZE, order.length));
 }
 
 async function playerLevel(userId: string): Promise<number> {
@@ -104,13 +133,9 @@ export async function listContracts(userId: string) {
     const previous = cooldownUntil.get(run.contractId);
     if (!previous || ends > previous) cooldownUntil.set(run.contractId, ends);
   }
-  const latestCollect = collected.find((run) => run.collectedAt)?.collectedAt ?? null;
-  const gapEnds = latestCollect ? minutesFromNow(RULES.WORK_GAP_MINUTES, latestCollect) : null;
-  const nextAcceptAt = gapEnds && gapEnds.getTime() > now.getTime() ? gapEnds : null;
-
   return {
     active: active ? presentActive(active, now) : null,
-    nextAcceptAt: nextAcceptAt ? nextAcceptAt.toISOString() : null,
+    nextAcceptAt: null,
     contracts: offered.map((contract) => {
       const cooldownEnds = cooldownUntil.get(contract.id) ?? null;
       const levelLocked = level < contract.minLevel;
@@ -130,7 +155,7 @@ export async function listContracts(userId: string) {
         requirement: gear ? `${workRequirementLabel(contract)}. ${gear}` : workRequirementLabel(contract),
         gearReady: readyGear,
         locked,
-        available: !locked && !cooldownEnds && !active && !nextAcceptAt,
+        available: !locked && !cooldownEnds && !active,
         cooldownEndsAt: cooldownEnds ? cooldownEnds.toISOString() : null,
       };
     }),
@@ -186,18 +211,6 @@ export async function acceptContract(userId: string, contractId: string) {
       const existing = await tx.contractRun.findUnique({ where: { activeSlot: userId } });
       if (existing) {
         throw new GameError(409, "ACTIVE_CONTRACT", "Finish the contract you already have.");
-      }
-      const lastCollected = await tx.contractRun.findFirst({
-        where: { userId, collectedAt: { not: null } },
-        orderBy: { collectedAt: "desc" },
-      });
-      if (lastCollected?.collectedAt) {
-        const gapEnds = minutesFromNow(RULES.WORK_GAP_MINUTES, lastCollected.collectedAt);
-        if (gapEnds.getTime() > now.getTime()) {
-          throw new GameError(409, "BOARD_GAP", "The board waits an hour between active jobs.", {
-            cooldownEndsAt: gapEnds.toISOString(),
-          });
-        }
       }
       try {
         return await tx.contractRun.create({

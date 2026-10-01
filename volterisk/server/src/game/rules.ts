@@ -342,13 +342,11 @@ export const RULES = {
   SECTOR_ID_MAX_LENGTH: 48,
   LANDMASS_ID_MAX_LENGTH: 48,
   REGION_NAME_MAX_LENGTH: 80,
-  /** Work board: how many contracts are offered and how often the offer rotates. */
-  WORK_BOARD_SIZE: 6,
-  WORK_BOARD_ROTATION_MINUTES: 30,
+  /** Shared board: this many contracts, redrawn at random each window. */
+  WORK_BOARD_SIZE: 7,
+  WORK_BOARD_ROTATION_MINUTES: 60,
   /** After collecting, that one contract is unavailable for this long. */
-  WORK_CONTRACT_COOLDOWN_MINUTES: 24 * 60,
-  /** After any active job is collected, the whole board waits this long. */
-  WORK_GAP_MINUTES: 60,
+  WORK_CONTRACT_COOLDOWN_MINUTES: 20,
   /** A failed heist leaves the attacker's vault unprotected for this long. */
   FAILED_HEIST_EXPOSURE_HOURS: 1,
   /** Against the Odds: a successful heist at or under this chance. */
