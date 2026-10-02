@@ -131,22 +131,37 @@ async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise
     heat = cooled.heat;
     settledAt = cooled.settledAt;
     judged = at;
-    if (cash <= 0 || heat <= RULES.HEAT_POLICE_AT) continue;
-    const take = heat > RULES.HEAT_POLICE_WIPE_AT ? cash : Math.floor(cash / 2);
-    if (take <= 0) continue;
-    cash -= take;
-    seized += take;
-    await tx.transaction.create({
-      data: { type: "police_seizure", amount: take, fromUserId: userId },
-    });
+    const take =
+      cash > 0 && heat > RULES.HEAT_POLICE_AT
+        ? heat > RULES.HEAT_POLICE_WIPE_AT
+          ? cash
+          : Math.floor(cash / 2)
+        : 0;
+    if (take > 0) {
+      cash -= take;
+      seized += take;
+      await tx.transaction.create({
+        data: { type: "police_seizure", amount: take, fromUserId: userId },
+      });
+      await writeNotification(tx, {
+        userId,
+        title: "Cash seized",
+        body:
+          heat > RULES.HEAT_POLICE_WIPE_AT
+            ? `Heat ${heat}. A heat check took every dollar in your pocket. The vault was left alone.`
+            : `Heat ${heat}. A heat check took half the cash in your pocket. The vault was left alone.`,
+        severity: "CRITICAL",
+      });
+      continue;
+    }
     await writeNotification(tx, {
       userId,
-      title: "Cash seized",
+      title: "Heat check",
       body:
-        heat > RULES.HEAT_POLICE_WIPE_AT
-          ? `Heat ${heat}. A heat check took every dollar in your pocket. The vault was left alone.`
-          : `Heat ${heat}. A heat check took half the cash in your pocket. The vault was left alone.`,
-      severity: "CRITICAL",
+        heat > RULES.HEAT_POLICE_AT
+          ? `Heat ${heat}. A heat check ran. Your pocket was already empty, so nothing was taken. The vault was left alone.`
+          : `Heat ${heat}. A heat check ran. Pocket cash stayed put. The vault was left alone.`,
+      severity: "WARNING",
     });
   }
 

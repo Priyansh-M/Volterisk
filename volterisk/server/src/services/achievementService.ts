@@ -107,7 +107,7 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
       where: { OR: [{ fromUserId: userId }, { toUserId: userId }] },
     }),
     prisma.heist.findFirst({
-      where: { attackerId: userId, success: true, successChance: { lte: RULES.AGAINST_THE_ODDS_CHANCE } },
+      where: { attackerId: userId, success: true, successChance: { lt: RULES.AGAINST_THE_ODDS_CHANCE } },
       select: { id: true },
     }),
     crossedRecently(userId),

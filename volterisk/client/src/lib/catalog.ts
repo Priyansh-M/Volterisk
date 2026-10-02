@@ -5,9 +5,9 @@ export const WEAPON_CATALOG = [
     number: 1,
     name: 'Rusty Crowbar',
     type: 'Breaching Tool',
-    price: 0,
+    price: 1_500,
     attacks: [10, 13, 16, 19],
-    flavor: 'Issued with the kit. Bent, rusty, and enough for a cheap door.',
+    flavor: 'Issued with the kit, and still for sale. Bent, rusty, and enough for a cheap door.',
   },
   {
     id: 'weapon:0002',

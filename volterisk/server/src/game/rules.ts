@@ -46,11 +46,11 @@ export const RULES = {
   ],
   /**
    * Cash to buy a weapon the player does not own yet.
-   * weapon:0001 is issued at signup and is not sold.
-   * Players may only buy the next number up from the best weapon they own.
+   * weapon:0001 is issued at signup and can also be bought.
+   * Other weapons may only be bought as the next number up from the best weapon owned.
    */
   WEAPON_BUY_COSTS: {
-    "weapon:0001": 0,
+    "weapon:0001": 1_500,
     "weapon:0002": 5_000,
     "weapon:0003": 8_500,
     "weapon:0004": 12_000,
@@ -81,7 +81,7 @@ export const RULES = {
     { id: "growing-arsenal", name: "Growing Arsenal", description: "Own 10 different weapon types", reward: 50_000 },
     { id: "full-arsenal", name: "Full Arsenal", description: "Own all 15 weapon types", reward: 250_000 },
     { id: "inside-job", name: "Inside Job", description: "Successfully rob a player who recently interacted with you", reward: 50_000, sealed: true },
-    { id: "against-the-odds", name: "Against the Odds", description: "Successfully complete a heist with a very low success probability", reward: 75_000, sealed: true },
+    { id: "against-the-odds", name: "Against the Odds", description: "Successfully complete a heist with a success chance under 15%.", reward: 75_000, sealed: true },
     { id: "big-spender", name: "Big Spender", description: "Spend $1,000,000 on weapons, upgrades and equipment", reward: 50_000, sealed: true },
     { id: "paper-trail", name: "Paper Trail", description: "Accumulate 100 recorded transactions in your ledger", reward: 25_000, sealed: true },
     { id: "first-entry", name: "First Entry", description: "Establish your first operational base.", reward: 1_000 },
@@ -354,8 +354,8 @@ export const RULES = {
   WORK_CONTRACT_COOLDOWN_MINUTES: 20,
   /** A failed heist leaves the attacker's vault unprotected for this long. */
   FAILED_HEIST_EXPOSURE_HOURS: 1,
-  /** Against the Odds: a successful heist at or under this chance. */
-  AGAINST_THE_ODDS_CHANCE: 20,
+  /** Against the Odds: a successful heist under this chance. */
+  AGAINST_THE_ODDS_CHANCE: 15,
   /** Inside Job: the target must have crossed your ledger within this many days. */
   INSIDE_JOB_DAYS: 7,
   BIG_SPENDER_CENTS: 1_000_000,

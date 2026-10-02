@@ -6,6 +6,7 @@ import type { GameNotice } from '../lib/types.ts'
 
 type Unlock = { id: string; name: string; description: string; reward: number }
 type HeistNotice = { id: string; by: string; success: boolean; amountStolen: number | null }
+type HeatNotice = { id: string; title: string; body: string }
 
 export function LedgerAlerts({
   onChange,
@@ -20,6 +21,7 @@ export function LedgerAlerts({
   onChangeRef.current = onChange
   const [unlock, setUnlock] = useState<Unlock | null>(null)
   const [heist, setHeist] = useState<HeistNotice | null>(null)
+  const [heatNote, setHeatNote] = useState<HeatNotice | null>(null)
   const [invite, setInvite] = useState<{ id: string; by: string; lobbyId: string } | null>(null)
   const [tableEnded, setTableEnded] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -60,6 +62,9 @@ export function LedgerAlerts({
         const report = notes.notifications.find(
           (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
         )
+        const heatReport = notes.notifications.find(
+          (row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'),
+        )
         const robbed = report?.title === 'You were robbed'
         if (next && !robbed) setUnlock(next)
         if (report && (!next || robbed)) {
@@ -75,6 +80,8 @@ export function LedgerAlerts({
             success: Boolean(parsed.success),
             amountStolen: parsed.amountStolen ?? null,
           })
+        } else if (heatReport && !next) {
+          setHeatNote({ id: heatReport.id, title: heatReport.title, body: heatReport.body })
         }
       } catch {
         /* the desk will try again */
@@ -104,9 +111,17 @@ export function LedgerAlerts({
     onChange()
   }
 
-  if (!unlock && !heist && !invite && !tableEnded) return null
+  async function dismissHeat() {
+    if (!heatNote) return
+    const id = heatNote.id
+    setHeatNote(null)
+    await api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+    onChange()
+  }
 
-  const revealHeist = Boolean(heist) && !tableEnded && !invite && !unlock
+  if (!unlock && !heist && !heatNote && !invite && !tableEnded) return null
+
+  const revealHeist = Boolean(heist) && !tableEnded && !invite && !unlock && !heatNote
 
   return (
     <div className={`${revealHeist ? 'heist-reveal' : 'fixed inset-0'} z-[80] flex items-center justify-center bg-background/75 p-4`}>
@@ -185,6 +200,27 @@ export function LedgerAlerts({
           >
             Open achievements
           </Link>
+        </section>
+      ) : heatNote ? (
+        <section className="animate-dossier relative w-full max-w-md border border-destructive bg-card p-8 shadow-2xl">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute top-3 right-3 cursor-pointer px-1 font-mono text-sm text-muted-foreground hover:text-foreground"
+            onClick={() => void dismissHeat()}
+          >
+            ×
+          </button>
+          <p className="font-mono text-[10px] tracking-[0.2em] text-destructive uppercase">Heat check</p>
+          <h2 className="mt-3 font-display text-3xl font-semibold uppercase">{heatNote.title}</h2>
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">{heatNote.body}</p>
+          <button
+            type="button"
+            className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+            onClick={() => void dismissHeat()}
+          >
+            Continue
+          </button>
         </section>
       ) : heist ? (
         <section className="heist-reveal-card relative z-[1] w-full max-w-md border border-border bg-card p-8 shadow-2xl">

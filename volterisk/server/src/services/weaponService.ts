@@ -95,10 +95,11 @@ export async function buyWeapon(userId: string, weaponId: string) {
     });
     const best = owned.reduce((max, row) => Math.max(max, row.weapon.number), 0);
     const already = owned.some((row) => row.weaponId === weaponId);
-    if (!already && weapon.number !== best + 1) {
+    const starter = weaponId === RULES.WEAPONS[0].id;
+    if (!starter && !already && weapon.number !== best + 1) {
       throw new GameError(400, "NOT_NEXT_WEAPON", "You can only buy the next weapon in the line.");
     }
-    if (already && weapon.number > best) {
+    if (!starter && already && weapon.number > best) {
       throw new GameError(400, "NOT_NEXT_WEAPON", "You can only buy the next weapon in the line.");
     }
 

@@ -189,7 +189,8 @@ export function MarketPage() {
         {WEAPON_CATALOG.map((item) => {
           const owned = ownedById.get(item.id)
           const known = arsenal !== null
-          const canBuy = known && nextId === item.id && item.price > 0
+          const starter = item.id === 'weapon:0001'
+          const canBuy = known && item.price > 0 && (nextId === item.id || (starter && !owned))
           const locked = known && !owned && !canBuy && item.price > 0
           return (
             <article key={item.id} className="flex flex-col overflow-hidden border border-line bg-panel">
