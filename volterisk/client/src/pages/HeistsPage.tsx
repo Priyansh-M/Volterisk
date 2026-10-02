@@ -404,10 +404,16 @@ function Dossier({
         <button
           type="button"
           disabled={!row.vulnerable || cooling || busy || row.locked}
-          className="gloss-gold h-9 flex-1 cursor-pointer text-xs disabled:cursor-not-allowed disabled:opacity-40"
+          className="gloss-gold min-h-9 flex-1 cursor-pointer px-2 text-center text-[10px] leading-tight disabled:cursor-not-allowed disabled:opacity-40"
           onClick={onPrepare}
         >
-          {row.locked ? 'Level 5' : cooling ? `Cooling ${coolLabel}` : 'Prepare heist'}
+          {row.locked
+            ? 'Level 5'
+            : !row.cadence && !row.vulnerable
+              ? 'Cooldown : Just been robbed'
+              : cooling
+                ? `Cooling ${coolLabel}`
+                : 'Prepare heist'}
         </button>
       </div>
       {open ? (

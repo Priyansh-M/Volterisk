@@ -2,6 +2,7 @@ import { GameError } from "../game/errors.js";
 import {
   RULES,
   exposedBalance,
+  insurancePremium,
   nextVaultTier,
   vaultCapacity,
   vaultDefense,
@@ -42,6 +43,7 @@ function presentVault(vault: {
     exposed,
     secured: vault.balance - exposed,
     insured,
+    insurancePremium: insurancePremium(tier),
     breached: Boolean(vault.breached) && !insured,
     insuredUntil: vault.insuredUntil?.toISOString() ?? null,
     maxLevel: RULES.VAULT_MAX_LEVEL,
@@ -109,9 +111,10 @@ export async function setInsurance(userId: string, enabled: boolean) {
       });
       return presentVault(updated);
     }
-    await debitCash(tx, userId, RULES.INSURANCE_PREMIUM);
+    const premium = insurancePremium(vault.tier || "standard");
+    await debitCash(tx, userId, premium);
     await tx.transaction.create({
-      data: { type: "insurance_premium", amount: RULES.INSURANCE_PREMIUM, fromUserId: userId },
+      data: { type: "insurance_premium", amount: premium, fromUserId: userId },
     });
     const updated = await tx.vault.update({
       where: { userId },

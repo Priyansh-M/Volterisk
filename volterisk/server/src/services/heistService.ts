@@ -10,7 +10,6 @@ import {
   hoursFromNow,
   minutesAgo,
   minutesFromNow,
-  vaultCapacity,
   vaultDefense,
   wealthBandLabel,
   wealthBucket,
@@ -143,7 +142,12 @@ async function readTargets(attackerId: string) {
     },
     select: { targetId: true, createdAt: true },
   });
-  const protectedIds = new Set(recentHits.map((row) => row.targetId));
+  const protectedUntil = new Map<string, Date>();
+  for (const hit of recentHits) {
+    const ends = hoursFromNow(RULES.TARGET_PROTECTION_HOURS, hit.createdAt);
+    const previous = protectedUntil.get(hit.targetId);
+    if (!previous || ends.getTime() > previous.getTime()) protectedUntil.set(hit.targetId, ends);
+  }
   const npcRecent = await prisma.heist.findMany({
     where: { attackerId, createdAt: { gt: minutesAgo(RULES.NPC_COOLDOWN_MINUTES) }, target: { isBot: true } },
     select: { targetId: true, createdAt: true },
@@ -179,13 +183,17 @@ async function readTargets(attackerId: string) {
             estimatedWealth: wealthBandLabel(balance),
             vulnerable: station
               ? !npcHitAt && !gated
-              : Boolean(user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()) || !protectedIds.has(user.id),
+              : !protectedUntil.has(user.id),
             sectorId: user.base?.sectorId ?? null,
             regionName: user.base?.regionName ?? null,
             locationName: user.base?.name?.trim() || null,
             cadence: station?.cadence ?? null,
             locked: gated,
-            cooldownEndsAt: npcHitAt ? minutesFromNow(RULES.NPC_COOLDOWN_MINUTES, npcHitAt).toISOString() : null,
+            cooldownEndsAt: station
+              ? npcHitAt
+                ? minutesFromNow(RULES.NPC_COOLDOWN_MINUTES, npcHitAt).toISOString()
+                : null
+              : protectedUntil.get(user.id)?.toISOString() ?? null,
           } satisfies TargetCard,
         };
     });
@@ -377,16 +385,13 @@ export async function attemptHeist(
             });
           }
         } else {
-          const exposed = Boolean(target.vaultExposedUntil && target.vaultExposedUntil.getTime() > now.getTime());
-          const recentSuccess = exposed
-            ? null
-            : await tx.heist.findFirst({
-                where: {
-                  targetId: targetUserId,
-                  success: true,
-                  createdAt: { gt: hoursAgo(RULES.TARGET_PROTECTION_HOURS, now) },
-                },
-              });
+          const recentSuccess = await tx.heist.findFirst({
+            where: {
+              targetId: targetUserId,
+              success: true,
+              createdAt: { gt: hoursAgo(RULES.TARGET_PROTECTION_HOURS, now) },
+            },
+          });
           if (recentSuccess) {
             throw new GameError(409, "TARGET_PROTECTED", "That vault was hit recently and is still shut.", {
               protectionEndsAt: hoursFromNow(RULES.TARGET_PROTECTION_HOURS, recentSuccess.createdAt).toISOString(),
@@ -506,24 +511,6 @@ export async function attemptHeist(
           });
         }
         const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
-        if (
-          target.vault.insured &&
-          target.vault.insuredUntil &&
-          target.vault.insuredUntil.getTime() > now.getTime()
-        ) {
-          const cover = Math.floor((amount * RULES.INSURANCE_COVERAGE_PERCENT) / 100);
-          const room = Math.max(0, vaultCapacity(target.vault.tier, vaultLevel) - (target.vault.balance - amount));
-          const paidCover = Math.min(cover, room);
-          if (paidCover > 0) {
-            await tx.vault.update({
-              where: { userId: targetUserId },
-              data: { balance: { increment: paidCover } },
-            });
-            await tx.transaction.create({
-              data: { type: "insurance_payout", amount: paidCover, toUserId: targetUserId },
-            });
-          }
-        }
         return {
           ...presentHeist(heist, target.username, owned.weapon.name),
           attack,

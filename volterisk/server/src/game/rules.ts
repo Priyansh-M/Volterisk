@@ -179,8 +179,13 @@ export const RULES = {
     silver: 3_000_000,
     gold: 20_000_000,
   } as Record<string, number>,
-  INSURANCE_COVERAGE_PERCENT: 60,
-  INSURANCE_PREMIUM: 4_000,
+  /** One price per tier, for one day. Insurance closes the vault again after a hit. */
+  INSURANCE_DAILY: {
+    standard: 1_750,
+    silver: 2_750,
+    gold: 3_500,
+    diamond: 4_250,
+  } as Record<string, number>,
   INSURANCE_HOURS: 24,
   /** Reputation titles. The highest entry a player's level reaches wins. */
   TITLES: [
@@ -686,6 +691,10 @@ export function vaultSecuredPercent(tier: string, level: number): number {
 export function exposedBalance(balance: number, tier: string, level: number): number {
   const secured = Math.floor((Math.max(0, balance) * vaultSecuredPercent(tier, level)) / 100);
   return Math.max(0, balance - secured);
+}
+
+export function insurancePremium(tier: string): number {
+  return RULES.INSURANCE_DAILY[tier] ?? RULES.INSURANCE_DAILY.standard;
 }
 
 export function nextVaultTier(tier: string): VaultTierName | null {

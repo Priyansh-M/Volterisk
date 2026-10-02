@@ -99,7 +99,7 @@ export function VaultPage() {
             </p>
           ) : null}
           <p className="mt-4 border border-border bg-background px-3 py-3 text-sm text-muted-foreground">
-            One successful robbery leaves the vault open. Until you carry insurance, a later heist can reach the whole balance. Insurance keeps the vault closed: you still cannot be hit again for 2 hours, and the secured share stays shut.
+            A successful robbery leaves the vault open, so a later heist can reach the whole balance. Insurance puts the vault back up after the hit. The stolen cash still leaves.
           </p>
           <div className="mt-4">
             <Btn
@@ -113,7 +113,7 @@ export function VaultPage() {
                   .finally(() => setBusy(false))
               }}
             >
-              {shown.insured ? 'Drop insurance' : 'Vault insurance · $4,000 / day · 60% cover'}
+              {shown.insured ? 'Drop insurance' : `Vault insurance · ${money(shown.insurancePremium ?? 1750)} / day · 100% cover`}
             </Btn>
           </div>
         </section>

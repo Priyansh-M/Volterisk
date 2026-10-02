@@ -216,6 +216,7 @@ export type VaultView = {
   exposed?: number
   secured?: number
   insured?: boolean
+  insurancePremium?: number
   breached?: boolean
   maxLevel: number
   upgradeCost: number | null
