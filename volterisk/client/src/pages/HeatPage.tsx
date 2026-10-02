@@ -8,6 +8,7 @@ const rows = [
   ['Collect an active job', '−10'],
   ['Passive job payday', '−6'],
   ['Every 2 hours, whether you are online or not', '−5'],
+  ['12:00 GMT each day', 'Reset to 0'],
 ]
 
 export function HeatPage() {
@@ -20,7 +21,7 @@ export function HeatPage() {
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">On your file</p>
         <p className="mt-2 font-display text-6xl font-semibold">{heat}</p>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-          Heat is the balance between crime and work. Heists raise it. Jobs and time bring it down. It never falls below zero.
+          Heat is the balance between crime and work. Heists raise it. Jobs and time bring it down. It resets to 0 every day at 12:00 GMT.
         </p>
       </section>
       <section className="border border-border bg-card">
@@ -43,7 +44,7 @@ export function HeatPage() {
         </table>
       </section>
       <section className="border border-destructive/40 bg-card p-5 text-sm text-muted-foreground">
-        Three heat checks run each day. One minute before a check, a warning opens. Above 50, the check takes half the cash in your pocket. Above 100, it takes all of it. The vault is not touched. A high-value heist is one that takes $50,000 or more, and that +12 replaces the usual +8. A failed heist is +15.
+        Three heat checks run each day. One minute before a check, a warning opens. Above 50, the check takes half the cash in your pocket. Above 100, it takes all of it. The vault is not touched. Heat also resets to 0 at 12:00 GMT every day. A high-value heist is one that takes $50,000 or more, and that +12 replaces the usual +8. A failed heist is +15.
       </section>
     </div>
   )

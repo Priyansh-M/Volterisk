@@ -13,7 +13,7 @@ import { listNotifications, markAllNotificationsRead, markNotificationRead } fro
 import { buyProperty, listProperties, upgradeProperty } from "../services/propertyService.js";
 import { buyShopItem, shopView, upgradeCamera } from "../services/shopService.js";
 import { communityBoard } from "../services/communityService.js";
-import { heatNeedsTouch, heatWarning as readHeatWarning, settleHeatIfDue } from "../services/heatService.js";
+import { heatNeedsTouch, heatWarning as readHeatWarning, settleHeatIfDue, settleHeatNoonIfDue } from "../services/heatService.js";
 import { getLeaderboard } from "../services/userService.js";
 
 export async function leaderboard(req: Request, res: Response): Promise<void> {
@@ -30,7 +30,9 @@ export async function notifications(req: Request, res: Response): Promise<void> 
 
 export async function heatWarning(req: Request, res: Response): Promise<void> {
   const now = Date.now();
-  if (heatNeedsTouch(now)) await settleHeatIfDue(currentUserId(req));
+  const userId = currentUserId(req);
+  await settleHeatNoonIfDue(userId);
+  if (heatNeedsTouch(now)) await settleHeatIfDue(userId);
   res.json(readHeatWarning(now));
 }
 

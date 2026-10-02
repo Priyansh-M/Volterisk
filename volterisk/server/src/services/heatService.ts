@@ -7,6 +7,7 @@ const STEP_MS = RULES.HEAT_DECAY_HOURS * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GAP_MS = RULES.HEAT_CHECK_GAP_HOURS * 60 * 60 * 1000;
 const SLACK_MS = DAY_MS - RULES.HEAT_CHECKS_PER_DAY * GAP_MS;
+const NOON_RESET_TYPE = "heat_noon_reset";
 
 function dayKey(dayStartMs: number): string {
   return new Date(dayStartMs).toISOString().slice(0, 10);
@@ -93,12 +94,63 @@ function judgedMs(value: string | null, createdAt: Date): number {
   return Number.isNaN(parsed) ? createdAt.getTime() : parsed;
 }
 
+/** Most recent 12:00 GMT that has already passed. */
+export function latestHeatNoon(now = new Date()): Date {
+  const noon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0, 0));
+  if (now.getTime() < noon.getTime()) noon.setUTCDate(noon.getUTCDate() - 1);
+  return noon;
+}
+
+async function noonResetExists(tx: Tx, userId: string, noon: Date): Promise<boolean> {
+  const row = await tx.transaction.findFirst({
+    where: { type: NOON_RESET_TYPE, fromUserId: userId, createdAt: { gte: noon } },
+    select: { id: true },
+  });
+  return Boolean(row);
+}
+
+/** Clears heat to 0 at the noon point. Call after checks that happened before noon. */
+async function wipeHeatAtNoon(
+  tx: Tx,
+  userId: string,
+  heat: number,
+  settledAt: Date,
+  noon: Date,
+): Promise<{ heat: number; settledAt: Date }> {
+  const cooled = decayed(heat, settledAt, noon);
+  await tx.transaction.create({
+    data: {
+      type: NOON_RESET_TYPE,
+      amount: cooled.heat,
+      fromUserId: userId,
+      createdAt: noon,
+    },
+  });
+  if (cooled.heat > 0) {
+    await writeNotification(tx, {
+      userId,
+      title: "Heat cleared",
+      body: `Heat reset to 0 at 12:00 GMT. It was ${cooled.heat}.`,
+      severity: "INFO",
+    });
+  }
+  return { heat: 0, settledAt: noon };
+}
+
 /** Heat number only. Pocket cash stays put until a scheduled check. */
 async function adjustHeat(tx: Tx, userId: string, delta: number, now = new Date()): Promise<number> {
   const user = await tx.user.findUnique({ where: { id: userId } });
   if (!user || user.isBot) return 0;
-  const cooled = decayed(user.heat, user.heatSettledAt, now);
-  const heat = Math.max(0, cooled.heat + delta);
+  let heat = user.heat;
+  let settledAt = user.heatSettledAt;
+  const noon = latestHeatNoon(now);
+  if (!(await noonResetExists(tx, userId, noon))) {
+    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon);
+    heat = wiped.heat;
+    settledAt = wiped.settledAt;
+  }
+  const cooled = decayed(heat, settledAt, now);
+  heat = Math.max(0, cooled.heat + delta);
   await tx.user.update({
     where: { id: userId },
     data: { heat, heatSettledAt: cooled.settledAt },
@@ -123,10 +175,20 @@ async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise
   let cash = user.cash;
   let seized = 0;
   let judged = judgedMs(user.heatJudgedOn, user.createdAt);
+  const noon = latestHeatNoon(now);
+  let noonDone = await noonResetExists(tx, userId, noon);
   const due = checksBetween(judged, now.getTime());
-  if (due.length === 0) return heat;
+
+  const ensureNoon = async (atMs: number) => {
+    if (noonDone || atMs <= noon.getTime()) return;
+    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon);
+    heat = wiped.heat;
+    settledAt = wiped.settledAt;
+    noonDone = true;
+  };
 
   for (const at of due) {
+    await ensureNoon(at);
     const cooled = decayed(heat, settledAt, new Date(at));
     heat = cooled.heat;
     settledAt = cooled.settledAt;
@@ -165,6 +227,12 @@ async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise
     });
   }
 
+  if (!noonDone) {
+    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon);
+    heat = wiped.heat;
+    settledAt = wiped.settledAt;
+  }
+
   const cooled = decayed(heat, settledAt, now);
   await tx.user.update({
     where: { id: userId },
@@ -192,6 +260,26 @@ export async function settleHeat(userId: string): Promise<number> {
   return prisma.$transaction((tx) => seizeDueChecks(tx, userId, new Date()));
 }
 
+/** Applies the 12:00 GMT wipe when that noon has passed and has not been recorded yet. */
+export async function settleHeatNoonIfDue(userId: string): Promise<void> {
+  const noon = latestHeatNoon();
+  const already = await prisma.transaction.findFirst({
+    where: { type: NOON_RESET_TYPE, fromUserId: userId, createdAt: { gte: noon } },
+    select: { id: true },
+  });
+  if (already) return;
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    if (!user || user.isBot) return;
+    if (await noonResetExists(tx, userId, noon)) return;
+    const wiped = await wipeHeatAtNoon(tx, userId, user.heat, user.heatSettledAt, noon);
+    await tx.user.update({
+      where: { id: userId },
+      data: { heat: wiped.heat, heatSettledAt: wiped.settledAt },
+    });
+  });
+}
+
 function latestCheckAt(nowMs: number): number | null {
   let latest: number | null = null;
   for (let day = utcDayStart(nowMs) - DAY_MS; day <= nowMs; day += DAY_MS) {
@@ -212,6 +300,7 @@ const settledPast = new Map<string, number>();
 
 /** One indexed read, and only when a check has passed since this player was last settled. */
 export async function settleHeatIfDue(userId: string): Promise<void> {
+  await settleHeatNoonIfDue(userId);
   const now = Date.now();
   const at = latestCheckAt(now);
   if (at === null) return;
