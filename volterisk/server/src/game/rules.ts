@@ -680,7 +680,13 @@ export function vaultDefense(tier: string, level: number): number {
 export function vaultCapacity(tier: string, level: number): number {
   const base = RULES.VAULT_CAPACITY_BASE[tier] ?? RULES.VAULT_CAPACITY_BASE.standard;
   const step = RULES.VAULT_CAPACITY_STEP[tier] ?? RULES.VAULT_CAPACITY_STEP.standard;
-  return base + vaultIndex(level) * step;
+  const bonus = level >= 4 ? 20_000 : level >= 3 ? 10_000 : 0;
+  let capacity = base + vaultIndex(level) * step + bonus;
+  if (tier === "standard" && level === 5) capacity += 5_000;
+  if (level === 5) capacity += 10_000;
+  if (tier === "silver") capacity += (level === 1 ? 10_000 : 0) + (level === 2 ? 10_000 : 0) + 5_000;
+  if (tier === "gold") capacity += 30_000;
+  return capacity;
 }
 
 export function vaultSecuredPercent(tier: string, level: number): number {
