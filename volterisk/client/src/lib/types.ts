@@ -71,6 +71,7 @@ export type Target = {
   userId: string
   username: string
   vaultLevel: number
+  clearanceLabel?: string
   wealthBucket: 'modest' | 'heavy' | 'fortune'
   estimatedWealth?: string
   vulnerable: boolean

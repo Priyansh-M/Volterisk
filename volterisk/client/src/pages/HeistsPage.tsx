@@ -387,7 +387,7 @@ function Dossier({
       <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>
       <h2 className="mt-1 font-display text-4xl font-semibold uppercase">{row.username}</h2>
       <div className="my-5 grid grid-cols-2 gap-4 border-y border-border py-4">
-        <Cell label="Recommended clearance" value={`Level ${row.vaultLevel}`} />
+        <Cell label="Recommended clearance" value={row.clearanceLabel ?? `Level ${row.vaultLevel}`} />
         <Cell label="Estimated wealth" value={row.estimatedWealth ?? '—'} />
         <Cell label="Location" value={location} />
         <Cell label="Vulnerability" value={vulnerability} tone={vulnerability === 'HIGH' ? 'ok' : 'bad'} />

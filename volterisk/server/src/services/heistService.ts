@@ -17,7 +17,15 @@ import {
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { creditCash, debitVault, type Tx } from "./economyService.js";
-import { isNpcGated, isStationedNpc, loadNpcPurses, NPC_STATIONS, openNpcPurse, stationForUsername } from "./nightCrew.js";
+import {
+  isDiamondHardNpc,
+  isNpcGated,
+  isStationedNpc,
+  loadNpcPurses,
+  NPC_STATIONS,
+  openNpcPurse,
+  stationForUsername,
+} from "./nightCrew.js";
 import { gainHeat, heistHeatGain } from "./heatService.js";
 import { writeNotification } from "./notificationService.js";
 
@@ -94,6 +102,7 @@ type TargetCard = {
   userId: string;
   username: string;
   vaultLevel: number;
+  clearanceLabel: string;
   wealthBucket: ReturnType<typeof wealthBucket>;
   estimatedWealth: string;
   vulnerable: boolean;
@@ -179,6 +188,9 @@ async function readTargets(attackerId: string) {
             userId: user.id,
             username: user.username,
             vaultLevel,
+            clearanceLabel: isDiamondHardNpc(user.username)
+              ? "Level 5 (At least)"
+              : `Level ${vaultLevel}`,
             wealthBucket: wealthBucket(balance),
             estimatedWealth: wealthBandLabel(balance),
             vulnerable: station
@@ -276,7 +288,13 @@ async function npcFacing(
     throw new GameError(403, "LEVEL_LOCKED", "That crew is locked until you reach level 5.");
   }
   const purse = await openNpcPurse(attackerId, target.id, target.username, level);
-  return { tier: "standard", vaultLevel: purse.vaultLevel, camera: 0, purseId: purse.id, balance: purse.balance };
+  return {
+    tier: purse.vaultTier || "standard",
+    vaultLevel: purse.vaultLevel,
+    camera: 0,
+    purseId: purse.id,
+    balance: purse.balance,
+  };
 }
 
 async function wearWeapon(tx: Tx, instanceId: string): Promise<boolean> {

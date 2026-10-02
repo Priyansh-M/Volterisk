@@ -16,7 +16,7 @@ export const NIGHT_CREW = [
   { username: "Colette Marsh", cash: 8_000, vaultBalance: 55_000, vaultLevel: 2, cadence: "day" },
   { username: "Felix Dunn", cash: 12_000, vaultBalance: 80_000, vaultLevel: 3, cadence: "week" },
   { username: "Ruth Keene", cash: 2_000, vaultBalance: 16_000, vaultLevel: 1, cadence: "week" },
-  { username: "Samir Odeh", cash: 20_000, vaultBalance: 120_000, vaultLevel: 4, cadence: "week" },
+  { username: "Samir Odeh", cash: 20_000, vaultBalance: 1_800_000, vaultLevel: 3, cadence: "week" },
   { username: "Inez Calder", cash: 1_500, vaultBalance: 12_000, vaultLevel: 1, cadence: "week" },
   { username: "Paulie Tran", cash: 9_000, vaultBalance: 64_000, vaultLevel: 2, cadence: "week" },
   { username: "Wes Harlow", cash: 7_000, vaultBalance: 36_000, vaultLevel: 2, cadence: "week" },
@@ -24,7 +24,7 @@ export const NIGHT_CREW = [
   { username: "Otto Venn", cash: 11_000, vaultBalance: 90_000, vaultLevel: 3, cadence: "week" },
   { username: "Sera Lang", cash: 6_500, vaultBalance: 48_000, vaultLevel: 2, cadence: "week" },
   { username: "Mick Doyle", cash: 3_500, vaultBalance: 20_000, vaultLevel: 1, cadence: "week" },
-  { username: "Anya Frost", cash: 14_000, vaultBalance: 110_000, vaultLevel: 4, cadence: "week" },
+  { username: "Anya Frost", cash: 14_000, vaultBalance: 1_600_000, vaultLevel: 3, cadence: "week" },
   { username: "Jules Peck", cash: 5_500, vaultBalance: 32_000, vaultLevel: 2, cadence: "week" },
   { username: "Nora Kim", cash: 8_500, vaultBalance: 70_000, vaultLevel: 3, cadence: "week" },
   { username: "Theo Marsh", cash: 4_200, vaultBalance: 26_000, vaultLevel: 1, cadence: "week" },
@@ -200,6 +200,22 @@ export async function loadNpcPurses(
     where: { attackerId, weekStart, npcId: { in: missing.map((npc) => npc.id) } },
   });
   for (const row of created) byNpc.set(row.npcId, row);
+  for (const npc of npcs) {
+    if (!DIAMOND_HARD.has(npc.username.toLowerCase())) continue;
+    const purse = byNpc.get(npc.id);
+    if (!purse || (purse.vaultTier === "diamond" && purse.vaultLevel === 3)) continue;
+    const offer = npcOffer(attackerLevel, npc.username, weekStart);
+    const updated = await prisma.npcPurse.update({
+      where: { id: purse.id },
+      data: {
+        vaultTier: "diamond",
+        vaultLevel: 3,
+        defaultBalance: offer.defaultBalance,
+        balance: Math.max(purse.balance, offer.defaultBalance),
+      },
+    });
+    byNpc.set(npc.id, updated);
+  }
   return byNpc;
 }
 
@@ -211,11 +227,16 @@ export function scaledNpcCount(level: number): number {
   return Math.max(3, 13 - level);
 }
 
-const GATED_NPCS = new Set(["samir odeh", "anya frost"]);
+/** Always open. Hard defense comes from their diamond vault, not a level gate. */
+const DIAMOND_HARD = new Set(["samir odeh", "anya frost"]);
 const PINNED_HARD = ["Felix Dunn", "Samir Odeh", "Anya Frost"];
 
-export function isNpcGated(username: string, attackerLevel: number): boolean {
-  return GATED_NPCS.has(username.trim().toLowerCase()) && attackerLevel < 5;
+export function isNpcGated(_username: string, _attackerLevel: number): boolean {
+  return false;
+}
+
+export function isDiamondHardNpc(username: string): boolean {
+  return DIAMOND_HARD.has(username.trim().toLowerCase());
 }
 
 function mix(seed: string): number {
@@ -229,7 +250,7 @@ function mix(seed: string): number {
 
 export type NpcOffer = {
   npcId: string;
-  tier: "standard";
+  tier: string;
   vaultLevel: number;
   defaultBalance: number;
   locked: boolean;
@@ -243,9 +264,11 @@ export function npcOffer(attackerLevel: number, npcId: string, weekStart: Date):
   const scaled = new Set([...PINNED_HARD, ...rest].slice(0, scaledNpcCount(attackerLevel)));
   const roster = NIGHT_CREW.find((bot) => bot.username === npcId) ?? NIGHT_CREW[0];
   const stepped = scaled.has(roster.username);
+  const diamond = DIAMOND_HARD.has(roster.username.toLowerCase());
   const hard = PINNED_HARD.includes(roster.username);
-  const vaultLevel = !stepped ? 1 : hard ? 5 : 1 + Math.floor(mix(`${week}:${attackerLevel}:${roster.username}:level`) * 4);
-  const capacity = Math.max(RULES.MIN_VAULT_BALANCE, vaultCapacity("standard", vaultLevel));
+  const tier = diamond ? "diamond" : "standard";
+  const vaultLevel = !stepped ? 1 : diamond ? 3 : hard ? 5 : 1 + Math.floor(mix(`${week}:${attackerLevel}:${roster.username}:level`) * 4);
+  const capacity = Math.max(RULES.MIN_VAULT_BALANCE, vaultCapacity(tier, vaultLevel));
   const rolled = Math.max(
     RULES.MIN_VAULT_BALANCE,
     Math.floor(capacity * (0.45 + mix(`${week}:${attackerLevel}:${roster.username}:cash`) * 0.55)),
@@ -253,10 +276,10 @@ export function npcOffer(attackerLevel: number, npcId: string, weekStart: Date):
   const defaultBalance = stepped ? rolled : Math.min(heistableVaultBalance(roster.vaultBalance), capacity);
   return {
     npcId: roster.username,
-    tier: "standard",
+    tier,
     vaultLevel,
     defaultBalance,
-    locked: isNpcGated(roster.username, attackerLevel),
+    locked: false,
   };
 }
 
