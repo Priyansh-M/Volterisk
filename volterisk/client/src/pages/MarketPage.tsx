@@ -241,7 +241,6 @@ export function MarketPage() {
                       {busy === item.id ? 'Buying…' : `Buy ${money(item.price)}`}
                     </Btn>
                   ) : null}
-                  {!owned && item.price === 0 ? <p className="text-sm text-muted">Starter tool.</p> : null}
                   {locked ? <Btn disabled>Buy previous first</Btn> : null}
                   {me && ((canBuy && me.cash < item.price) || (owned && item.price > 0 && me.cash < item.price)) ? (
                     <p className="w-full text-xs text-destructive">Not enough cash. Check your vault.</p>
