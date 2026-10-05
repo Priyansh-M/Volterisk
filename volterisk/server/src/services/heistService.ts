@@ -102,6 +102,8 @@ type TargetCard = {
   userId: string;
   username: string;
   vaultLevel: number;
+  vaultTier: string;
+  vaultLabel: string;
   clearanceLabel: string;
   wealthBucket: ReturnType<typeof wealthBucket>;
   estimatedWealth: string;
@@ -181,6 +183,8 @@ async function readTargets(attackerId: string) {
         const purse = station ? purses.get(user.id) ?? null : null;
         const gated = station ? isNpcGated(user.username, attackerLevel) : false;
         const vaultLevel = purse?.vaultLevel ?? user.vault!.level;
+        const vaultTier = purse?.vaultTier ?? user.vault!.tier ?? "standard";
+        const tierName = vaultTier.charAt(0).toUpperCase() + vaultTier.slice(1);
         const balance = purse?.balance ?? user.vault!.balance;
         return {
           isBot: user.isBot,
@@ -188,13 +192,15 @@ async function readTargets(attackerId: string) {
             userId: user.id,
             username: user.username,
             vaultLevel,
+            vaultTier,
+            vaultLabel: `${tierName} Lvl.${vaultLevel}`,
             clearanceLabel: isDiamondHardNpc(user.username)
               ? "Level 5 (At least)"
               : `Level ${vaultLevel}`,
             wealthBucket: wealthBucket(balance),
             estimatedWealth: wealthBandLabel(balance),
             vulnerable: station
-              ? !npcHitAt && !gated
+              ? !npcHitAt && !gated && balance >= RULES.MIN_VAULT_BALANCE
               : !protectedUntil.has(user.id),
             sectorId: user.base?.sectorId ?? null,
             regionName: user.base?.regionName ?? null,
@@ -303,7 +309,10 @@ async function wearWeapon(tx: Tx, instanceId: string): Promise<boolean> {
     data: { durability: { decrement: 1 } },
   });
   if (row.durability <= 0) {
-    await tx.userWeapon.delete({ where: { id: row.id } });
+    await tx.userWeapon.update({
+      where: { id: row.id },
+      data: { durability: 0, equipped: false },
+    });
     return true;
   }
   return false;

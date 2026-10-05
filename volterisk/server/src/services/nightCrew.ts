@@ -164,6 +164,33 @@ export async function ensureNpcStations(): Promise<void> {
   }
 }
 
+/** Raise an existing purse when the attacker levels up. Never shrink mid-week. */
+async function upgradePurseIfNeeded(
+  purse: {
+    id: string;
+    balance: number;
+    defaultBalance: number;
+    vaultTier: string;
+    vaultLevel: number;
+  },
+  offer: NpcOffer,
+) {
+  const betterTier = offer.tier === "diamond" && purse.vaultTier !== "diamond";
+  const betterLevel = offer.vaultLevel > purse.vaultLevel;
+  const betterDefault = offer.defaultBalance > purse.defaultBalance;
+  if (!betterTier && !betterLevel && !betterDefault) return purse;
+  const boost = Math.max(0, offer.defaultBalance - purse.defaultBalance);
+  return prisma.npcPurse.update({
+    where: { id: purse.id },
+    data: {
+      vaultTier: betterTier ? offer.tier : purse.vaultTier,
+      vaultLevel: Math.max(purse.vaultLevel, offer.vaultLevel),
+      defaultBalance: Math.max(purse.defaultBalance, offer.defaultBalance),
+      balance: purse.balance + boost,
+    },
+  });
+}
+
 /** One read for the week's purses, then inserts only the crews that are missing. */
 export async function loadNpcPurses(
   attackerId: string,
@@ -177,54 +204,40 @@ export async function loadNpcPurses(
     : [];
   const byNpc = new Map(existing.map((row) => [row.npcId, row]));
   const missing = npcs.filter((npc) => !byNpc.has(npc.id));
-  if (missing.length === 0) return byNpc;
-  try {
-    await prisma.npcPurse.createMany({
-      data: missing.map((npc) => {
-        const offer = npcOffer(attackerLevel, npc.username, weekStart);
-        return {
-          attackerId,
-          npcId: npc.id,
-          weekStart,
-          balance: offer.defaultBalance,
-          defaultBalance: offer.defaultBalance,
-          vaultTier: offer.tier,
-          vaultLevel: offer.vaultLevel,
-        };
-      }),
+  if (missing.length > 0) {
+    try {
+      await prisma.npcPurse.createMany({
+        data: missing.map((npc) => {
+          const offer = npcOffer(attackerLevel, npc.username, weekStart);
+          return {
+            attackerId,
+            npcId: npc.id,
+            weekStart,
+            balance: offer.defaultBalance,
+            defaultBalance: offer.defaultBalance,
+            vaultTier: offer.tier,
+            vaultLevel: offer.vaultLevel,
+          };
+        }),
+      });
+    } catch {
+      /* another request inserted the same week */
+    }
+    const created = await prisma.npcPurse.findMany({
+      where: { attackerId, weekStart, npcId: { in: missing.map((npc) => npc.id) } },
     });
-  } catch {
-    /* another request inserted the same week */
+    for (const row of created) byNpc.set(row.npcId, row);
   }
-  const created = await prisma.npcPurse.findMany({
-    where: { attackerId, weekStart, npcId: { in: missing.map((npc) => npc.id) } },
-  });
-  for (const row of created) byNpc.set(row.npcId, row);
-  for (const npc of npcs) {
-    if (!DIAMOND_HARD.has(npc.username.toLowerCase())) continue;
-    const purse = byNpc.get(npc.id);
-    if (!purse || (purse.vaultTier === "diamond" && purse.vaultLevel === 3)) continue;
-    const offer = npcOffer(attackerLevel, npc.username, weekStart);
-    const updated = await prisma.npcPurse.update({
-      where: { id: purse.id },
-      data: {
-        vaultTier: "diamond",
-        vaultLevel: 3,
-        defaultBalance: offer.defaultBalance,
-        balance: Math.max(purse.balance, offer.defaultBalance),
-      },
-    });
-    byNpc.set(npc.id, updated);
-  }
+  await Promise.all(
+    npcs.map(async (npc) => {
+      const purse = byNpc.get(npc.id);
+      if (!purse) return;
+      const offer = npcOffer(attackerLevel, npc.username, weekStart);
+      const updated = await upgradePurseIfNeeded(purse, offer);
+      byNpc.set(npc.id, updated);
+    }),
+  );
   return byNpc;
-}
-
-/** How many crews step up with the player. The rest stay on a level 1 standard vault. */
-export function scaledNpcCount(level: number): number {
-  if (level <= 1) return NIGHT_CREW.length;
-  if (level === 2) return 15;
-  if (level === 3) return 10;
-  return Math.max(3, 13 - level);
 }
 
 /** Always open. Hard defense comes from their diamond vault, not a level gate. */
@@ -256,29 +269,28 @@ export type NpcOffer = {
   locked: boolean;
 };
 
-/** Stable for the UTC week, the attacker, and their reputation level. */
+/** Stable for the UTC week at a given reputation. Higher reputation raises vault level and cash. */
 export function npcOffer(attackerLevel: number, npcId: string, weekStart: Date): NpcOffer {
   const week = weekStart.toISOString();
-  const rest = NIGHT_CREW.map((bot) => bot.username).filter((name) => !PINNED_HARD.includes(name));
-  rest.sort((a, b) => mix(`${week}:${a}`) - mix(`${week}:${b}`));
-  const scaled = new Set([...PINNED_HARD, ...rest].slice(0, scaledNpcCount(attackerLevel)));
   const roster = NIGHT_CREW.find((bot) => bot.username === npcId) ?? NIGHT_CREW[0];
-  const stepped = scaled.has(roster.username);
   const diamond = DIAMOND_HARD.has(roster.username.toLowerCase());
   const hard = PINNED_HARD.includes(roster.username);
   const tier = diamond ? "diamond" : "standard";
-  const vaultLevel = !stepped ? 1 : diamond ? 3 : hard ? 5 : 1 + Math.floor(mix(`${week}:${attackerLevel}:${roster.username}:level`) * 4);
+  const vaultLevel = diamond
+    ? 3
+    : hard
+      ? Math.min(5, Math.max(3, attackerLevel))
+      : Math.min(5, Math.max(1, attackerLevel));
   const capacity = Math.max(RULES.MIN_VAULT_BALANCE, vaultCapacity(tier, vaultLevel));
   const rolled = Math.max(
     RULES.MIN_VAULT_BALANCE,
     Math.floor(capacity * (0.45 + mix(`${week}:${attackerLevel}:${roster.username}:cash`) * 0.55)),
   );
-  const defaultBalance = stepped ? rolled : Math.min(heistableVaultBalance(roster.vaultBalance), capacity);
   return {
     npcId: roster.username,
     tier,
     vaultLevel,
-    defaultBalance,
+    defaultBalance: rolled,
     locked: false,
   };
 }
@@ -288,8 +300,8 @@ export async function openNpcPurse(attackerId: string, npcUserId: string, npcUse
   const existing = await prisma.npcPurse.findUnique({
     where: { attackerId_npcId_weekStart: { attackerId, npcId: npcUserId, weekStart } },
   });
-  if (existing) return existing;
   const offer = npcOffer(attackerLevel, npcUsername, weekStart);
+  if (existing) return upgradePurseIfNeeded(existing, offer);
   try {
     return await prisma.npcPurse.create({
       data: {
@@ -307,6 +319,6 @@ export async function openNpcPurse(attackerId: string, npcUserId: string, npcUse
       where: { attackerId_npcId_weekStart: { attackerId, npcId: npcUserId, weekStart } },
     });
     if (!again) throw new Error("NPC purse did not open.");
-    return again;
+    return upgradePurseIfNeeded(again, offer);
   }
 }

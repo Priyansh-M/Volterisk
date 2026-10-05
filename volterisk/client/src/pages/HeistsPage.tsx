@@ -304,7 +304,7 @@ export function HeistsPage() {
                 </div>
               ) : null}
             </dl>
-            {result.broken ? <p className="mt-4 font-display text-xl uppercase text-destructive">Broken. Removed from the arsenal.</p> : null}
+            {result.broken ? <p className="mt-4 font-display text-xl uppercase text-destructive">Broken. Unlock stays; buy another copy anytime.</p> : null}
             <button type="button" className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={() => setResult(null)}>
               Close
             </button>
@@ -387,6 +387,7 @@ function Dossier({
       <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>
       <h2 className="mt-1 font-display text-4xl font-semibold uppercase">{row.username}</h2>
       <div className="my-5 grid grid-cols-2 gap-4 border-y border-border py-4">
+        <Cell label="Vault" value={row.vaultLabel ?? `Lvl.${row.vaultLevel}`} />
         <Cell label="Recommended clearance" value={row.clearanceLabel ?? `Level ${row.vaultLevel}`} />
         <Cell label="Estimated wealth" value={row.estimatedWealth ?? '—'} />
         <Cell label="Location" value={location} />
@@ -444,7 +445,7 @@ function Dossier({
               <div>
                 <p className="font-mono text-[9px] uppercase text-muted-foreground">Target vault</p>
                 <p className="font-display text-xl uppercase">{quote.vaultTier} vault</p>
-                <p className="text-sm">Level {quote.vaultLevel}</p>
+                <p className="text-sm">Lvl.{quote.vaultLevel}</p>
                 <p className="text-sm">Defense: {quote.defense}</p>
               </div>
               <p className="font-mono text-xs sm:col-span-2">

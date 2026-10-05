@@ -58,14 +58,20 @@ async function findInstance(client: Tx | typeof prisma, userId: string, weaponId
 }
 
 export async function listWeapons(userId: string) {
-  const ownedRows = await prisma.userWeapon.findMany({
-    where: { userId, durability: { gt: 0 } },
-    include: { weapon: true },
-    orderBy: [{ weapon: { number: "asc" } }, { upgradeLevel: "desc" }],
-  });
+  const [ownedRows, unlockRows] = await Promise.all([
+    prisma.userWeapon.findMany({
+      where: { userId, durability: { gt: 0 } },
+      include: { weapon: true },
+      orderBy: [{ weapon: { number: "asc" } }, { upgradeLevel: "desc" }],
+    }),
+    prisma.userWeapon.findMany({
+      where: { userId },
+      select: { weapon: { select: { number: true } } },
+    }),
+  ]);
   const owned = ownedRows.map(presentOwned);
-  const best = owned.reduce((max, weapon) => Math.max(max, weapon.number), 0);
-  const next = RULES.WEAPONS.find((weapon) => weapon.number === best + 1) ?? null;
+  const unlockedThrough = unlockRows.reduce((max, row) => Math.max(max, row.weapon.number), 0);
+  const next = RULES.WEAPONS.find((weapon) => weapon.number === unlockedThrough + 1) ?? null;
   const shop = next
     ? {
         id: next.id,
@@ -77,7 +83,7 @@ export async function listWeapons(userId: string) {
         effectiveLevel: attackPower(next.number, RULES.WEAPON_MIN_UPGRADE),
       }
     : null;
-  return { owned, shop };
+  return { owned, shop, unlockedThrough };
 }
 
 export async function buyWeapon(userId: string, weaponId: string) {
@@ -94,12 +100,8 @@ export async function buyWeapon(userId: string, weaponId: string) {
       include: { weapon: true },
     });
     const best = owned.reduce((max, row) => Math.max(max, row.weapon.number), 0);
-    const already = owned.some((row) => row.weaponId === weaponId);
     const starter = weaponId === RULES.WEAPONS[0].id;
-    if (!starter && !already && weapon.number !== best + 1) {
-      throw new GameError(400, "NOT_NEXT_WEAPON", "You can only buy the next weapon in the line.");
-    }
-    if (!starter && already && weapon.number > best) {
+    if (!starter && weapon.number > best + 1) {
       throw new GameError(400, "NOT_NEXT_WEAPON", "You can only buy the next weapon in the line.");
     }
 

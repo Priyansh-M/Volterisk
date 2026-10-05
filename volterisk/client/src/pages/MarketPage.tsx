@@ -8,7 +8,7 @@ import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
 import type { OwnedWeapon, ShopWeapon } from '../lib/types.ts'
 
-type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null }
+type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null; unlockedThrough?: number }
 type SaleLot = { id: string; name: string; price: number; note: string; owned: boolean }
 
 type Counter = {
@@ -60,14 +60,8 @@ export function MarketPage() {
         const item = WEAPON_CATALOG.find((row) => row.id === itemId)
         await api('/api/weapons/buy', { method: 'POST', body: JSON.stringify({ weaponId: itemId }) })
         if (me && item) applyCash(me.cash - item.price)
-        setArsenal((current) => {
-          if (!current || !item) return current
-          const owned = current.owned.some((row) => row.id === itemId)
-            ? current.owned
-            : [...current.owned, { id: item.id, name: item.name, number: item.number, upgradeLevel: 1, effectiveLevel: item.attacks[0], nextEffectiveLevel: null, equipped: false, nextUpgradeCost: null }]
-          const next = WEAPON_CATALOG.find((row) => row.number === item.number + 1)
-          return { owned, shop: current.owned.some((row) => row.id === itemId) ? current.shop : next ? { id: next.id, name: next.name, number: next.number, price: next.price, effectiveLevel: next.attacks[0] } : null }
-        })
+        const weapons = await load<Arsenal>('/api/me/weapons')
+        setArsenal(weapons)
       } else if (itemId === 'estimate-predictor' || itemId === 'security-camera') {
         const paid = await api<{ cash: number; quantity?: number; level?: number; nextCost?: number | null }>('/api/shop/buy', { method: 'POST', body: JSON.stringify({ itemId }) })
         applyCash(paid.cash)
@@ -122,7 +116,11 @@ export function MarketPage() {
   }
 
   const ownedById = new Map(arsenal?.owned.map((row) => [row.id, row]) ?? [])
-  const nextId = arsenal?.shop?.id ?? null
+  const unlockedThrough =
+    arsenal?.unlockedThrough ??
+    arsenal?.owned.reduce((max, row) => Math.max(max, row.number), 0) ??
+    0
+  const nextNumber = unlockedThrough + 1
   const board = counter ?? emptyCounter
 
   return (
@@ -189,9 +187,9 @@ export function MarketPage() {
         {WEAPON_CATALOG.map((item) => {
           const owned = ownedById.get(item.id)
           const known = arsenal !== null
-          const starter = item.id === 'weapon:0001'
-          const canBuy = known && item.price > 0 && (nextId === item.id || (starter && !owned))
-          const locked = known && !owned && !canBuy && item.price > 0
+          const unlocked = item.number <= unlockedThrough
+          const canBuy = known && item.price > 0 && (unlocked || item.number === nextNumber)
+          const locked = known && !unlocked && item.number !== nextNumber && item.price > 0
           return (
             <article key={item.id} className="flex flex-col overflow-hidden border border-line bg-panel">
               <div className="aspect-[11/7] border-b border-line">
@@ -204,6 +202,8 @@ export function MarketPage() {
                     <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-gold">Equipped</span>
                   ) : owned ? (
                     <span className="rounded-full bg-ok/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ok">Owned</span>
+                  ) : unlocked ? (
+                    <span className="rounded-full bg-ok/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ok">Unlocked</span>
                   ) : locked ? (
                     <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">Locked</span>
                   ) : null}
