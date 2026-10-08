@@ -4,6 +4,7 @@ import { Shell } from './components/Shell.tsx'
 import { useAuth } from './lib/auth.tsx'
 import { AchievementsPage } from './pages/AchievementsPage.tsx'
 import { ArsenalPage } from './pages/ArsenalPage.tsx'
+import { BountyPage } from './pages/BountyPage.tsx'
 import { CityPage } from './pages/CityPage.tsx'
 import { DashboardPage } from './pages/DashboardPage.tsx'
 import { HeatPage } from './pages/HeatPage.tsx'
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/casino/roulette" element={<Suspense fallback={<p className="text-sm text-muted">Opening the wheel…</p>}><RoulettePage /></Suspense>} />
+        <Route path="/bounties" element={<BountyPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

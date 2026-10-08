@@ -48,9 +48,9 @@ function missingWeaponTable(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
 }
 
-async function weaponTableExists(): Promise<boolean> {
+async function tableExists(probe: () => Promise<unknown>): Promise<boolean> {
   try {
-    await prisma.weapon.findFirst({ select: { id: true } });
+    await probe();
     return true;
   } catch (error) {
     if (missingWeaponTable(error)) return false;
@@ -58,15 +58,15 @@ async function weaponTableExists(): Promise<boolean> {
   }
 }
 
-/**
- * An empty SQLite file (the engine creates one on first connect) has no Weapon
- * table. ensureNightCrew then throws P2021 at startup and the process exits,
- * which resets the register request the client already opened.
- * Push with the local Prisma CLI, not npx, so the schema matches this checkout.
- */
-export async function ensureDatabase(): Promise<void> {
-  if (await weaponTableExists()) return;
-  await prisma.$disconnect();
+async function weaponTableExists(): Promise<boolean> {
+  return tableExists(() => prisma.weapon.findFirst({ select: { id: true } }));
+}
+
+async function bountyTableExists(): Promise<boolean> {
+  return tableExists(() => prisma.bounty.findFirst({ select: { id: true } }));
+}
+
+function pushSchema(): void {
   const cli = path.join(serverRoot, "node_modules", "prisma", "build", "index.js");
   execFileSync(process.execPath, [cli, "db", "push", "--skip-generate"], {
     cwd: serverRoot,
@@ -74,8 +74,133 @@ export async function ensureDatabase(): Promise<void> {
     stdio: ["ignore", "inherit", "inherit"],
     env: process.env,
   });
+}
+
+/**
+ * An empty SQLite file (the engine creates one on first connect) has no Weapon
+ * table. ensureNightCrew then throws P2021 at startup and the process exits,
+ * which resets the register request the client already opened.
+ * Also pushes when newer tables (e.g. Bounty) are missing from an older file.
+ * Push with the local Prisma CLI, not npx, so the schema matches this checkout.
+ */
+export async function ensureDatabase(): Promise<void> {
+  const hasWeapons = await weaponTableExists();
+  const hasBounties = hasWeapons ? await bountyTableExists() : false;
+  if (hasWeapons && hasBounties) return;
+  await prisma.$disconnect();
+  pushSchema();
   if (!(await weaponTableExists())) {
     throw new Error("Weapon table is still missing. From volterisk/server run: npm run db:push");
+  }
+  if (!(await bountyTableExists())) {
+    throw new Error("Bounty table is still missing. From volterisk/server run: npm run db:push");
+  }
+}
+
+/** Postgres/Vercel: create Bounty if deploy skipped db push. */
+export async function ensureBountyTable(): Promise<void> {
+  if (await bountyTableExists()) return;
+  if (!usesPostgres()) {
+    await ensureDatabase();
+    return;
+  }
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "Bounty" (
+      "id" TEXT NOT NULL,
+      "posterId" TEXT NOT NULL,
+      "targetId" TEXT NOT NULL,
+      "amount" INTEGER NOT NULL,
+      "funded" INTEGER NOT NULL DEFAULT 0,
+      "goal" INTEGER NOT NULL DEFAULT 0,
+      "stolenTotal" INTEGER NOT NULL DEFAULT 0,
+      "status" TEXT NOT NULL DEFAULT 'open',
+      "hunterId" TEXT,
+      "huntStartedAt" TIMESTAMP(3),
+      "heistId" TEXT,
+      "claimedAt" TIMESTAMP(3),
+      "cancelledAt" TIMESTAMP(3),
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Bounty_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Bounty" ADD COLUMN IF NOT EXISTS "funded" INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* sqlite / already there */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Bounty" ADD COLUMN IF NOT EXISTS "goal" INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* sqlite / already there */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Bounty" ADD COLUMN IF NOT EXISTS "stolenTotal" INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* sqlite / already there */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Bounty" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3)`);
+  } catch {
+    /* sqlite / already there */
+  }
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "BountyFund" (
+      "id" TEXT NOT NULL,
+      "bountyId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "amount" INTEGER NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "BountyFund_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "BountyCut" (
+      "id" TEXT NOT NULL,
+      "bountyId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "stolen" INTEGER NOT NULL DEFAULT 0,
+      "paid" INTEGER NOT NULL DEFAULT 0,
+      "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "BountyCut_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "BountyCut_bountyId_userId_key" ON "BountyCut"("bountyId", "userId")`,
+    );
+  } catch {
+    /* already there */
+  }
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Bounty_status_createdAt_idx" ON "Bounty"("status", "createdAt")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Bounty_posterId_targetId_status_idx" ON "Bounty"("posterId", "targetId", "status")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Bounty_hunterId_status_idx" ON "Bounty"("hunterId", "status")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Bounty_targetId_status_idx" ON "Bounty"("targetId", "status")`);
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "Bounty"
+        ADD CONSTRAINT "Bounty_posterId_fkey" FOREIGN KEY ("posterId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    `);
+  } catch {
+    /* already linked */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "Bounty"
+        ADD CONSTRAINT "Bounty_targetId_fkey" FOREIGN KEY ("targetId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    `);
+  } catch {
+    /* already linked */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "Bounty"
+        ADD CONSTRAINT "Bounty_hunterId_fkey" FOREIGN KEY ("hunterId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE
+    `);
+  } catch {
+    /* already linked */
+  }
+  if (!(await bountyTableExists())) {
+    throw new Error("Bounty table could not be created. Run npm run db:push:supabase from volterisk/server.");
   }
 }
 

@@ -14,7 +14,7 @@ import {
 import { prisma } from "../prisma.js";
 import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js";
 import { unclaimedCount } from "./achievementService.js";
-import { settleHeatNoonIfDue } from "./heatService.js";
+import { settleHeatState } from "./heatService.js";
 import { settlePassivePay } from "./workService.js";
 import { publicProfileFor } from "./publicProfileService.js";
 import { assetById, assetMoneySpent } from "./propertyService.js";
@@ -182,7 +182,7 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 }
 
 export async function getProfile(userId: string) {
-  await settleHeatNoonIfDue(userId);
+  await settleHeatState(userId);
   await settlePassivePay(userId);
   const [user, won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
     prisma.user.findUnique({

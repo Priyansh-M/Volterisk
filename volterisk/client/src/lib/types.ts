@@ -109,6 +109,7 @@ export type HeistResult = {
   advantage?: number
   penalty?: { hours: number; endsAt: string } | null
   cash?: number | null
+  bountyPayout?: number
 }
 
 export type HistoryRow = {

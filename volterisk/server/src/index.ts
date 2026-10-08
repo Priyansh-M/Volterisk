@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { createApp } from "./app.js";
-import { configureSqlite, ensureDatabase, usesPostgres } from "./prisma.js";
+import { configureSqlite, ensureBountyTable, ensureDatabase, usesPostgres } from "./prisma.js";
 import { setReady } from "./runtime.js";
 import { ensureNightCrew } from "./services/nightCrew.js";
 
@@ -22,6 +22,8 @@ async function boot(): Promise<void> {
   if (!usesPostgres()) {
     await ensureDatabase();
     await configureSqlite();
+  } else {
+    await ensureBountyTable();
   }
   await ensureNightCrew();
 }

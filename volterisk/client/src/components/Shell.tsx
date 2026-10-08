@@ -19,6 +19,7 @@ import {
   IconSignal,
   IconVault,
   IconContract,
+  IconCrosshair,
   IconRank,
 } from './Icons.tsx'
 
@@ -37,6 +38,7 @@ const warm: Record<string, string[]> = {
   '/notifications': ['/api/notifications'],
   '/profile': ['/api/me'],
   '/heat': ['/api/me'],
+  '/bounties': ['/api/bounties'],
 }
 
 const links = [
@@ -70,6 +72,7 @@ const pageMeta: Record<string, [string, string]> = {
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
   '/leaderboard': ['Intelligence Ranking', 'Current standing across the criminal network.'],
   '/casino/roulette': ['Roulette', 'European wheel. Cash only. Five percent of the total.'],
+  '/bounties': ['Bounty Board', 'Post cash contracts. Start a hunt, heist the mark, claim the purse.'],
   '/notifications': ['Incoming Reports', 'Security alerts and operational updates.'],
 }
 
@@ -385,6 +388,23 @@ export function Shell() {
                     Roulette
                   </NavLink>
                 ) : null}
+                <NavLink
+                  to="/bounties"
+                  title={collapsed ? 'Bounties' : undefined}
+                  onMouseEnter={() => warm['/bounties']?.forEach(prefetch)}
+                  onFocus={() => warm['/bounties']?.forEach(prefetch)}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    `mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs no-underline ${
+                      isActive || location.pathname.startsWith('/bounties')
+                        ? 'border-primary bg-accent text-foreground'
+                        : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
+                    }`
+                  }
+                >
+                  <IconCrosshair className="h-4 w-4 shrink-0" />
+                  {collapsed ? null : <span>Bounties</span>}
+                </NavLink>
               </Fragment>
             ) : null}
             </Fragment>

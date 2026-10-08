@@ -297,7 +297,14 @@ export function HeistsPage() {
                   <dt className="font-mono text-[10px] uppercase text-muted-foreground">Money Stolen</dt>
                   <dd className="font-mono text-success">{money(result.amountStolen)}</dd>
                 </div>
-              ) : result.penalty ? (
+              ) : null}
+              {result.success && (result.bountyPayout ?? 0) > 0 ? (
+                <div className="flex justify-between">
+                  <dt className="font-mono text-[10px] uppercase text-muted-foreground">Bounty cut</dt>
+                  <dd className="font-mono text-success">{money(result.bountyPayout ?? 0)}</dd>
+                </div>
+              ) : null}
+              {!result.success && result.penalty ? (
                 <div className="flex justify-between gap-4">
                   <dt className="font-mono text-[10px] uppercase text-muted-foreground">Penalty</dt>
                   <dd className="text-right">Vault protection is off for {result.penalty.hours} hour{result.penalty.hours === 1 ? '' : 's'}.</dd>

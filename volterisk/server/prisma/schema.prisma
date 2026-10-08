@@ -42,6 +42,11 @@ model User {
   txFrom         Transaction[]     @relation("TxFrom")
   txTo           Transaction[]     @relation("TxTo")
   inventory      InventoryItem[]
+  bountiesPosted Bounty[]          @relation("BountyPoster")
+  bountiesOn     Bounty[]          @relation("BountyTarget")
+  bountiesHunted Bounty[]          @relation("BountyHunter")
+  bountyFunds    BountyFund[]
+  bountyCuts     BountyCut[]
 }
 
 /**
@@ -272,4 +277,69 @@ model Notification {
   heist Heist? @relation(fields: [heistId], references: [id])
 
   @@index([userId, createdAt])
+}
+
+/**
+ * Shared contract on a mark. amount = remaining reward pool.
+ * funded = goal = steal target (the posted reward is also how much must be stolen).
+ * Hunters must Start before their heists count. Payout settles on complete/cancel.
+ * status: open | hunting | completed | cancelled
+ */
+model Bounty {
+  id            String    @id @default(cuid())
+  posterId      String
+  targetId      String
+  amount        Int
+  funded        Int       @default(0)
+  goal          Int       @default(0)
+  stolenTotal   Int       @default(0)
+  status        String    @default("open")
+  hunterId      String?
+  huntStartedAt DateTime?
+  heistId       String?
+  claimedAt     DateTime?
+  cancelledAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  poster User         @relation("BountyPoster", fields: [posterId], references: [id], onDelete: Cascade)
+  target User         @relation("BountyTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  hunter User?        @relation("BountyHunter", fields: [hunterId], references: [id], onDelete: SetNull)
+  funds  BountyFund[]
+  cuts   BountyCut[]
+
+  @@index([status, createdAt])
+  @@index([posterId, targetId, status])
+  @@index([hunterId, status])
+  @@index([targetId, status])
+}
+
+model BountyFund {
+  id        String   @id @default(cuid())
+  bountyId  String
+  userId    String
+  amount    Int
+  createdAt DateTime @default(now())
+
+  bounty Bounty @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([bountyId])
+  @@index([userId])
+}
+
+/** Hunter enrollment. Heists only count after Start. */
+model BountyCut {
+  id        String   @id @default(cuid())
+  bountyId  String
+  userId    String
+  stolen    Int      @default(0)
+  paid      Int      @default(0)
+  startedAt DateTime @default(now())
+
+  bounty Bounty @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bountyId, userId])
+  @@index([userId])
 }

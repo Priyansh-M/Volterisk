@@ -16,6 +16,7 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
+import { noteBountyHeist } from "./bountyService.js";
 import { creditCash, debitVault, type Tx } from "./economyService.js";
 import {
   isDiamondHardNpc,
@@ -536,6 +537,18 @@ export async function attemptHeist(
             body: JSON.stringify({ by: attacker.username, success: true, amountStolen: amount }),
             severity: "CRITICAL",
           });
+          const bountyPayout = await noteBountyHeist(tx, attackerId, targetUserId, heist.id, amount);
+          const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
+          return {
+            ...presentHeist(heist, target.username, owned.weapon.name),
+            attack,
+            defense,
+            advantage: attack - defense,
+            vaultTier: target.vault.tier,
+            broken,
+            cash: paid?.cash ?? null,
+            bountyPayout,
+          };
         }
         const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
         return {
@@ -546,6 +559,7 @@ export async function attemptHeist(
           vaultTier: target.vault.tier,
           broken,
           cash: paid?.cash ?? null,
+          bountyPayout: 0,
         };
       },
       { timeout: 15_000 },

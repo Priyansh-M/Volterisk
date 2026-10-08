@@ -113,9 +113,18 @@ export function LedgerAlerts({
 
   async function dismissHeat() {
     if (!heatNote) return
-    const id = heatNote.id
     setHeatNote(null)
-    await api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+    try {
+      const notes = await api<{ notifications: GameNotice[] }>('/api/notifications')
+      const heatIds = notes.notifications
+        .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'))
+        .map((row) => row.id)
+      await Promise.all(
+        heatIds.map((id) => api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)),
+      )
+    } catch {
+      await api(`/api/notifications/${heatNote.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+    }
     onChange()
   }
 

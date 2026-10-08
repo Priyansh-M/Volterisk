@@ -187,12 +187,16 @@ async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise
     noonDone = true;
   };
 
+  let lastHeatAtCheck = heat;
+  let checksRun = 0;
   for (const at of due) {
     await ensureNoon(at);
     const cooled = decayed(heat, settledAt, new Date(at));
     heat = cooled.heat;
     settledAt = cooled.settledAt;
     judged = at;
+    checksRun += 1;
+    lastHeatAtCheck = heat;
     const take =
       cash > 0 && heat > RULES.HEAT_POLICE_AT
         ? heat > RULES.HEAT_POLICE_WIPE_AT
@@ -205,32 +209,37 @@ async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise
       await tx.transaction.create({
         data: { type: "police_seizure", amount: take, fromUserId: userId },
       });
-      await writeNotification(tx, {
-        userId,
-        title: "Cash seized",
-        body:
-          heat > RULES.HEAT_POLICE_WIPE_AT
-            ? `Heat ${heat}. A heat check took every dollar in your pocket. The vault was left alone.`
-            : `Heat ${heat}. A heat check took half the cash in your pocket. The vault was left alone.`,
-        severity: "CRITICAL",
-      });
-      continue;
     }
-    await writeNotification(tx, {
-      userId,
-      title: "Heat check",
-      body:
-        heat > RULES.HEAT_POLICE_AT
-          ? `Heat ${heat}. A heat check ran. Your pocket was already empty, so nothing was taken. The vault was left alone.`
-          : `Heat ${heat}. A heat check ran. Pocket cash stayed put. The vault was left alone.`,
-      severity: "WARNING",
-    });
   }
 
   if (!noonDone) {
     const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon);
     heat = wiped.heat;
     settledAt = wiped.settledAt;
+  }
+
+  if (checksRun > 0) {
+    if (seized > 0) {
+      await writeNotification(tx, {
+        userId,
+        title: "Cash seized",
+        body:
+          lastHeatAtCheck > RULES.HEAT_POLICE_WIPE_AT
+            ? `Heat ${lastHeatAtCheck}. A heat check took every dollar in your pocket. The vault was left alone.`
+            : `Heat ${lastHeatAtCheck}. A heat check took $${seized.toLocaleString()} from your pocket. The vault was left alone.`,
+        severity: "CRITICAL",
+      });
+    } else {
+      await writeNotification(tx, {
+        userId,
+        title: "Heat check",
+        body:
+          lastHeatAtCheck > RULES.HEAT_POLICE_AT
+            ? `Heat ${lastHeatAtCheck}. A heat check ran. Your pocket was already empty, so nothing was taken. The vault was left alone.`
+            : `Heat ${lastHeatAtCheck}. A heat check ran. Pocket cash stayed put. The vault was left alone.`,
+        severity: "WARNING",
+      });
+    }
   }
 
   const cooled = decayed(heat, settledAt, now);
@@ -276,6 +285,29 @@ export async function settleHeatNoonIfDue(userId: string): Promise<void> {
     await tx.user.update({
       where: { id: userId },
       data: { heat: wiped.heat, heatSettledAt: wiped.settledAt },
+    });
+  });
+}
+
+/**
+ * Noon wipe plus idle decay (−5 / 2h). Profile loads must call this or heat
+ * only moves when a heist, job, or police check touches the meter.
+ */
+export async function settleHeatState(userId: string): Promise<void> {
+  await settleHeatNoonIfDue(userId);
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    if (!user || user.isBot) return;
+    const cooled = decayed(user.heat, user.heatSettledAt, new Date());
+    if (
+      cooled.heat === user.heat &&
+      cooled.settledAt.getTime() === user.heatSettledAt.getTime()
+    ) {
+      return;
+    }
+    await tx.user.update({
+      where: { id: userId },
+      data: { heat: cooled.heat, heatSettledAt: cooled.settledAt },
     });
   });
 }
