@@ -30,10 +30,7 @@ export function isMissing(err: unknown) {
 }
 
 export function isBusy(err: unknown) {
-  return (
-    err instanceof ApiError &&
-    (err.status === 503 || err.status === 502 || err.code === 'DB_BUSY' || err.code === 'BOOT')
-  )
+  return err instanceof ApiError && (err.status === 503 || err.code === 'DB_BUSY' || err.code === 'BOOT')
 }
 
 const memory = new Map<string, unknown>()
@@ -84,13 +81,13 @@ function requestUrl(path: string) {
 }
 
 function shouldRetryBusy(status: number, code?: string) {
-  return status === 503 || status === 502 || code === 'DB_BUSY' || code === 'BOOT'
+  // Only true busy/boot — not generic 500/502 HTML failures (those retry loops felt like lag).
+  return status === 503 || code === 'DB_BUSY' || code === 'BOOT'
 }
 
 /**
- * All verbs retry on free-tier pool pressure (delay, don't drop the action).
- * Auth/validation errors never retry. Mutations are safe to retry on DB_BUSY —
- * interactive txs roll back when the pool rejects them mid-flight.
+ * Retry only on ledger-busy. Auth/validation/server bugs fail immediately.
+ * Max 2 attempts so a busy blip delays ~0.4s instead of hanging for seconds.
  */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
@@ -100,7 +97,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const method = (options.method ?? 'GET').toUpperCase()
   if (method !== 'GET') invalidateGets()
 
-  const maxAttempts = 3
+  const maxAttempts = 2
   let lastError: ApiError | null = null
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const response = await fetch(requestUrl(path), { ...options, headers })
@@ -127,7 +124,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const detail = data.issues?.find((issue) => issue.message)?.message
     lastError = new ApiError(detail || message, response.status, code, data.issues)
     if (attempt + 1 < maxAttempts && shouldRetryBusy(response.status, code)) {
-      await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.floor(Math.random() * 120)))
+      await new Promise((r) => setTimeout(r, 350 + Math.floor(Math.random() * 100)))
       continue
     }
     throw lastError

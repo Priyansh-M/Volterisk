@@ -18,6 +18,7 @@ if (!usesPostgres()) {
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
   prismaInflight?: number;
+  prismaReleaseEpoch?: number;
 };
 
 /**
@@ -47,8 +48,9 @@ function runtimeDatabaseUrl(): string | undefined {
     }
     // Session pool is tiny — never let a single isolate open more than one client.
     url.searchParams.set("connection_limit", "1");
-    if (!url.searchParams.has("connect_timeout")) url.searchParams.set("connect_timeout", "10");
-    if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "20");
+    // Fail fast into a short client/server retry instead of hanging the UI.
+    if (!url.searchParams.has("connect_timeout")) url.searchParams.set("connect_timeout", "5");
+    if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "8");
     return url.toString();
   } catch {
     return raw;
@@ -67,8 +69,8 @@ export function isDbBusyError(error: unknown): boolean {
   return /EMAXCONNSESSION|max clients reached|too many clients|timed out fetching a new connection/i.test(msg);
 }
 
-/** Retry on pool pressure so actions delay instead of hard-failing on free tier. */
-export async function withConnRetry<T>(label: string, fn: () => Promise<T>, attempts = 4): Promise<T> {
+/** Short retry on pool pressure. Keep waits small so login/actions do not feel hung. */
+export async function withConnRetry<T>(label: string, fn: () => Promise<T>, attempts = 3): Promise<T> {
   let last: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -76,7 +78,7 @@ export async function withConnRetry<T>(label: string, fn: () => Promise<T>, atte
     } catch (error) {
       last = error;
       if (!isDbBusyError(error) || i === attempts - 1) throw error;
-      const wait = 250 * 2 ** i + Math.floor(Math.random() * 150);
+      const wait = 150 * 2 ** i + Math.floor(Math.random() * 80);
       console.warn(`[prisma] ${label}: pool busy, retry in ${wait}ms`);
       await new Promise((r) => setTimeout(r, wait));
     }
@@ -89,20 +91,27 @@ export const prisma =
   new PrismaClient({
     ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
     transactionOptions: {
-      maxWait: 10_000,
-      timeout: 15_000,
+      maxWait: 8_000,
+      timeout: 12_000,
     },
   });
 globalForPrisma.prisma = prisma;
 globalForPrisma.prismaInflight ??= 0;
+globalForPrisma.prismaReleaseEpoch ??= 0;
+
+/**
+ * Longer than desk/heat polls so normal browsing reuses one session client.
+ * Short 4s disconnects caused reconnect lag on every poll + login.
+ */
+const IDLE_DISCONNECT_MS = 90_000;
 
 /** Drop the session-mode client when the isolate is idle so other isolates can connect. */
 export async function releasePrismaConnection(opts?: { immediate?: boolean }): Promise<void> {
   if ((globalForPrisma.prismaInflight ?? 0) > 0) return;
-  // Hold the session a few seconds so a page's burst of GETs can reuse it.
-  // Boot uses immediate so ready() is not blocked for 4s.
+  const epoch = ++(globalForPrisma.prismaReleaseEpoch as number);
   if (!opts?.immediate) {
-    await new Promise<void>((r) => setTimeout(r, 4_000));
+    await new Promise<void>((r) => setTimeout(r, IDLE_DISCONNECT_MS));
+    if (epoch !== globalForPrisma.prismaReleaseEpoch) return;
     if ((globalForPrisma.prismaInflight ?? 0) > 0) return;
   }
   try {
@@ -113,11 +122,13 @@ export async function releasePrismaConnection(opts?: { immediate?: boolean }): P
 }
 
 /**
- * Wrap a Vercel request so the session connection is released after the last
- * concurrent handler finishes. Safe to call locally (no-op disconnect cost is fine).
+ * Wrap a Vercel request so idle isolates eventually free their session slot.
+ * A new request cancels any pending idle disconnect (epoch bump).
  */
 export function trackPrismaRequest(res: { once: (event: "finish" | "close", fn: () => void) => void }): void {
   globalForPrisma.prismaInflight = (globalForPrisma.prismaInflight ?? 0) + 1;
+  // Cancel any pending idle disconnect — this isolate is active again.
+  globalForPrisma.prismaReleaseEpoch = (globalForPrisma.prismaReleaseEpoch ?? 0) + 1;
   let done = false;
   const finish = () => {
     if (done) return;

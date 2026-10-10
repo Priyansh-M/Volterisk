@@ -140,7 +140,7 @@ export async function registerPlayer(username: string, password: string) {
   await ensureWeaponCatalog();
   const user = await createPlayer({ username, password });
   const token = signToken(user);
-  const profile = await getProfile(user.id);
+  const profile = await getProfile(user.id, { settle: false });
   return { token, user: profile };
 }
 
@@ -165,10 +165,11 @@ export async function loginPlayer(username: string, password: string) {
   }
   const token = signToken(user);
   try {
-    const profile = await getProfile(user.id);
+    // Skip heat/passive/yield settles on login — /api/me right after handles them.
+    // That kept login off the heavy path that was 500ing under pool pressure.
+    const profile = await getProfile(user.id, { settle: false });
     return { token, user: profile };
   } catch (error) {
-    // Never turn a settle/pool blip into a blank "Server error" on an otherwise good login.
     if (error instanceof GameError) throw error;
     console.error("[login] getProfile failed after credentials ok", error);
     throw new GameError(
@@ -197,13 +198,15 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
   return minutesFromNow(RULES.HEIST_COOLDOWN_MINUTES, last.createdAt).toISOString();
 }
 
-export async function getProfile(userId: string) {
-  // Sequential on purpose: Vercel uses connection_limit=1, so parallel $transactions deadlock.
-  // Settles must not fail login/me — pay/heat can catch up on the next load.
-  await settleHeatState(userId).catch(() => null);
-  await settlePassivePay(userId).catch(() => null);
-  await settleVaultYield(userId).catch(() => null);
-  await settlePropertyMaterialYields(userId).catch(() => null);
+export async function getProfile(userId: string, opts?: { settle?: boolean }) {
+  // Settles are independent of the profile read. Never let them fail login/me.
+  if (opts?.settle !== false) {
+    await settleHeatState(userId).catch(() => null);
+    await settlePassivePay(userId).catch(() => null);
+    await settleVaultYield(userId).catch(() => null);
+    await settlePropertyMaterialYields(userId).catch(() => null);
+  }
+  // Sequential reads on purpose under connection_limit=1 (parallel still queues; keep simple).
   const [user, won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
