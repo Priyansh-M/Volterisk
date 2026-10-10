@@ -46,29 +46,25 @@ function runtimeDatabaseUrl(): string | undefined {
 
 const databaseUrl = runtimeDatabaseUrl();
 
-/** Pool exhaustion — map to 503, never pretend it is a bad JWT. */
+/**
+ * Pool / engine race — map to 503 DB_BUSY.
+ * Never treat these as a bad JWT (that logged people out).
+ */
 export function isDbBusyError(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P1001" || error.code === "P2024") return true;
   }
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
-  const msg = error instanceof Error ? error.message : String(error);
-  return /EMAXCONNSESSION|max clients reached|too many clients|timed out fetching a new connection/i.test(msg);
-}
-
-export async function withConnRetry<T>(label: string, fn: () => Promise<T>, attempts = 2): Promise<T> {
-  let last: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (error) {
-      last = error;
-      if (!isDbBusyError(error) || i === attempts - 1) throw error;
-      console.warn(`[prisma] ${label}: pool busy, retry`);
-      await new Promise((r) => setTimeout(r, 200 + Math.floor(Math.random() * 100)));
+  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
+    const msg = error.message;
+    if (/Engine is not yet connected|not yet connected|Connection .* closed|Server has closed the connection/i.test(msg)) {
+      return true;
     }
   }
-  throw last;
+  const msg = error instanceof Error ? error.message : String(error);
+  return /EMAXCONNSESSION|max clients reached|too many clients|timed out fetching a new connection|Engine is not yet connected|not yet connected/i.test(
+    msg,
+  );
 }
 
 export const prisma =
@@ -82,12 +78,22 @@ export const prisma =
   });
 globalForPrisma.prisma = prisma;
 
-/** Kept for boot callers — no-op. Forcing disconnect after requests was unstable online. */
+/** Warm the engine during boot so the first HTTP request is not racing connect. */
+export async function ensurePrismaConnected(): Promise<void> {
+  await prisma.$connect();
+}
+
+/**
+ * @deprecated No-op. Idle $disconnect after requests caused
+ * "Engine is not yet connected" on Vercel — never disconnect between HTTP requests.
+ */
 export async function releasePrismaConnection(_opts?: { immediate?: boolean }): Promise<void> {
   /* intentionally empty */
 }
 
-/** Kept for api/index.ts — no-op. Isolates keep one warm client (connection_limit=1). */
+/**
+ * @deprecated No-op. Kept so older api/index call sites compile; do not reconnect disconnect logic.
+ */
 export function trackPrismaRequest(_res: { once: (event: "finish" | "close", fn: () => void) => void }): void {
   /* intentionally empty */
 }
@@ -135,8 +141,10 @@ export async function ensureDatabase(): Promise<void> {
   const hasWeapons = await weaponTableExists();
   const hasBounties = hasWeapons ? await bountyTableExists() : false;
   if (hasWeapons && hasBounties) return;
+  // Local SQLite schema push only — reconnect immediately after.
   await prisma.$disconnect();
   pushSchema();
+  await prisma.$connect();
   if (!(await weaponTableExists())) {
     throw new Error("Weapon table is still missing. From volterisk/server run: npm run db:push");
   }

@@ -137,7 +137,17 @@ export async function listContracts(userId: string) {
   const now = new Date();
   const level = await playerLevel(userId);
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
-  const buffs = await territoryPassives(userId);
+  const buffs = await territoryPassives(userId).catch(() => ({
+    industrial: false,
+    financial: false,
+    industrialCount: 0,
+    financialCount: 0,
+    attackBuffPercent: 0,
+    defenseFlat: 0,
+    maxSecuredPercent: 100,
+    workCooldownCutMinutes: 0,
+    collectBonusPercent: 0,
+  }));
   const cooldownMins = Math.max(0, RULES.WORK_CONTRACT_COOLDOWN_MINUTES - buffs.workCooldownCutMinutes);
   const offered = offeredContracts(now);
   const [active, collected] = await Promise.all([
@@ -147,7 +157,7 @@ export async function listContracts(userId: string) {
       select: { contractId: true, collectedAt: true },
     }),
   ]);
-  await notifyIfReady(active);
+  await notifyIfReady(active).catch(() => null);
 
   const cooldownUntil = new Map<string, Date>();
   for (const run of collected) {
@@ -423,7 +433,7 @@ export async function settlePassivePay(userId: string): Promise<number> {
 
 export async function listPassiveJobs(userId: string) {
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
-  await settlePassivePay(userId);
+  await settlePassivePay(userId).catch(() => 0);
   const chosen = await prisma.user.findUnique({ where: { id: userId }, select: { passiveJobId: true, reputationLevel: true } });
   const reputationLevel = chosen?.reputationLevel ?? 1;
   return {

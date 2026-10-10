@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import app from "../server/src/index.js";
-import { trackPrismaRequest } from "../server/src/prisma.js";
 
 type RequestWithUrl = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -41,8 +40,6 @@ function withApiPrefix(req: RequestWithUrl): string {
 
 export default function handler(req: RequestWithUrl, res: ServerResponse): void {
   req.url = withApiPrefix(req);
-  // Session-mode pooler slots are scarce — release after the response so idle
-  // isolates do not keep holding a client until the next cold recycle.
-  trackPrismaRequest(res);
+  // Keep the Prisma client warm for the isolate lifetime — do not disconnect after requests.
   app(req, res);
 }

@@ -1,16 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { GameError } from "../game/errors.js";
-import { isDbBusyError, prisma, withConnRetry } from "../prisma.js";
+import { isDbBusyError, prisma } from "../prisma.js";
 
 function jwtSecret(): string {
   return process.env.JWT_SECRET || "iron-hour-local-dev";
 }
 
-/** Short-lived ok sessions so desk/heat polls do not hit User on every request. */
-const sessionOkUntil = new Map<string, number>();
-const SESSION_CACHE_MS = 25_000;
-
+/** Simple auth — no session cache / retry wrappers (those caused flaky logouts). */
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
     const header = req.header("authorization") ?? "";
@@ -27,25 +24,13 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     if (!payload.sub || typeof payload.tv !== "number") {
       throw new GameError(401, "UNAUTHORIZED", "Invalid token.");
     }
-    const cacheKey = `${payload.sub}:${payload.tv}`;
-    if ((sessionOkUntil.get(cacheKey) ?? 0) > Date.now()) {
-      req.userId = payload.sub;
-      next();
-      return;
-    }
-    const user = await withConnRetry(
-      "auth.session",
-      () =>
-        prisma.user.findUnique({
-          where: { id: payload.sub },
-          select: { id: true, tokenVersion: true },
-        }),
-      2,
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, tokenVersion: true },
+    });
     if (!user || user.tokenVersion !== payload.tv) {
       throw new GameError(401, "UNAUTHORIZED", "Session expired.");
     }
-    sessionOkUntil.set(cacheKey, Date.now() + SESSION_CACHE_MS);
     req.userId = user.id;
     next();
   } catch (error) {
@@ -53,11 +38,13 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       next(error);
       return;
     }
+    // Pool pressure is not a bad password / expired session.
     if (isDbBusyError(error)) {
       next(new GameError(503, "DB_BUSY", "The ledger is busy. Try again in a moment."));
       return;
     }
-    next(new GameError(401, "UNAUTHORIZED", "Invalid token."));
+    console.error("[auth]", error);
+    next(new GameError(503, "DB_BUSY", "The ledger is busy. Try again in a moment."));
   }
 }
 

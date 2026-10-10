@@ -6,6 +6,7 @@ import {
   ensureBountyTable,
   ensureCareerModsSchema,
   ensureDatabase,
+  ensurePrismaConnected,
   ensureTerritorySchema,
   usesPostgres,
 } from "./prisma.js";
@@ -33,6 +34,8 @@ async function boot(): Promise<void> {
       "Local API refused remote DATABASE_URL (would exhaust Supabase session pool). Use npm run dev (SQLite) or set ALLOW_REMOTE_DB=1.",
     );
   }
+  // Connect once per isolate; never $disconnect between requests on Vercel.
+  await ensurePrismaConnected();
   if (!usesPostgres()) {
     await ensureDatabase();
     await configureSqlite();

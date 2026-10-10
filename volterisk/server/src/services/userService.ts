@@ -16,7 +16,6 @@ import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js"
 import { unclaimedCount } from "./achievementService.js";
 import { settleHeatState } from "./heatService.js";
 import { settlePassivePay } from "./workService.js";
-import { publicProfileFor } from "./publicProfileService.js";
 import { CAREERS, isCareerId } from "../game/careersAndMods.js";
 import { assetById, assetMoneySpent } from "./propertyService.js";
 import { settlePropertyMaterialYields } from "./propertyMaterialYieldService.js";
@@ -218,7 +217,8 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
     throw new GameError(404, "NOT_FOUND", "Player not found.");
   }
   // Secondary stats — never fail the whole profile if one aggregate is slow/busy.
-  const [won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
+  // Rank comes from the leaderboard page; scanning every player here timed out login.
+  const [won, failed, lost, unclaimed, cooldown] = await Promise.all([
     prisma.heist
       .aggregate({
         where: { attackerId: userId, success: true },
@@ -233,7 +233,6 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
         _sum: { amountStolen: true },
       })
       .catch(() => ({ _sum: { amountStolen: 0 } })),
-    publicProfileFor(userId).catch(() => null),
     unclaimedCount(userId).catch(() => 0),
     cooldownEndsAt(userId).catch(() => null),
   ]);
@@ -247,7 +246,7 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
     avatarUrl: user.avatarUrl,
     level,
     title: titleForLevel(level),
-    rank: standing?.rank ?? 1,
+    rank: 1,
     cash: user.cash,
     vaultCreditCard: Boolean(user.vaultCreditCard),
     vault: {
