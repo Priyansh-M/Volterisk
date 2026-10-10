@@ -2,7 +2,7 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ZodError } from "zod";
 import { GameError } from "./game/errors.js";
-import { ensurePrismaConnected, isDbBusyError, trackPrismaRequest } from "./prisma.js";
+import { ensurePrismaConnected, isDbBusyError } from "./prisma.js";
 import { api } from "./routes/index.js";
 import { bootError, ready } from "./runtime.js";
 
@@ -15,8 +15,6 @@ export function createApp() {
       next();
       return;
     }
-    // Hold one session slot only while this response is alive; reconnect before work.
-    trackPrismaRequest(res);
     void ready
       .then(async () => {
         if (bootError) {

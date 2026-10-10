@@ -45,7 +45,7 @@ export function peek<T>(path: string): T | null {
 export function invalidateGets() {
   generation += 1
   memory.clear()
-  // Keep in-flight promises — clearing them duplicated requests and froze buys behind a stuck queue.
+  inflight.clear()
 }
 
 function fetchGet<T>(path: string): Promise<T> {
@@ -81,41 +81,12 @@ function requestUrl(path: string) {
 }
 
 function shouldRetryBusy(status: number, code?: string) {
-  // Only true busy/boot — not generic 500/502 HTML failures (those retry loops felt like lag).
   return status === 503 || code === 'DB_BUSY' || code === 'BOOT'
 }
 
 /**
- * Cap parallel GETs so a page load cannot open many Vercel isolates.
- * Mutations (buy/equip/etc.) bypass the queue — user actions must never freeze
- * behind desk polls or long busy backoffs.
- */
-const MAX_PARALLEL_GETS = 2
-let parallelGets = 0
-const getWaiters: Array<() => void> = []
-
-function acquireGetSlot(): Promise<void> {
-  if (parallelGets < MAX_PARALLEL_GETS) {
-    parallelGets += 1
-    return Promise.resolve()
-  }
-  return new Promise((resolve) => {
-    getWaiters.push(() => {
-      parallelGets += 1
-      resolve()
-    })
-  })
-}
-
-function releaseGetSlot() {
-  parallelGets = Math.max(0, parallelGets - 1)
-  const next = getWaiters.shift()
-  if (next) next()
-}
-
-/**
- * Retry only on ledger-busy. Auth/validation/server bugs fail immediately.
- * GET slots are released during backoff so buys/UI are not frozen.
+ * Simple fetch. Mutations never retry (a buy must not hang or double-fire).
+ * GETs get one short busy retry only.
  */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
@@ -123,54 +94,39 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const method = (options.method ?? 'GET').toUpperCase()
-  const isGet = method === 'GET'
-  if (!isGet) invalidateGets()
+  if (method !== 'GET') invalidateGets()
 
-  if (isGet) await acquireGetSlot()
-  let holdingGet = isGet
-  try {
-    const maxAttempts = isGet ? 3 : 4
-    let lastError: ApiError | null = null
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const response = await fetch(requestUrl(path), { ...options, headers })
-      const text = await response.text()
-      let data: {
-        error?: string | { code?: string; message?: string }
-        code?: string
-        issues?: { path: string; message: string }[]
-      } = {}
-      if (text) {
-        try {
-          data = JSON.parse(text) as typeof data
-        } catch {
-          throw new ApiError(
-            'The API did not answer. This site reached the page instead of /api.',
-            response.status || 502,
-          )
-        }
+  const maxAttempts = method === 'GET' ? 2 : 1
+  let lastError: ApiError | null = null
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await fetch(requestUrl(path), { ...options, headers })
+    const text = await response.text()
+    let data: {
+      error?: string | { code?: string; message?: string }
+      code?: string
+      issues?: { path: string; message: string }[]
+    } = {}
+    if (text) {
+      try {
+        data = JSON.parse(text) as typeof data
+      } catch {
+        throw new ApiError(
+          'The API did not answer. This site reached the page instead of /api.',
+          response.status || 502,
+        )
       }
-      if (response.ok) return data as T
-      const nested = data.error && typeof data.error === 'object' ? data.error : null
-      const message = nested?.message || (typeof data.error === 'string' ? data.error : response.statusText)
-      const code = nested?.code || data.code
-      const detail = data.issues?.find((issue) => issue.message)?.message
-      lastError = new ApiError(detail || message, response.status, code, data.issues)
-      if (attempt + 1 < maxAttempts && shouldRetryBusy(response.status, code)) {
-        if (holdingGet) {
-          releaseGetSlot()
-          holdingGet = false
-        }
-        await new Promise((r) => setTimeout(r, 300 * 2 ** attempt + Math.floor(Math.random() * 150)))
-        if (isGet) {
-          await acquireGetSlot()
-          holdingGet = true
-        }
-        continue
-      }
-      throw lastError
     }
-    throw lastError ?? new ApiError('Request failed', 500)
-  } finally {
-    if (holdingGet) releaseGetSlot()
+    if (response.ok) return data as T
+    const nested = data.error && typeof data.error === 'object' ? data.error : null
+    const message = nested?.message || (typeof data.error === 'string' ? data.error : response.statusText)
+    const code = nested?.code || data.code
+    const detail = data.issues?.find((issue) => issue.message)?.message
+    lastError = new ApiError(detail || message, response.status, code, data.issues)
+    if (attempt + 1 < maxAttempts && shouldRetryBusy(response.status, code)) {
+      await new Promise((r) => setTimeout(r, 350 + Math.floor(Math.random() * 100)))
+      continue
+    }
+    throw lastError
   }
+  throw lastError ?? new ApiError('Request failed', 500)
 }

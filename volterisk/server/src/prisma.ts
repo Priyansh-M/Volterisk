@@ -71,8 +71,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Retry pool saturation / reconnect races. Does not change game outcomes. */
-export async function withDbRetry<T>(fn: () => Promise<T>, attempts = 6): Promise<T> {
+/**
+ * Short retry for transient pool blips. Keep attempts low so buys never hang
+ * for tens of seconds — fail as 503 and let the client show an error.
+ */
+export async function withDbRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
   let last: unknown;
   for (let i = 0; i < attempts; i += 1) {
     try {
@@ -81,8 +84,7 @@ export async function withDbRetry<T>(fn: () => Promise<T>, attempts = 6): Promis
     } catch (error) {
       last = error;
       if (!isDbBusyError(error) || i + 1 >= attempts) throw error;
-      // Back off so other isolates can free a session slot (pool_size 15).
-      await sleep(120 * 2 ** i + Math.floor(Math.random() * 180));
+      await sleep(150 * (i + 1) + Math.floor(Math.random() * 100));
     }
   }
   throw last;
@@ -93,67 +95,29 @@ export const prisma =
   new PrismaClient({
     ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
     transactionOptions: {
-      maxWait: 10_000,
-      timeout: 15_000,
+      maxWait: 5_000,
+      timeout: 12_000,
     },
   });
 globalForPrisma.prisma = prisma;
 
 /**
- * Free-tier session pool is ~15 slots. Each Vercel isolate that stays connected
- * forever starves login. Hold the connection only while requests are in flight,
- * then idle-release. Always $connect() again before the next request (see app).
+ * Stable singleton (pre free-tier disconnect hacks). connection_limit=1 per isolate.
+ * Do NOT idle-$disconnect between requests — that raced buys/transactions and
+ * surfaced as stuck "Buying…" with no cash change.
  */
-let prismaInFlight = 0;
-let idleReleaseTimer: ReturnType<typeof setTimeout> | null = null;
-const IDLE_RELEASE_MS = process.env.VERCEL ? 2_000 : 30_000;
-
-function clearIdleRelease(): void {
-  if (idleReleaseTimer) {
-    clearTimeout(idleReleaseTimer);
-    idleReleaseTimer = null;
-  }
-}
-
-function scheduleIdleRelease(): void {
-  if (prismaInFlight > 0) return;
-  clearIdleRelease();
-  idleReleaseTimer = setTimeout(() => {
-    idleReleaseTimer = null;
-    if (prismaInFlight > 0) return;
-    void prisma.$disconnect().catch(() => undefined);
-  }, IDLE_RELEASE_MS);
-}
-
-/** Warm / reconnect the engine. Safe to call every request. */
 export async function ensurePrismaConnected(): Promise<void> {
-  clearIdleRelease();
-  await withDbRetry(() => prisma.$connect());
+  await prisma.$connect();
 }
 
-/** Release after idle — never mid-request. */
-export async function releasePrismaConnection(opts?: { immediate?: boolean }): Promise<void> {
-  if (opts?.immediate) {
-    clearIdleRelease();
-    if (prismaInFlight === 0) await prisma.$disconnect().catch(() => undefined);
-    return;
-  }
-  scheduleIdleRelease();
+/** @deprecated No-op — kept for call-site compatibility. */
+export async function releasePrismaConnection(_opts?: { immediate?: boolean }): Promise<void> {
+  /* intentionally empty */
 }
 
-/** Count HTTP work so idle disconnect cannot race an open response. */
-export function trackPrismaRequest(res: { once: (event: "finish" | "close", fn: () => void) => void }): void {
-  prismaInFlight += 1;
-  clearIdleRelease();
-  let ended = false;
-  const end = () => {
-    if (ended) return;
-    ended = true;
-    prismaInFlight = Math.max(0, prismaInFlight - 1);
-    scheduleIdleRelease();
-  };
-  res.once("finish", end);
-  res.once("close", end);
+/** @deprecated No-op — kept for call-site compatibility. */
+export function trackPrismaRequest(_res: { once: (event: "finish" | "close", fn: () => void) => void }): void {
+  /* intentionally empty */
 }
 
 function missingWeaponTable(error: unknown): boolean {

@@ -231,28 +231,21 @@ export function BlackMarketPage() {
                     disabled={busy !== null || row.seller === me?.username}
                     onClick={() => {
                       setBusy(row.id)
-                      api<{ cash: number }>('/api/black-market/buy', {
-                        method: 'POST',
-                        body: JSON.stringify({ listingId: row.id }),
-                      })
-                        .then((paid) => {
+                      setError(null)
+                      void (async () => {
+                        try {
+                          const paid = await api<{ cash: number }>('/api/black-market/buy', {
+                            method: 'POST',
+                            body: JSON.stringify({ listingId: row.id }),
+                          })
                           applyCash(paid.cash)
-                          setBlack((cur) =>
-                            cur
-                              ? {
-                                  ...cur,
-                                  listings: cur.listings.filter((l) => l.id !== row.id),
-                                  mine: cur.mine.filter((l) => l.id !== row.id),
-                                }
-                              : cur,
-                          )
-                          setBusy(null)
-                          void reload().catch(() => undefined)
-                        })
-                        .catch((err: unknown) => {
+                          await reload()
+                        } catch (err: unknown) {
                           setError(err instanceof ApiError ? err.message : 'Buy failed.')
+                        } finally {
                           setBusy(null)
-                        })
+                        }
+                      })()
                     }}
                   >
                     {busy === row.id ? 'Buying…' : `Buy ${money(row.price)}`}
