@@ -1,9 +1,18 @@
 import "dotenv/config";
 import express from "express";
 import { createApp } from "./app.js";
-import { configureSqlite, ensureBountyTable, ensureDatabase, usesPostgres } from "./prisma.js";
+import {
+  configureSqlite,
+  ensureBountyTable,
+  ensureCareerModsSchema,
+  ensureDatabase,
+  ensureTerritorySchema,
+  usesPostgres,
+} from "./prisma.js";
 import { setReady } from "./runtime.js";
 import { ensureNightCrew } from "./services/nightCrew.js";
+import { settlePropertyMaterialYieldsNoonGmt } from "./services/propertyMaterialYieldService.js";
+import { settleVaultYieldNoonGmt } from "./services/vaultYieldService.js";
 
 void express;
 
@@ -25,7 +34,17 @@ async function boot(): Promise<void> {
   } else {
     await ensureBountyTable();
   }
+  await ensureTerritorySchema();
+  await ensureCareerModsSchema();
   await ensureNightCrew();
+  if (!process.env.VERCEL) {
+    const tick = () => {
+      void settleVaultYieldNoonGmt().catch(() => null);
+      void settlePropertyMaterialYieldsNoonGmt().catch(() => null);
+    };
+    tick();
+    setInterval(tick, 15 * 60_000);
+  }
 }
 
 const pending = boot();

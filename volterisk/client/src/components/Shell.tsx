@@ -1,8 +1,10 @@
-import { Fragment, useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { Portrait } from './Portrait.tsx'
+import { Level11Guide } from './Level11Guide.tsx'
 import { ReputationAlert } from './ReputationAlert.tsx'
+import { SoftToast } from './SoftToast.tsx'
 import { api, prefetch } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
@@ -10,28 +12,41 @@ import type { GameNotice } from '../lib/types.ts'
 import {
   IconArsenal,
   IconBoard,
-  IconHeist,
-  IconHome,
-  IconMap,
-  IconProfile,
-  IconProperty,
-  IconSeal,
-  IconSignal,
-  IconVault,
+  IconChevronDown,
+  IconCoins,
   IconContract,
   IconCrosshair,
+  IconEye,
+  IconGlobe,
+  IconHeist,
+  IconHome,
+  IconLayers,
+  IconMap,
+  IconMarket,
+  IconOps,
+  IconPin,
+  IconProfile,
+  IconProperty,
   IconRank,
+  IconSeal,
+  IconSignal,
+  IconSteps,
+  IconTool,
+  IconVault,
 } from './Icons.tsx'
 
 const warm: Record<string, string[]> = {
   '/': ['/api/heists/history', '/api/work/contracts', '/api/community'],
   '/heists': ['/api/heists/targets', '/api/me/weapons', '/api/shop'],
-  '/assets': ['/api/properties'],
+  '/assets': ['/api/properties', '/api/materials'],
+  '/workshop': ['/api/workshop', '/api/materials'],
   '/market': ['/api/me/weapons', '/api/shop', '/api/properties'],
-  '/arsenal': ['/api/me/weapons', '/api/shop'],
+  '/black-market': ['/api/black-market', '/api/mods', '/api/me/weapons'],
+  '/arsenal': ['/api/me/weapons', '/api/shop', '/api/mods'],
   '/vault': ['/api/me/vault'],
   '/work': ['/api/work/contracts', '/api/work/passive'],
-  '/reputation': ['/api/reputation'],
+  '/reputation': ['/api/reputation', '/api/career'],
+  '/territory': ['/api/territory', '/api/career'],
   '/map': ['/api/map/bases'],
   '/leaderboard': ['/api/leaderboard'],
   '/achievements': ['/api/achievements'],
@@ -41,20 +56,65 @@ const warm: Record<string, string[]> = {
   '/bounties': ['/api/bounties'],
 }
 
-const links = [
-  { to: '/', label: 'Dashboard', end: true, Icon: IconHome },
-  { to: '/heists', label: 'Heists', end: false, Icon: IconHeist },
-  { to: '/vault', label: 'Vault', end: false, Icon: IconVault },
-  { to: '/arsenal', label: 'Arsenal', end: false, Icon: IconArsenal },
-  { to: '/market', label: 'Marketplace', end: false, Icon: IconBoard },
-  { to: '/assets', label: 'Assets', end: false, Icon: IconProperty },
-  { to: '/work', label: 'Work', end: false, Icon: IconContract },
-  { to: '/reputation', label: 'Reputation', end: false, Icon: IconRank },
-  { to: '/map', label: 'Map', end: false, Icon: IconMap },
-  { to: '/achievements', label: 'Achievements', end: false, Icon: IconSeal },
-  { to: '/profile', label: 'Profile', end: false, Icon: IconProfile },
-  { to: '/leaderboard', label: 'Leaderboard', end: false, Icon: IconBoard },
+type NavItem = { to: string; label: string; end?: boolean; Icon: typeof IconHome; casino?: boolean }
+
+type NavGroup = { id: string; label: string; Icon: typeof IconHome; items: NavItem[] }
+
+const navGroups: NavGroup[] = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    Icon: IconLayers,
+    items: [{ to: '/', label: 'Dashboard', end: true, Icon: IconHome }],
+  },
+  {
+    id: 'operations',
+    label: 'Operations',
+    Icon: IconOps,
+    items: [
+      { to: '/heists', label: 'Heists', Icon: IconHeist },
+      { to: '/work', label: 'Work', Icon: IconContract },
+      { to: '/bounties', label: 'Bounties', Icon: IconCrosshair },
+    ],
+  },
+  {
+    id: 'finances',
+    label: 'Finances & Assets',
+    Icon: IconCoins,
+    items: [
+      { to: '/vault', label: 'Vault', Icon: IconVault },
+      { to: '/market', label: 'Marketplace', Icon: IconMarket },
+      { to: '/black-market', label: 'Black Market', Icon: IconEye },
+      { to: '/assets', label: 'Assets', Icon: IconProperty },
+      { to: '/workshop', label: 'Workshop', Icon: IconTool },
+      { to: '/casino/roulette', label: 'Casino', Icon: IconBoard, casino: true },
+    ],
+  },
+  {
+    id: 'progression',
+    label: 'Progression',
+    Icon: IconSteps,
+    items: [
+      { to: '/arsenal', label: 'Arsenal', Icon: IconArsenal },
+      { to: '/reputation', label: 'Reputation', Icon: IconRank },
+      { to: '/territory', label: 'Territory', Icon: IconPin },
+      { to: '/achievements', label: 'Achievements', Icon: IconSeal },
+    ],
+  },
+  {
+    id: 'world',
+    label: 'World',
+    Icon: IconGlobe,
+    items: [
+      { to: '/map', label: 'Map', Icon: IconMap },
+      { to: '/profile', label: 'Profile', Icon: IconProfile },
+      { to: '/leaderboard', label: 'Leaderboard', Icon: IconBoard },
+    ],
+  },
 ]
+
+/** Matches server WORKSHOP.MIN_REPUTATION. */
+const WORKSHOP_MIN_REPUTATION = 5
 
 const pageMeta: Record<string, [string, string]> = {
   '/': ['Operations Center', 'Live overview of your network, assets, and opportunities.'],
@@ -63,10 +123,13 @@ const pageMeta: Record<string, [string, string]> = {
   '/vault': ['Vault Facility', 'Secure capital and improve protection systems.'],
   '/arsenal': ['Classified Arsenal', 'Inspect and manage registered equipment.'],
   '/market': ['Marketplace', 'Tools, property, and automobiles.'],
-  '/assets': ['Assets', 'Properties and vehicles you already hold.'],
+  '/black-market': ['Black Market', 'Player listings for materials, modifications, and weapons.'],
+  '/assets': ['Assets', 'Properties, vehicles, and materials you hold.'],
+  '/workshop': ['Workshop', 'Craft modifications from materials. Recipes unlock by workshop level.'],
   '/properties': ['Assets', 'Properties and vehicles you already hold.'],
   '/work': ['Contract Board', 'Select underground work by reward, risk, and location.'],
   '/reputation': ['Reputation', ''],
+  '/territory': ['Territory', 'Expand any empty sector after level 11. Hold vault capital. Track police attention.'],
   '/map': ['World Intelligence', 'Monitor territories and inspect the network.'],
   '/achievements': ['Accomplishments', 'Archived milestones, sealed cases, and distinctions.'],
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
@@ -88,6 +151,7 @@ function CashIcon({ className }: { className?: string }) {
 export function Shell() {
   const { me, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notices, setNotices] = useState(0)
@@ -95,13 +159,100 @@ export function Shell() {
   const [welcome, setWelcome] = useState(false)
   const [brief, setBrief] = useState(false)
   const [discordInvite, setDiscordInvite] = useState(false)
+  const [workshopGate, setWorkshopGate] = useState(false)
   const [heatWarn, setHeatWarn] = useState<string | null>(null)
   const [heatWarnClosed, setHeatWarnClosed] = useState<string | null>(null)
   const [casinoOpen, setCasinoOpen] = useState(location.pathname.startsWith('/casino'))
+  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    for (const g of navGroups) initial[g.id] = false
+    const saved = localStorage.getItem('volterisk-nav-open')
+    if (saved && navGroups.some((g) => g.id === saved)) {
+      initial[saved] = true
+    } else {
+      initial.overview = true
+    }
+    return initial
+  })
+  const groupOpenRef = useRef(groupOpen)
+  groupOpenRef.current = groupOpen
+  const navAnimRef = useRef<number | null>(null)
+  const NAV_DROP_MS = 230
+
+  function clearNavAnim() {
+    if (navAnimRef.current != null) {
+      window.clearTimeout(navAnimRef.current)
+      navAnimRef.current = null
+    }
+  }
+
+  function closeAllGroups() {
+    const next: Record<string, boolean> = {}
+    for (const g of navGroups) next[g.id] = false
+    setGroupOpen(next)
+    localStorage.removeItem('volterisk-nav-open')
+  }
+
+  function openGroupNow(id: string) {
+    const next: Record<string, boolean> = {}
+    for (const g of navGroups) next[g.id] = g.id === id
+    setGroupOpen(next)
+    localStorage.setItem('volterisk-nav-open', id)
+  }
+
+  /** Collapse the open group first, then expand the target (or stay closed). */
+  function revealGroup(id: string | null) {
+    clearNavAnim()
+    const current = navGroups.find((g) => groupOpenRef.current[g.id])?.id ?? null
+    if (current === id) return
+
+    if (current) {
+      closeAllGroups()
+      if (!id) return
+      navAnimRef.current = window.setTimeout(() => {
+        navAnimRef.current = null
+        openGroupNow(id)
+      }, NAV_DROP_MS)
+      return
+    }
+
+    if (id) openGroupNow(id)
+  }
+
+  function toggleGroup(id: string) {
+    const current = navGroups.find((g) => groupOpenRef.current[g.id])?.id ?? null
+    if (current === id) {
+      revealGroup(null)
+      return
+    }
+    revealGroup(id)
+  }
+
+  useEffect(() => () => clearNavAnim(), [])
+
+  useEffect(() => {
+    const match = navGroups.find((g) =>
+      g.items.some((item) => {
+        if (item.casino) return location.pathname.startsWith('/casino')
+        if (item.end) return location.pathname === item.to
+        return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+      }),
+    )
+    if (!match) return
+    revealGroup(match.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- drive from route only
+  }, [location.pathname])
 
   useEffect(() => {
     if (typeof me?.unclaimedAchievements === 'number') setUnclaimed(me.unclaimedAchievements)
   }, [me?.unclaimedAchievements])
+
+  useEffect(() => {
+    if (location.pathname !== '/workshop') return
+    if ((me?.level ?? 0) >= WORKSHOP_MIN_REPUTATION) return
+    setWorkshopGate(true)
+    navigate('/', { replace: true })
+  }, [location.pathname, me?.level, navigate])
 
   useEffect(() => {
     if (location.pathname !== '/') return
@@ -112,17 +263,47 @@ export function Shell() {
     if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
   }, [location.pathname])
 
+  /** First-account intro: 5s between welcome → brief → discord (Continue still works). */
+  useEffect(() => {
+    if (!welcome || location.pathname !== '/') return
+    const t = window.setTimeout(() => {
+      sessionStorage.removeItem('volterisk-welcome')
+      setWelcome(false)
+      if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
+    }, 5_000)
+    return () => window.clearTimeout(t)
+  }, [welcome, location.pathname])
+
+  useEffect(() => {
+    if (!brief || welcome || location.pathname !== '/') return
+    const t = window.setTimeout(() => {
+      sessionStorage.removeItem('volterisk-brief')
+      setBrief(false)
+    }, 5_000)
+    return () => window.clearTimeout(t)
+  }, [brief, welcome, location.pathname])
+
   useEffect(() => {
     if (!me?.id) return
     const seen = localStorage.getItem(`volterisk-discord:${me.id}`) === '1'
-    const introOpen = sessionStorage.getItem('volterisk-welcome') === '1' || sessionStorage.getItem('volterisk-brief') === '1'
-    setDiscordInvite(!seen && !introOpen && !welcome && !brief)
+    const introOpen =
+      welcome ||
+      brief ||
+      sessionStorage.getItem('volterisk-welcome') === '1' ||
+      sessionStorage.getItem('volterisk-brief') === '1'
+    if (seen || introOpen) {
+      setDiscordInvite(false)
+      return
+    }
+    const t = window.setTimeout(() => setDiscordInvite(true), 5_000)
+    return () => window.clearTimeout(t)
   }, [me?.id, welcome, brief])
 
   useEffect(() => {
     if (!me?.id) return
     let cancelled = false
     async function look() {
+      if (document.hidden) return
       try {
         const row = await api<{ active: boolean; token: string | null }>('/api/heat/warning')
         if (!cancelled) setHeatWarn(row.active && row.token ? row.token : null)
@@ -131,10 +312,15 @@ export function Shell() {
       }
     }
     void look()
-    const timer = window.setInterval(() => void look(), 15000)
+    const timer = window.setInterval(() => void look(), 30_000)
+    const onVis = () => {
+      if (!document.hidden) void look()
+    }
+    document.addEventListener('visibilitychange', onVis)
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [me?.id])
 
@@ -229,6 +415,24 @@ export function Shell() {
           </section>
         </div>
       ) : null}
+      {workshopGate ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-background/85 p-4">
+          <section className="w-full max-w-md border border-primary bg-card px-5 py-5 shadow-2xl">
+            <p className="font-mono text-[10px] tracking-[0.2em] text-primary uppercase">Workshop locked</p>
+            <h2 className="mt-2 font-display text-2xl font-semibold uppercase">Access denied</h2>
+            <p className="mt-3 text-sm leading-relaxed text-foreground">
+              Minimum reputation level five to access.
+            </p>
+            <button
+              type="button"
+              className="gloss-gold mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+              onClick={() => setWorkshopGate(false)}
+            >
+              Understood
+            </button>
+          </section>
+        </div>
+      ) : null}
       {heatWarn && heatWarn !== heatWarnClosed ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4">
           <section className="animate-dossier relative w-full max-w-lg border border-destructive bg-card p-8 shadow-2xl">
@@ -281,6 +485,8 @@ export function Shell() {
         </div>
       ) : null}
       <ReputationAlert />
+      <Level11Guide />
+      <SoftToast />
       {mobileOpen ? (
         <button aria-label="Close navigation overlay" className="fixed inset-0 z-40 bg-background/75 lg:hidden" onClick={() => setMobileOpen(false)} />
       ) : null}
@@ -310,7 +516,7 @@ export function Shell() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{me.username}</p>
                 <p className="font-mono text-[9px] uppercase text-primary">
-                  {me.title} · Lvl {String(me.level).padStart(2, '0')}
+                  {me.title} · Level {me.level}
                 </p>
               </div>
             )}
@@ -318,8 +524,12 @@ export function Shell() {
           {collapsed ? null : (
             <div className="mt-4 flex justify-between border-t border-sidebar-border pt-3">
               <span>
-                <small className="block font-mono text-[8px] uppercase text-muted-foreground">Cash</small>
-                <b className="font-mono text-xs">{money(me.cash)}</b>
+                <small className="block font-mono text-[8px] uppercase text-muted-foreground">
+                  {me.vaultCreditCard ? 'Card' : 'Cash'}
+                </small>
+                <b className="font-mono text-xs">
+                  {money(me.vaultCreditCard ? me.vault.balance : me.cash)}
+                </b>
               </span>
               <span className="text-right">
                 <small className="block font-mono text-[8px] uppercase text-muted-foreground">Location</small>
@@ -329,86 +539,118 @@ export function Shell() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3">
-          {links.map((link) => (
-            <Fragment key={link.to}>
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.end}
-              title={collapsed ? link.label : undefined}
-              onMouseEnter={() => warm[link.to]?.forEach(prefetch)}
-              onFocus={() => warm[link.to]?.forEach(prefetch)}
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                `mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs no-underline ${
-                  isActive
-                    ? 'border-primary bg-accent text-foreground'
-                    : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
-                }`
-              }
-            >
-              <link.Icon className="h-4 w-4 shrink-0" />
-              {collapsed ? null : <span>{link.label}</span>}
-              {!collapsed && link.to === '/achievements' && unclaimed > 0 ? (
-                <span className="ml-auto text-primary" title="Reward ready to claim" aria-label="Reward ready to claim">
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
-                    <path d="M7 4h10v2a5 5 0 0 1-4 4.9V14h3v2H8v-2h3v-3.1A5 5 0 0 1 7 6V4zm-3 1h2v2a3 3 0 0 0 1.2 2.4A4 4 0 0 1 4 6V5zm16 0v1a4 4 0 0 1-3.2 3.4A3 3 0 0 0 18 7V5h2zM9 18h6v2H9v-2z" />
-                  </svg>
-                </span>
-              ) : null}
-            </NavLink>
-            {link.to === '/work' ? (
-              <Fragment>
-                <button
-                  type="button"
-                  className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs ${
-                    location.pathname.startsWith('/casino')
-                      ? 'border-primary bg-accent text-foreground'
-                      : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
-                  }`}
-                  onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
-                  onFocus={() => void import('../pages/RoulettePage.tsx')}
-                  onClick={() => setCasinoOpen((open) => !open)}
-                >
-                  <CashIcon className="h-4 w-4 shrink-0" />
-                  {collapsed ? null : <span className="flex-1">Casino</span>}
-                  {collapsed ? null : <span className="text-[10px]">{casinoOpen ? '−' : '+'}</span>}
-                </button>
-                {casinoOpen && !collapsed ? (
-                  <NavLink
-                    to="/casino/roulette"
-                    onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
-                    onClick={() => setMobileOpen(false)}
-                    className={({ isActive }) =>
-                      `mb-0.5 flex h-9 items-center gap-3 border-l-2 pl-10 text-left text-xs no-underline ${
-                        isActive ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
-                      }`
-                    }
-                  >
-                    Roulette
-                  </NavLink>
-                ) : null}
-                <NavLink
-                  to="/bounties"
-                  title={collapsed ? 'Bounties' : undefined}
-                  onMouseEnter={() => warm['/bounties']?.forEach(prefetch)}
-                  onFocus={() => warm['/bounties']?.forEach(prefetch)}
-                  onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) =>
-                    `mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs no-underline ${
-                      isActive || location.pathname.startsWith('/bounties')
+          {navGroups.map((group) => {
+            const open = collapsed || !!groupOpen[group.id]
+            const groupActive = group.items.some((item) =>
+              item.end ? location.pathname === item.to : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+            )
+            const itemPad = collapsed ? 'px-3' : 'pl-10 pr-3'
+            return (
+              <div key={group.id} className="mb-0.5">
+                {collapsed ? null : (
+                  <button
+                    type="button"
+                    className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs ${
+                      groupActive
                         ? 'border-primary bg-accent text-foreground'
                         : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
-                    }`
-                  }
-                >
-                  <IconCrosshair className="h-4 w-4 shrink-0" />
-                  {collapsed ? null : <span>Bounties</span>}
-                </NavLink>
-              </Fragment>
-            ) : null}
-            </Fragment>
-          ))}
+                    }`}
+                    onClick={() => toggleGroup(group.id)}
+                  >
+                    <group.Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex-1">{group.label}</span>
+                    <IconChevronDown
+                      className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out ${open ? 'rotate-0' : '-rotate-90'}`}
+                    />
+                  </button>
+                )}
+                <div className={`nav-drop ${open ? 'nav-drop-open' : ''}`}>
+                  <div className="nav-drop-inner">
+                    {group.items.map((link) => {
+                      if (link.casino) {
+                        return (
+                          <Fragment key={link.to}>
+                            <button
+                              type="button"
+                              className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 text-left text-xs ${itemPad} ${
+                                location.pathname.startsWith('/casino')
+                                  ? 'border-primary bg-accent text-foreground'
+                                  : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
+                              }`}
+                              onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
+                              onClick={() => setCasinoOpen((v) => !v)}
+                            >
+                              <CashIcon className="h-4 w-4 shrink-0" />
+                              {collapsed ? null : <span className="flex-1">Casino</span>}
+                              {collapsed ? null : (
+                                <IconChevronDown
+                                  className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out ${casinoOpen ? 'rotate-0' : '-rotate-90'}`}
+                                />
+                              )}
+                            </button>
+                            <div className={`nav-drop ${casinoOpen && !collapsed ? 'nav-drop-open' : ''}`}>
+                              <div className="nav-drop-inner">
+                                <NavLink
+                                  to="/casino/roulette"
+                                  onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
+                                  onClick={() => setMobileOpen(false)}
+                                  className={({ isActive }) =>
+                                    `mb-0.5 flex h-9 items-center gap-3 border-l-2 pl-16 pr-3 text-left text-xs no-underline ${
+                                      isActive
+                                        ? 'border-primary text-foreground'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                                    }`
+                                  }
+                                >
+                                  Roulette
+                                </NavLink>
+                              </div>
+                            </div>
+                          </Fragment>
+                        )
+                      }
+                      return (
+                        <NavLink
+                          key={link.to}
+                          to={link.to}
+                          end={link.end}
+                          title={collapsed ? link.label : undefined}
+                          onMouseEnter={() => warm[link.to]?.forEach(prefetch)}
+                          onFocus={() => warm[link.to]?.forEach(prefetch)}
+                          onClick={(event) => {
+                            if (link.to === '/workshop' && (me?.level ?? 0) < WORKSHOP_MIN_REPUTATION) {
+                              event.preventDefault()
+                              setWorkshopGate(true)
+                              setMobileOpen(false)
+                              return
+                            }
+                            setMobileOpen(false)
+                          }}
+                          className={({ isActive }) =>
+                            `mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 text-left text-xs no-underline ${itemPad} ${
+                              isActive
+                                ? 'border-primary bg-accent text-foreground'
+                                : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
+                            }`
+                          }
+                        >
+                          <link.Icon className="h-4 w-4 shrink-0" />
+                          {collapsed ? null : <span>{link.label}</span>}
+                          {!collapsed && link.to === '/achievements' && unclaimed > 0 ? (
+                            <span className="ml-auto text-primary" title="Reward ready to claim">
+                              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                                <path d="M7 4h10v2a5 5 0 0 1-4 4.9V14h3v2H8v-2h3v-3.1A5 5 0 0 1 7 6V4zm-3 1h2v2a3 3 0 0 0 1.2 2.4A4 4 0 0 1 4 6V5zm16 0v1a4 4 0 0 1-3.2 3.4A3 3 0 0 0 18 7V5h2zM9 18h6v2H9v-2z" />
+                              </svg>
+                            </span>
+                          ) : null}
+                        </NavLink>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </nav>
         <div className="border-t border-sidebar-border p-3">
           <a
@@ -453,8 +695,12 @@ export function Shell() {
           </div>
           <div className="flex items-center gap-2 sm:gap-5">
             <div className="border-l border-border pl-3 sm:pl-5">
-              <span className="block font-mono text-[8px] uppercase text-muted-foreground">Total balance</span>
-              <b className="font-mono text-xs">{money(me.cash + me.vault.balance)}</b>
+              <span className="block font-mono text-[8px] uppercase text-muted-foreground">
+                {me.vaultCreditCard ? 'Card' : 'Total balance'}
+              </span>
+              <b className="font-mono text-xs">
+                {money(me.vaultCreditCard ? me.vault.balance : me.cash + me.vault.balance)}
+              </b>
             </div>
             <NavLink to="/notifications" aria-label="Notifications" className="relative text-foreground no-underline" onClick={() => setNotices(0)}>
               <IconSignal className="h-4 w-4" />

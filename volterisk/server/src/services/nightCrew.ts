@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { RULES, vaultCapacity } from "../game/rules.js";
+import { npcTakeWindow } from "../game/npcPayout.js";
+import { RULES, vaultCapacity, vaultModSlotsForLevel } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { createPlayer, ensureWeaponCatalog } from "./userService.js";
+
+export { npcPayoutBand, npcTakeWindow } from "../game/npcPayout.js";
 
 /**
  * Twenty stationed crews. They are heist targets and map markers, never players.
@@ -168,6 +171,9 @@ export async function ensureNpcStations(): Promise<void> {
 async function upgradePurseIfNeeded(
   purse: {
     id: string;
+    attackerId: string;
+    npcId: string;
+    weekStart: Date;
     balance: number;
     defaultBalance: number;
     vaultTier: string;
@@ -242,7 +248,29 @@ export async function loadNpcPurses(
 
 /** Always open. Hard defense comes from their diamond vault, not a level gate. */
 const DIAMOND_HARD = new Set(["samir odeh", "anya frost"]);
-const PINNED_HARD = ["Felix Dunn", "Samir Odeh", "Anya Frost"];
+
+/**
+ * NPC progression bands (4 crews each). Tier 0 matches the attacker’s reputation;
+ * each next band is 2 clearance levels behind (L−2, L−4, …).
+ * Tier 0 also uses a 3h personal cooldown; others keep the global 2h NPC cooldown.
+ */
+export const NPC_PROGRESSION_TIERS = [
+  ["Mara Voss", "Colette Marsh", "Felix Dunn", "Nora Kim"],
+  ["Eddie Quill", "Nia Pell", "Hugo Brandt", "Paulie Tran"],
+  ["Wes Harlow", "Otto Venn", "Sera Lang", "Cora Bennett"],
+  ["Lila Quinn", "Jules Peck", "Mick Doyle", "Theo Marsh"],
+  ["Ruth Keene", "Inez Calder", "Samir Odeh", "Anya Frost"],
+] as const;
+
+/** @deprecated use NPC_PROGRESSION_TIERS[0] — kept for any older imports */
+export const SCALING_NPCS = NPC_PROGRESSION_TIERS[0];
+
+const TIER_BY_NAME = new Map<string, number>();
+for (let t = 0; t < NPC_PROGRESSION_TIERS.length; t += 1) {
+  for (const name of NPC_PROGRESSION_TIERS[t]!) {
+    TIER_BY_NAME.set(name.toLowerCase(), t);
+  }
+}
 
 export function isNpcGated(_username: string, _attackerLevel: number): boolean {
   return false;
@@ -250,6 +278,121 @@ export function isNpcGated(_username: string, _attackerLevel: number): boolean {
 
 export function isDiamondHardNpc(username: string): boolean {
   return DIAMOND_HARD.has(username.trim().toLowerCase());
+}
+
+export function npcTierIndex(username: string): number {
+  return TIER_BY_NAME.get(username.trim().toLowerCase()) ?? NPC_PROGRESSION_TIERS.length - 1;
+}
+
+/** Effective clearance / power level for this crew vs the attacker. */
+export function npcEffectiveLevel(username: string, attackerLevel: number): number {
+  return Math.max(1, attackerLevel - npcTierIndex(username) * 2);
+}
+
+export function isScalingNpc(username: string): boolean {
+  return npcTierIndex(username) === 0;
+}
+
+/** Minutes before this attacker may hit the same crew again. Tier 0 = 3h. */
+export function npcCooldownMinutes(username: string): number {
+  return npcTierIndex(username) === 0 ? 180 : RULES.NPC_COOLDOWN_MINUTES;
+}
+
+/**
+ * Extra NPC defense once the attacker is past reputation 10.
+ * +10 per player level above 10 (same for every crew). Stacks with NPC_DEFENSE_FLAT.
+ */
+export function npcLevelDefenseBonus(attackerLevel: number): number {
+  if (attackerLevel <= RULES.NPC_DEFENSE_LEVEL_START) return 0;
+  return (attackerLevel - RULES.NPC_DEFENSE_LEVEL_START) * RULES.NPC_DEFENSE_PER_LEVEL;
+}
+
+/** Total flat NPC defense bump: base flat + post-L10 scaling. */
+export function npcDefenseBonus(attackerLevel: number): number {
+  return RULES.NPC_DEFENSE_FLAT + npcLevelDefenseBonus(attackerLevel);
+}
+
+export function maxNpcCooldownMinutes(): number {
+  return 180;
+}
+
+/**
+ * Draft vault balances for an “average” player at a reputation rung.
+ * Used as the purse target so estimated wealth tracks the ladder (pre-L10).
+ */
+export function averagePlayerVaultBalance(level: number): number {
+  const L = Math.max(1, Math.floor(level));
+  const table: Record<number, number> = {
+    1: 28_000,
+    2: 55_000,
+    3: 95_000,
+    4: 180_000,
+    5: 400_000,
+    6: 750_000,
+    7: 1_200_000,
+    8: 2_000_000,
+    9: 3_500_000,
+    10: 6_000_000,
+    11: 10_000_000,
+    12: 14_000_000,
+    13: 18_000_000,
+    14: 24_000_000,
+    15: 32_000_000,
+    20: 55_000_000,
+    25: 90_000_000,
+    30: 140_000_000,
+    35: 220_000_000,
+    40: 350_000_000,
+    45: 500_000_000,
+    50: 750_000_000,
+  };
+  if (table[L] != null) return table[L]!;
+  const keys = Object.keys(table)
+    .map(Number)
+    .sort((a, b) => a - b);
+  let lo = keys[0]!;
+  let hi = keys[keys.length - 1]!;
+  for (const k of keys) {
+    if (k <= L) lo = k;
+    if (k >= L) {
+      hi = k;
+      break;
+    }
+  }
+  if (lo === hi) return table[lo]!;
+  const t = (L - lo) / (hi - lo);
+  return Math.floor(table[lo]! + (table[hi]! - table[lo]!) * t);
+}
+
+/** Vault tier/level appropriate for a clearance rung (harder doors as level rises). */
+export function vaultForEffectiveLevel(effectiveLevel: number): { tier: string; vaultLevel: number } {
+  const level = Math.max(1, effectiveLevel);
+  if (level >= 25) return { tier: "diamond", vaultLevel: Math.min(5, 3 + Math.floor((level - 25) / 5)) };
+  if (level >= 15) return { tier: "gold", vaultLevel: Math.min(5, 2 + Math.floor((level - 15) / 2)) };
+  if (level >= 8) return { tier: "silver", vaultLevel: Math.min(5, 1 + Math.floor((level - 8) / 2)) };
+  return { tier: "standard", vaultLevel: Math.min(5, Math.max(1, level)) };
+}
+
+/** Synthetic vault mods for NPC purses once clearance ≥ 15 (slot-capped). */
+export function npcVaultModsForLevel(effectiveLevel: number): string[] {
+  if (effectiveLevel < 15) return [];
+  const pool: { min: number; id: string }[] = [
+    { min: 15, id: "reinforced-vault-panels" },
+    { min: 18, id: "motion-detection-grid" },
+    { min: 20, id: "access-control-system" },
+    { min: 25, id: "layered-barrier-system" },
+    { min: 28, id: "adaptive-security-network" },
+    { min: 30, id: "thermal-signature-masking" },
+    { min: 32, id: "automated-countermeasures" },
+    { min: 35, id: "aegis-defence-core" },
+    { min: 40, id: "predictive-security-matrix" },
+    { min: 45, id: "distributed-barrier-network" },
+  ];
+  const slots = vaultModSlotsForLevel(effectiveLevel);
+  return pool
+    .filter((row) => effectiveLevel >= row.min)
+    .map((row) => row.id)
+    .slice(0, Math.max(0, slots));
 }
 
 function mix(seed: string): number {
@@ -266,31 +409,62 @@ export type NpcOffer = {
   tier: string;
   vaultLevel: number;
   defaultBalance: number;
+  clearanceLevel: number;
+  modIds: string[];
+  cooldownMinutes: number;
   locked: boolean;
 };
 
-/** Stable for the UTC week at a given reputation. Higher reputation raises vault level and cash. */
+/**
+ * Stable for the UTC week at a given reputation.
+ * Clearance drives vault tier/defense. At L10+ the purse is sized to the
+ * absolute take band (so 1–15% rolls land in the designed dollar window);
+ * pre-L10 still tracks average-player wealth.
+ */
 export function npcOffer(attackerLevel: number, npcId: string, weekStart: Date): NpcOffer {
   const week = weekStart.toISOString();
   const roster = NIGHT_CREW.find((bot) => bot.username === npcId) ?? NIGHT_CREW[0];
+  const clearanceLevel = npcEffectiveLevel(roster.username, attackerLevel);
   const diamond = DIAMOND_HARD.has(roster.username.toLowerCase());
-  const hard = PINNED_HARD.includes(roster.username);
-  const tier = diamond ? "diamond" : "standard";
-  const vaultLevel = diamond
-    ? 3
-    : hard
-      ? Math.min(5, Math.max(3, attackerLevel))
-      : Math.min(5, Math.max(1, attackerLevel));
-  const capacity = Math.max(RULES.MIN_VAULT_BALANCE, vaultCapacity(tier, vaultLevel));
-  const rolled = Math.max(
-    RULES.MIN_VAULT_BALANCE,
-    Math.floor(capacity * (0.45 + mix(`${week}:${attackerLevel}:${roster.username}:cash`) * 0.55)),
+
+  let tier: string;
+  let vaultLevel: number;
+  if (diamond) {
+    tier = "diamond";
+    vaultLevel = Math.min(5, Math.max(3, 2 + Math.floor(clearanceLevel / 3)));
+  } else {
+    ({ tier, vaultLevel } = vaultForEffectiveLevel(clearanceLevel));
+  }
+
+  const takeWin = npcTakeWindow(
+    attackerLevel,
+    npcTierIndex(roster.username),
+    DIAMOND_HARD.has(roster.username.toLowerCase()),
   );
+  let defaultBalance: number;
+  if (takeWin) {
+    // Purse sized so a mid take fits the window; vault defense still from tier/level.
+    const midTake = (takeWin.min + takeWin.max) / 2;
+    const jitter = 0.92 + mix(`${week}:${attackerLevel}:${roster.username}:band`) * 0.16;
+    defaultBalance = Math.max(
+      RULES.MIN_VAULT_BALANCE,
+      Math.floor((midTake / 0.08) * jitter),
+    );
+  } else {
+    const avg = averagePlayerVaultBalance(clearanceLevel);
+    const jitter = 0.88 + mix(`${week}:${clearanceLevel}:${roster.username}:cash`) * 0.24;
+    defaultBalance = Math.max(RULES.MIN_VAULT_BALANCE, Math.floor(avg * jitter));
+    if (diamond) defaultBalance = Math.floor(defaultBalance * 1.35);
+  }
+
   return {
     npcId: roster.username,
     tier,
     vaultLevel,
-    defaultBalance: rolled,
+    defaultBalance,
+    clearanceLevel,
+    modIds: npcVaultModsForLevel(clearanceLevel),
+    cooldownMinutes: npcCooldownMinutes(roster.username),
     locked: false,
   };
 }

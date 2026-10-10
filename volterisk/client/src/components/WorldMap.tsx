@@ -20,10 +20,13 @@ type Props = {
   pins: MapPin[]
   canClaim: boolean
   claimHint?: string | null
+  /** L11+ expand: scout any empty sector. */
+  canScout?: boolean
   busy: boolean
   loading?: boolean
   focusSectorId?: string | null
   onClaim: (sector: Sector, name: string) => void
+  onScout?: (sector: Sector) => void
   className?: string
   /** Onboarding only. The live map does not nag after login. */
   showHint?: boolean
@@ -36,7 +39,19 @@ function fitCamera(width: number, height: number): Cam {
   return { k, x: (WORLD.width - viewW) / 2, y: (WORLD.height - viewH) / 2 }
 }
 
-export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = false, focusSectorId = null, onClaim, className = '', showHint = false }: Props) {
+export function WorldMap({
+  pins,
+  canClaim,
+  claimHint = null,
+  canScout = false,
+  busy,
+  loading = false,
+  focusSectorId = null,
+  onClaim,
+  onScout,
+  className = '',
+  showHint = false,
+}: Props) {
   const navigate = useNavigate()
   const frame = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -284,15 +299,23 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
                     const pin = pinBySector.get(sector.id)
                     const hot = focus?.id === sector.id
                     const selected = pinned?.id === sector.id
-                    const fill = pin?.isYou
-                      ? 'rgba(46, 158, 72, 0.92)'
-                      : pin?.isNpc
-                        ? 'rgba(196, 92, 38, 0.9)'
-                        : pin
-                          ? 'rgba(47, 95, 158, 0.88)'
-                          : hot
-                            ? 'rgba(20,20,20,0.16)'
-                            : 'rgba(255,255,255,0.08)'
+                    const territory = pin?.kind === 'territory'
+                    const custom = territory && pin?.mapColor ? pin.mapColor : null
+                    const fill = territory
+                      ? custom
+                        ? hexToRgba(custom, pin?.isYou ? 0.9 : 0.82)
+                        : pin?.isYou
+                          ? 'rgba(124, 58, 237, 0.88)'
+                          : 'rgba(109, 40, 217, 0.85)'
+                      : pin?.isYou
+                        ? 'rgba(46, 158, 72, 0.92)'
+                        : pin?.isNpc
+                          ? 'rgba(196, 92, 38, 0.9)'
+                          : pin
+                            ? 'rgba(47, 95, 158, 0.88)'
+                            : hot
+                              ? 'rgba(20,20,20,0.16)'
+                              : 'rgba(255,255,255,0.08)'
                     return (
                       <g key={sector.id}>
                         <rect
@@ -311,8 +334,16 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
                             y={sector.cy - 3.1}
                             width={6.2}
                             height={6.2}
-                            fill={pin.isYou ? '#1f7a38' : pin.isNpc ? '#9a3f16' : '#1d4e8c'}
-                            stroke={pin.isYou ? '#141414' : '#f7f4ee'}
+                            fill={
+                              territory
+                                ? custom ?? '#7c3aed'
+                                : pin.isYou
+                                  ? '#1f7a38'
+                                  : pin.isNpc
+                                    ? '#9a3f16'
+                                    : '#1d4e8c'
+                            }
+                            stroke={pin.isYou && !territory ? '#141414' : '#f7f4ee'}
                             strokeWidth={0.7}
                           />
                         ) : null}
@@ -331,7 +362,15 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
                   y={sector.cy - 4.5 / cam.k}
                   width={9 / cam.k}
                   height={9 / cam.k}
-                  fill={pin.isYou ? '#2e9e48' : pin.isNpc ? '#c45c26' : '#2f5f9e'}
+                  fill={
+                    pin.kind === 'territory'
+                      ? pin.mapColor ?? '#7c3aed'
+                      : pin.isYou
+                        ? '#2e9e48'
+                        : pin.isNpc
+                          ? '#c45c26'
+                          : '#2f5f9e'
+                  }
                   stroke="#f4f1ea"
                   strokeWidth={0.8}
                   vectorEffect="non-scaling-stroke"
@@ -373,8 +412,12 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
       <div className="pointer-events-none absolute bottom-3 left-3 border border-[#1c1c1c]/30 bg-[#f7f4ee]/90 px-2.5 py-2 text-[#1c1c1c]">
         <p className="font-serif text-[13px] tracking-[0.22em]">VOLTERISK</p>
         <p className="mt-1 text-[10px] tracking-[0.16em] uppercase">{SECTORS.length} sectors</p>
-        <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">{LANDMASSES[0]?.regions.length ?? 0} regions</p>
-        <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">Continent</p>
+        <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">
+          {LANDMASSES.reduce((n, land) => n + land.regions.length, 0)} regions
+        </p>
+        <p className="text-[10px] tracking-[0.16em] text-[#6d6860] uppercase">
+          {LANDMASSES.length} landmass{LANDMASSES.length === 1 ? '' : 'es'}
+        </p>
       </div>
       <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[10px] tracking-[0.14em] text-[#6d6860] uppercase">
         <div className="mb-1 h-px w-16 bg-[#1c1c1c]" />
@@ -422,17 +465,33 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
           style={{ left: tip.x, top: tip.y }}
         >
           <p className="text-[10px] font-semibold tracking-[0.14em] text-[#6d6860]">
-            {focusPin?.isYou ? 'yours' : focusPin?.isNpc ? 'NPC crew' : focusPin ? 'Player' : 'Open sector'}
+            {focusPin?.kind === 'territory'
+              ? focusPin.isYou
+                ? 'your territory'
+                : 'territory'
+              : focusPin?.isYou
+                ? 'yours'
+                : focusPin?.isNpc
+                  ? 'NPC crew'
+                  : focusPin
+                    ? 'Player'
+                    : 'Open sector'}
           </p>
           <p className="mt-1 font-display text-lg font-semibold uppercase">
-            {focusPin?.name?.trim() || focus.regionName}
+            {focusPin?.kind === 'territory'
+              ? focusPin.name?.trim() || 'Territory'
+              : focusPin?.name?.trim() || focus.regionName}
           </p>
           <p className="mt-1 text-[12px] text-[#3c3a36]">
-            {focusPin && !focusPin.isYou
-              ? `Held by ${focusPin.player?.username ?? focusPin.name ?? 'a crew'}`
-              : focus.regionName}
+            {focusPin?.kind === 'territory'
+              ? focusPin.isYou
+                ? 'Expansion/Extra territory only'
+                : `Held by ${focusPin.player?.username ?? 'a crew'} · expansion · no vault`
+              : focusPin && !focusPin.isYou
+                ? `Held by ${focusPin.player?.username ?? focusPin.name ?? 'a crew'}`
+                : focus.regionName}
           </p>
-          {focusPin && card ? (
+          {focusPin && focusPin.kind !== 'territory' && card ? (
             <dl className="mt-2 space-y-1 border-t border-[#1c1c1c]/15 pt-2 text-[12px]">
               <Row label="Name" value={card.username} />
               <Row label="Title" value={card.title} />
@@ -445,7 +504,7 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
               {card.failedHeists !== undefined ? <Row label="Misses" value={String(card.failedHeists)} /> : null}
             </dl>
           ) : null}
-          {pinned && focusPin && !focusPin.isYou ? (
+          {pinned && focusPin && !focusPin.isYou && focusPin.kind !== 'territory' ? (
             showHint ? (
               <p className="mt-2 bg-[#c8c3bb] px-2 py-2 text-center text-[11px] text-[#5c5852]">Finish account creation first.</p>
             ) : (
@@ -484,7 +543,17 @@ export function WorldMap({ pins, canClaim, claimHint = null, busy, loading = fal
               </button>
             </div>
           ) : null}
-          {pinned && !focusPin && !canClaim && claimHint ? (
+          {pinned && !focusPin && canScout && onScout ? (
+            <button
+              type="button"
+              disabled={busy}
+              className="gloss-gold mt-2 w-full cursor-pointer px-3 py-2 text-[11px] font-semibold tracking-[0.14em] uppercase disabled:opacity-50"
+              onClick={() => onScout(pinned)}
+            >
+              {busy ? 'Filing…' : 'Scout territory'}
+            </button>
+          ) : null}
+          {pinned && !focusPin && !canClaim && !canScout && claimHint ? (
             <p className="mt-2 text-[11px] text-[#6d6860]">{claimHint}</p>
           ) : null}
         </aside>
@@ -524,4 +593,14 @@ export function claimErrorCopy(err: unknown) {
 
 function isQuiet(err: ApiError) {
   return err.status === 404 || err.status === 501
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const raw = hex.replace('#', '')
+  if (raw.length !== 6) return hex
+  const r = Number.parseInt(raw.slice(0, 2), 16)
+  const g = Number.parseInt(raw.slice(2, 4), 16)
+  const b = Number.parseInt(raw.slice(4, 6), 16)
+  if ([r, g, b].some((n) => Number.isNaN(n))) return hex
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }

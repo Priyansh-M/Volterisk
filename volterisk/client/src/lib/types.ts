@@ -19,9 +19,10 @@ export type Profile = {
   title: string
   rank: number
   cash: number
+  vaultCreditCard?: boolean
   onboarding: Onboarding
   base: PlayerBase | null
-  vault: { balance: number; level: number }
+  vault: { balance: number; level: number; tier?: string }
   equippedWeapon: {
     id: string
     name: string
@@ -43,6 +44,19 @@ export type Profile = {
 }
 
 export type OwnedWeapon = {
+  repairCost?: number
+  mods?: string[]
+  installedMods?: {
+    id: string
+    name: string
+    tier: string
+    description?: string
+    breaksOnRemove?: boolean
+    maxDurabilityBonus?: number
+  }[]
+  modSlots?: number
+  modSlotsUsed?: number
+  listed?: boolean
   instanceId?: string
   id: string
   name: string
@@ -110,6 +124,7 @@ export type HeistResult = {
   penalty?: { hours: number; endsAt: string } | null
   cash?: number | null
   bountyPayout?: number
+  materialsGained?: { id: string; name: string; quantity: number }[]
 }
 
 export type HistoryRow = {
@@ -123,8 +138,8 @@ export type HistoryRow = {
 }
 
 export type Leaderboard = {
-  richest: { rank: number; username: string; netWorth: number; level?: number; successfulHeists?: number; base?: string | null }[]
-  you?: { rank: number; username: string; netWorth: number; level?: number; successfulHeists?: number; base?: string | null } | null
+  richest: { rank: number; username: string; netWorth: number; level?: number; successfulHeists?: number; base?: string | null; career?: string | null }[]
+  you?: { rank: number; username: string; netWorth: number; level?: number; successfulHeists?: number; base?: string | null; career?: string | null } | null
   assets?: { rank: number; username: string; assetWorth: number; properties: number; vehicles: number; vaultLabel: string }[]
   assetsYou?: { rank: number; username: string; assetWorth: number; properties: number; vehicles: number; vaultLabel: string } | null
   heisters: { rank: number; username: string; successfulHeists: number }[]
@@ -155,6 +170,10 @@ export type MapPin = {
   landmassId: string
   regionName: string
   name?: string | null
+  /** Home base vs L11+ expansion holding (no vault / not heistable from map). */
+  kind?: 'base' | 'territory'
+  /** Custom territory paint hex from Sector Pigment Kit. */
+  mapColor?: string | null
   isYou: boolean
   isNpc?: boolean
   player: PublicCard
@@ -215,7 +234,10 @@ export type VaultView = {
   tier?: string
   tierLabel?: string
   defense?: number
-  capacity?: number
+  capacity?: number | null
+  capacityUnlimited?: boolean
+  creditCard?: boolean
+  withdrawEnabled?: boolean
   securedPercent?: number
   exposed?: number
   secured?: number
@@ -223,13 +245,16 @@ export type VaultView = {
   insurancePremium?: number
   breached?: boolean
   maxLevel: number
+  modSlots?: number
+  modSlotsUsed?: number
   upgradeCost: number | null
   next?: {
     tier: string
     tierLabel: string
     level: number
     defense: number
-    capacity: number
+    capacity: number | null
+    capacityUnlimited?: boolean
     converts: boolean
   } | null
 }

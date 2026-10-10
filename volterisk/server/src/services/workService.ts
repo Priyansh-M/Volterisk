@@ -9,11 +9,14 @@ import {
   workRequirementLabel,
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
-import { creditCash } from "./economyService.js";
+import { creditEarn } from "./economyService.js";
 import { coolHeat } from "./heatService.js";
 import { ASSETS, assetById } from "./propertyService.js";
 import { writeNotification } from "./notificationService.js";
 import { uniqueConflictText, withSqliteRetry } from "./sqlite.js";
+import { careerBonuses } from "./careerService.js";
+import { creditItem } from "./inventoryService.js";
+import { territoryPassives } from "./territoryPassives.js";
 
 const PAYOUT_TYPE = "contract_payout";
 
@@ -134,11 +137,13 @@ export async function listContracts(userId: string) {
   const now = new Date();
   const level = await playerLevel(userId);
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
+  const buffs = await territoryPassives(userId);
+  const cooldownMins = Math.max(0, RULES.WORK_CONTRACT_COOLDOWN_MINUTES - buffs.workCooldownCutMinutes);
   const offered = offeredContracts(now);
   const [active, collected] = await Promise.all([
     prisma.contractRun.findUnique({ where: { activeSlot: userId } }),
     prisma.contractRun.findMany({
-      where: { userId, collectedAt: { gt: minutesAgo(RULES.WORK_CONTRACT_COOLDOWN_MINUTES, now) } },
+      where: { userId, collectedAt: { gt: minutesAgo(cooldownMins || 1, now) } },
       select: { contractId: true, collectedAt: true },
     }),
   ]);
@@ -147,7 +152,7 @@ export async function listContracts(userId: string) {
   const cooldownUntil = new Map<string, Date>();
   for (const run of collected) {
     if (!run.collectedAt) continue;
-    const ends = minutesFromNow(RULES.WORK_CONTRACT_COOLDOWN_MINUTES, run.collectedAt);
+    const ends = minutesFromNow(cooldownMins, run.collectedAt);
     if (ends.getTime() <= now.getTime()) continue;
     const previous = cooldownUntil.get(run.contractId);
     if (!previous || ends > previous) cooldownUntil.set(run.contractId, ends);
@@ -211,20 +216,19 @@ export async function acceptContract(userId: string, contractId: string) {
       if (!onBoard) {
         throw new GameError(409, "NOT_OFFERED", "That contract is not on the board right now.");
       }
+      const buffs = await territoryPassives(userId);
+      const cooldownMins = Math.max(0, RULES.WORK_CONTRACT_COOLDOWN_MINUTES - buffs.workCooldownCutMinutes);
       const cooling = await tx.contractRun.findFirst({
         where: {
           userId,
           contractId: definition.id,
-          collectedAt: { gt: minutesAgo(RULES.WORK_CONTRACT_COOLDOWN_MINUTES, now) },
+          collectedAt: { gt: minutesAgo(cooldownMins || 1, now) },
         },
         orderBy: { collectedAt: "desc" },
       });
       if (cooling?.collectedAt) {
         throw new GameError(409, "CONTRACT_COOLDOWN", "That contract is still cooling down.", {
-          cooldownEndsAt: minutesFromNow(
-            RULES.WORK_CONTRACT_COOLDOWN_MINUTES,
-            cooling.collectedAt,
-          ).toISOString(),
+          cooldownEndsAt: minutesFromNow(cooldownMins, cooling.collectedAt).toISOString(),
         });
       }
       const existing = await tx.contractRun.findUnique({ where: { activeSlot: userId } });
@@ -279,28 +283,57 @@ export async function collectContract(userId: string) {
       if (claimed.count !== 1) {
         throw new GameError(409, "ALREADY_COLLECTED", "That payout was already taken.");
       }
-      await creditCash(tx, userId, active.reward);
+      const buffs = await territoryPassives(userId);
+      const career = await careerBonuses(userId);
+      const bonusPct = buffs.collectBonusPercent + career.workCollectBonusPercent;
+      const bonus = Math.floor((active.reward * bonusPct) / 100);
+      const payout = active.reward + bonus;
+      await creditEarn(tx, userId, payout);
       await coolHeat(tx, userId, RULES.HEAT_ACTIVE_WORK);
       await tx.transaction.create({
         data: {
           type: PAYOUT_TYPE,
-          amount: active.reward,
+          amount: payout,
           toUserId: userId,
         },
       });
       const definition = workContractById(active.contractId);
+      const matDrop =
+        active.reward >= 50_000
+          ? { id: "mat:conductive-filament", n: 1 }
+          : active.reward >= 15_000
+            ? { id: "mat:reinforced-alloy", n: 2 }
+            : { id: "mat:scrap-components", n: 3 };
+      await creditItem(tx, userId, matDrop.id, matDrop.n);
+      let blueprint: string | null = null;
+      if (active.reward >= 18_000 && Math.random() < 0.12) {
+        const advanced = [
+          "phase-alignment-core",
+          "predictive-breach-module",
+          "self-calibrating-assembly",
+          "overdrive-mechanism",
+          "aegis-defence-core",
+          "predictive-security-matrix",
+          "distributed-barrier-network",
+          "blacksite-containment-system",
+        ];
+        blueprint = `bp:${advanced[Math.floor(Math.random() * advanced.length)]}`;
+        await creditItem(tx, userId, blueprint, 1);
+      }
       await writeNotification(tx, {
         userId,
         title: "Contract paid",
-        body: `${definition?.name ?? "A contract"} paid $${active.reward.toLocaleString("en-US")}.`,
+        body: `${definition?.name ?? "A contract"} paid $${payout.toLocaleString("en-US")}${bonus ? ` (incl. +$${bonus.toLocaleString("en-US")} financial)` : ""}. Materials +${matDrop.n}${blueprint ? ` · blueprint found` : ""}.`,
         severity: "INFO",
       });
       const user = await tx.user.findUnique({ where: { id: userId } });
       return {
         cash: user?.cash ?? 0,
-        reward: active.reward,
+        reward: payout,
         contractId: active.contractId,
         collectedAt: now.toISOString(),
+        materials: { [matDrop.id]: matDrop.n },
+        blueprint,
       };
     }),
   );
@@ -367,11 +400,21 @@ export async function settlePassivePay(userId: string): Promise<number> {
       covered = true;
       return;
     }
-    await creditCash(tx, userId, job.payPerDay);
+    const buffs = await territoryPassives(userId);
+    const career = await careerBonuses(userId);
+    const bonus = Math.floor((job.payPerDay * (buffs.collectBonusPercent + career.workCollectBonusPercent)) / 100);
+    const payout = job.payPerDay + bonus;
+    await creditEarn(tx, userId, payout);
     await coolHeat(tx, userId, RULES.HEAT_PASSIVE_DAY);
     await tx.user.update({ where: { id: userId }, data: { passivePaidFor: noon } });
     await tx.transaction.create({
-      data: { type: "passive_payday", amount: job.payPerDay, toUserId: userId },
+      data: { type: "passive_payday", amount: payout, toUserId: userId },
+    });
+    await writeNotification(tx, {
+      userId,
+      title: "Passive payday",
+      body: `${job.name} paid $${payout.toLocaleString("en-US")} at 12:00 GMT${bonus ? ` (incl. bonuses)` : ""}.`,
+      severity: "INFO",
     });
     covered = true;
   });

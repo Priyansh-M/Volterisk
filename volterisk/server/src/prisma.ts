@@ -208,3 +208,174 @@ export async function configureSqlite(): Promise<void> {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode = WAL");
   await prisma.$queryRawUnsafe("PRAGMA busy_timeout = 8000");
 }
+
+/** Add L11 territory columns/tables when db push was skipped (esp. Postgres). */
+export async function ensureTerritorySchema(): Promise<void> {
+  const alters = [
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "policeAttention" INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "policeSettledOn" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "vaultCreditCard" BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastVaultYieldAt" TIMESTAMP(3)`,
+  ];
+  for (const sql of alters) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch {
+      /* sqlite may not support IF NOT EXISTS on ADD COLUMN */
+      try {
+        const sqlite = sql
+          .replace(" IF NOT EXISTS", "")
+          .replace("BOOLEAN NOT NULL DEFAULT false", "BOOLEAN NOT NULL DEFAULT 0")
+          .replace("TIMESTAMP(3)", "DATETIME");
+        await prisma.$executeRawUnsafe(sqlite);
+      } catch {
+        /* already present */
+      }
+    }
+  }
+  const ts = usesPostgres() ? "TIMESTAMP(3)" : "DATETIME";
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "TerritoryHolding" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "sectorId" TEXT NOT NULL,
+      "landmassId" TEXT NOT NULL,
+      "regionName" TEXT NOT NULL,
+      "specialization" TEXT,
+      "securedAt" ${ts} NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "createdAt" ${ts} NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "TerritoryHolding_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "ExpansionOp" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "sectorId" TEXT NOT NULL,
+      "landmassId" TEXT NOT NULL,
+      "regionName" TEXT NOT NULL,
+      "stage" TEXT NOT NULL,
+      "completesAt" ${ts},
+      "closedAt" ${ts},
+      "createdAt" ${ts} NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "ExpansionOp_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "TerritoryHolding_sectorId_key" ON "TerritoryHolding"("sectorId")`,
+    );
+  } catch {
+    /* present */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "TerritoryHolding_userId_idx" ON "TerritoryHolding"("userId")`);
+  } catch {
+    /* present */
+  }
+  try {
+    await prisma.$executeRawUnsafe(
+      usesPostgres()
+        ? `ALTER TABLE "TerritoryHolding" ADD COLUMN IF NOT EXISTS "mapColor" TEXT`
+        : `ALTER TABLE "TerritoryHolding" ADD COLUMN "mapColor" TEXT`,
+    );
+  } catch {
+    /* present */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ExpansionOp_userId_closedAt_idx" ON "ExpansionOp"("userId", "closedAt")`);
+  } catch {
+    /* present */
+  }
+}
+
+/** Careers + ModOwned + UserWeapon.listed (safe ADD COLUMN / CREATE TABLE). */
+export async function ensureCareerModsSchema(): Promise<void> {
+  const userCols = [
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "primaryCareer" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "secondaryCareer" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "careerChangedAt" TIMESTAMP(3)`,
+  ];
+  for (const sql of userCols) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch {
+      try {
+        const sqlite = sql
+          .replace(" IF NOT EXISTS", "")
+          .replace("TIMESTAMP(3)", "DATETIME");
+        await prisma.$executeRawUnsafe(sqlite);
+      } catch {
+        /* present */
+      }
+    }
+  }
+  try {
+    await prisma.$executeRawUnsafe(
+      usesPostgres()
+        ? `ALTER TABLE "UserWeapon" ADD COLUMN IF NOT EXISTS "listed" BOOLEAN NOT NULL DEFAULT false`
+        : `ALTER TABLE "UserWeapon" ADD COLUMN "listed" BOOLEAN NOT NULL DEFAULT 0`,
+    );
+  } catch {
+    /* present */
+  }
+  const ts = usesPostgres() ? "TIMESTAMP(3)" : "DATETIME";
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "ModOwned" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "modId" TEXT NOT NULL,
+      "kind" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'inventory',
+      "userWeaponId" TEXT,
+      "vaultSlot" INTEGER,
+      "activatedAt" ${ts},
+      "createdAt" ${ts} NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "ModOwned_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  for (const idx of [
+    `CREATE INDEX IF NOT EXISTS "ModOwned_userId_status_idx" ON "ModOwned"("userId", "status")`,
+    `CREATE INDEX IF NOT EXISTS "ModOwned_userId_modId_idx" ON "ModOwned"("userId", "modId")`,
+    `CREATE INDEX IF NOT EXISTS "ModOwned_userWeaponId_idx" ON "ModOwned"("userWeaponId")`,
+  ]) {
+    try {
+      await prisma.$executeRawUnsafe(idx);
+    } catch {
+      /* present */
+    }
+  }
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "CraftingJob" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "recipeId" TEXT NOT NULL,
+      "startsAt" ${ts} NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "completesAt" ${ts} NOT NULL,
+      "collectedAt" ${ts},
+      "cancelledAt" ${ts},
+      "createdAt" ${ts} NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "CraftingJob_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "MarketListing" (
+      "id" TEXT NOT NULL,
+      "sellerId" TEXT NOT NULL,
+      "buyerId" TEXT,
+      "kind" TEXT NOT NULL,
+      "itemId" TEXT NOT NULL,
+      "quantity" INTEGER NOT NULL DEFAULT 1,
+      "price" INTEGER NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'open',
+      "userWeaponId" TEXT,
+      "modOwnedId" TEXT,
+      "expiresAt" ${ts} NOT NULL,
+      "soldAt" ${ts},
+      "cancelledAt" ${ts},
+      "createdAt" ${ts} NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "MarketListing_pkey" PRIMARY KEY ("id")
+    )
+  `);
+}

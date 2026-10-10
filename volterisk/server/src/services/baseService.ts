@@ -107,15 +107,34 @@ export async function renameBase(userId: string, name: string | null) {
 }
 
 export async function listBases(viewerId: string) {
-  const [bases, profiles] = await Promise.all([
+  const [bases, holdings, profiles] = await Promise.all([
     prisma.base.findMany({
       orderBy: { createdAt: "asc" },
-      include: { user: { select: { username: true, isBot: true } } },
+      select: {
+        sectorId: true,
+        landmassId: true,
+        regionName: true,
+        name: true,
+        userId: true,
+        user: { select: { username: true, isBot: true } },
+      },
+    }),
+    prisma.territoryHolding.findMany({
+      orderBy: { createdAt: "asc" },
+      select: {
+        sectorId: true,
+        landmassId: true,
+        regionName: true,
+        specialization: true,
+        mapColor: true,
+        userId: true,
+        user: { select: { username: true, isBot: true } },
+      },
     }),
     loadPublicProfiles(),
   ]);
-  return {
-    bases: bases.flatMap((base) => {
+  const pins = [
+    ...bases.flatMap((base) => {
       if (!base.user) return [];
       const profile = profiles.get(base.userId);
       return [
@@ -124,6 +143,7 @@ export async function listBases(viewerId: string) {
           landmassId: base.landmassId,
           regionName: base.regionName,
           name: base.name,
+          kind: "base" as const,
           isYou: base.userId === viewerId,
           isNpc: base.user.isBot,
           player: profile
@@ -141,5 +161,34 @@ export async function listBases(viewerId: string) {
         },
       ];
     }),
-  };
+    ...holdings.flatMap((hold) => {
+      if (!hold.user) return [];
+      const profile = profiles.get(hold.userId);
+      return [
+        {
+          sectorId: hold.sectorId,
+          landmassId: hold.landmassId,
+          regionName: hold.regionName,
+          name: hold.specialization ? `${hold.specialization} sector` : "Territory",
+          kind: "territory" as const,
+          mapColor: hold.mapColor ?? null,
+          isYou: hold.userId === viewerId,
+          isNpc: hold.user.isBot,
+          player: profile
+            ? toPublicCard(profile)
+            : {
+                username: hold.user.username,
+                title: "",
+                level: 0,
+                rank: 0,
+                estimatedWealth: "—",
+                properties: 0,
+                weapons: 0,
+                successfulHeists: 0,
+              },
+        },
+      ];
+    }),
+  ];
+  return { bases: pins };
 }

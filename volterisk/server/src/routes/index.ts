@@ -26,8 +26,38 @@ import {
 import { claim as claimStarter } from "../controllers/onboardingController.js";
 import { publicPlayer } from "../controllers/playerController.js";
 import { deposit, insurance, upgrade as upgradeVault, withdraw } from "../controllers/vaultController.js";
-import { buy, equip, upgrade as upgradeWeapon } from "../controllers/weaponController.js";
+import { buy, equip, repair, upgrade as upgradeWeapon } from "../controllers/weaponController.js";
+import { career, setPrimary, setSecondary } from "../controllers/careerController.js";
+import {
+  armLockdown,
+  installVault,
+  installWeapon,
+  mods,
+  purchaseMod,
+  uninstallVault,
+  uninstallWeapon,
+} from "../controllers/modController.js";
 import { claimReputationLevel, reputation } from "../controllers/reputationController.js";
+import {
+  blackMarket,
+  blackMarketBuy,
+  blackMarketCancel,
+  blackMarketList,
+  craftCancel,
+  craftCollect,
+  craftStart,
+  materials,
+  workshop,
+  workshopUpgrade,
+} from "../controllers/workshopController.js";
+import {
+  abandon as abandonTerritory,
+  advance as advanceTerritory,
+  board as territoryBoard,
+  scout as scoutTerritory,
+  specialize as specializeTerritory,
+  recolor as recolorTerritory,
+} from "../controllers/territoryController.js";
 import { accept, collect, collectPassivePay, contracts, passive } from "../controllers/workController.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "./asyncHandler.js";
@@ -82,6 +112,19 @@ api.post("/vault/deposit", requireAuth, asyncHandler(deposit));
 api.post("/weapons/buy", requireAuth, asyncHandler(buy));
 api.post("/weapons/upgrade", requireAuth, asyncHandler(upgradeWeapon));
 api.post("/weapons/equip", requireAuth, asyncHandler(equip));
+api.post("/weapons/repair", requireAuth, asyncHandler(repair));
+
+api.get("/career", requireAuth, asyncHandler(career));
+api.post("/career/primary", requireAuth, asyncHandler(setPrimary));
+api.post("/career/secondary", requireAuth, asyncHandler(setSecondary));
+
+api.get("/mods", requireAuth, asyncHandler(mods));
+api.post("/mods/buy", requireAuth, asyncHandler(purchaseMod));
+api.post("/mods/weapon/install", requireAuth, asyncHandler(installWeapon));
+api.post("/mods/weapon/remove", requireAuth, asyncHandler(uninstallWeapon));
+api.post("/mods/vault/install", requireAuth, asyncHandler(installVault));
+api.post("/mods/vault/remove", requireAuth, asyncHandler(uninstallVault));
+api.post("/mods/vault/lockdown", requireAuth, asyncHandler(armLockdown));
 
 api.post("/onboarding/claim", requireAuth, asyncHandler(claimStarter));
 
@@ -96,6 +139,24 @@ api.post("/work/contracts/accept", requireAuth, asyncHandler(accept));
 api.post("/work/contracts/collect", requireAuth, asyncHandler(collect));
 api.get("/reputation", requireAuth, asyncHandler(reputation));
 api.post("/reputation/claim", requireAuth, asyncHandler(claimReputationLevel));
+
+api.get("/materials", requireAuth, asyncHandler(materials));
+api.get("/workshop", requireAuth, asyncHandler(workshop));
+api.post("/workshop/upgrade", requireAuth, asyncHandler(workshopUpgrade));
+api.post("/workshop/craft/start", requireAuth, asyncHandler(craftStart));
+api.post("/workshop/craft/cancel", requireAuth, asyncHandler(craftCancel));
+api.post("/workshop/craft/collect", requireAuth, asyncHandler(craftCollect));
+api.get("/black-market", requireAuth, asyncHandler(blackMarket));
+api.post("/black-market/list", requireAuth, asyncHandler(blackMarketList));
+api.post("/black-market/cancel", requireAuth, asyncHandler(blackMarketCancel));
+api.post("/black-market/buy", requireAuth, asyncHandler(blackMarketBuy));
+
+api.get("/territory", requireAuth, asyncHandler(territoryBoard));
+api.post("/territory/scout", requireAuth, asyncHandler(scoutTerritory));
+api.post("/territory/advance", requireAuth, asyncHandler(advanceTerritory));
+api.post("/territory/abandon", requireAuth, asyncHandler(abandonTerritory));
+api.post("/territory/specialize", requireAuth, asyncHandler(specializeTerritory));
+api.post("/territory/recolor", requireAuth, asyncHandler(recolorTerritory));
 
 api.get("/work/passive", requireAuth, asyncHandler(passive));
 api.post("/work/passive/select", requireAuth, asyncHandler(collectPassivePay));

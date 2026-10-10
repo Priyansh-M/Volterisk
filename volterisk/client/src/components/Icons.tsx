@@ -495,3 +495,53 @@ export function IconFlame(props: IconProps) {
     </svg>
   )
 }
+
+/** Nav group glyphs — keep distinct from page/item icons. */
+export function IconLayers(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 3.5 3.5 8 12 12.5 20.5 8z" />
+      <path d="M3.5 12 12 16.5 20.5 12" />
+      <path d="M3.5 16 12 20.5 20.5 16" />
+    </Glyph>
+  )
+}
+
+export function IconOps(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4" />
+      <path d="M7.5 7.5 12 12l4.5-4.5M7.5 16.5 12 12l4.5 4.5" />
+    </Glyph>
+  )
+}
+
+export function IconCoins(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <ellipse cx="10" cy="14" rx="6" ry="4.2" />
+      <path d="M4 14v2.2c0 2.3 2.7 4.2 6 4.2s6-1.9 6-4.2V14" />
+      <ellipse cx="14" cy="8.5" rx="6" ry="4.2" />
+      <path d="M8 8.5v1.8c0 2.3 2.7 4.2 6 4.2" opacity="0.7" />
+    </Glyph>
+  )
+}
+
+export function IconSteps(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M4 20h5v-5h5V10h5V4" />
+      <path d="M14 4h5v5" opacity="0.55" />
+    </Glyph>
+  )
+}
+
+export function IconGlobe(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17" />
+      <path d="M12 3.5c2.4 2.6 3.6 5.4 3.6 8.5s-1.2 5.9-3.6 8.5c-2.4-2.6-3.6-5.4-3.6-8.5s1.2-5.9 3.6-8.5z" />
+    </Glyph>
+  )
+}

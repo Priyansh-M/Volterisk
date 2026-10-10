@@ -11,11 +11,13 @@ export type NotificationInput = {
   heistId?: string;
 };
 
+type NotifyClient = Tx | typeof prisma;
+
 /**
  * Single writer for player-facing alerts. Pass a transaction client when the
  * alert must land with the money move that caused it.
  */
-export async function writeNotification(client: Tx, input: NotificationInput): Promise<void> {
+export async function writeNotification(client: NotifyClient, input: NotificationInput): Promise<void> {
   await client.notification.create({
     data: {
       userId: input.userId,

@@ -7,6 +7,8 @@ type AuthValue = {
   loading: boolean
   refresh: () => Promise<void>
   applyCash: (cash: number) => void
+  /** Optimistic spend: card users debit vault; others debit pocket cash. */
+  applySpend: (amount: number) => void
   patchMe: (update: (current: Profile) => Profile) => void
   login: (token: string) => Promise<void>
   logout: () => Promise<void>
@@ -24,6 +26,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function applyCash(cash: number) {
     setMe((current) => (current ? { ...current, cash } : current))
+  }
+
+  function applySpend(amount: number) {
+    setMe((current) => {
+      if (!current || amount <= 0) return current
+      if (current.vaultCreditCard) {
+        return {
+          ...current,
+          vault: { ...current.vault, balance: Math.max(0, current.vault.balance - amount) },
+        }
+      }
+      return { ...current, cash: Math.max(0, current.cash - amount) }
+    })
   }
 
   function patchMe(update: (current: Profile) => Profile) {
@@ -58,7 +73,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe(null)
   }
 
-  return <AuthContext.Provider value={{ me, loading, refresh, applyCash, patchMe, login, logout }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ me, loading, refresh, applyCash, applySpend, patchMe, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

@@ -25,7 +25,7 @@ export function HomePage() {
             <Brief kicker="Territory" body="Claim one square on the Volterisk chart. That square is your block." />
             <Brief kicker="Heists" body="Hit stationed crews and other players. The server rolls the chance. You do not." />
             <Brief kicker="Vault" body="Cash in your pocket can be seized. Cash in the vault has a door, a cap, and insurance." />
-            <Brief kicker="Reputation" body="Levels 1 to 10. Work, titles, and the harder crews follow that number." />
+            <Brief kicker="Reputation" body="Levels 1 to 11. Work, titles, and territory expansion at the top of the ladder." />
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <button

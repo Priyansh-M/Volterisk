@@ -5,22 +5,27 @@ import {
   insurancePremium,
   nextVaultTier,
   vaultCapacity,
+  vaultCapacityUnlimited,
   vaultDefense,
+  vaultModSlotsForLevel,
   vaultSecuredPercent,
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
-import { creditCash, debitCash, debitVault } from "./economyService.js";
+import { chargeSpend, creditCash, debitCash, debitVault } from "./economyService.js";
 
 // Future: crew vaults and heat-based protection sit beside this account vault.
 
-function presentVault(vault: {
-  balance: number;
-  level: number;
-  tier: string;
-  insured: boolean;
-  insuredUntil: Date | null;
-  breached?: boolean;
-}) {
+async function presentVault(
+  vault: {
+    balance: number;
+    level: number;
+    tier: string;
+    insured: boolean;
+    insuredUntil: Date | null;
+    breached?: boolean;
+  },
+  userId: string,
+) {
   const tier = vault.tier || "standard";
   const level = Math.min(Math.max(vault.level, 1), RULES.VAULT_MAX_LEVEL);
   const converting = level >= RULES.VAULT_MAX_LEVEL;
@@ -32,13 +37,30 @@ function presentVault(vault: {
   const exposed = exposedBalance(vault.balance, tier, level);
   const insured =
     vault.insured && vault.insuredUntil !== null && vault.insuredUntil.getTime() > Date.now();
+  const [rep, modSlotsUsed] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { reputationLevel: true, vaultCreditCard: true },
+    }),
+    prisma.modOwned.count({ where: { userId, kind: "vault", status: "installed" } }).catch(() => 0),
+  ]);
+  const creditCard = Boolean(rep?.vaultCreditCard);
+  const unlimited = vaultCapacityUnlimited(tier, level, creditCard);
+  const modSlots = vaultModSlotsForLevel(rep?.reputationLevel ?? 1);
+  const nextUnlimited =
+    upcoming != null && upgradeCost != null
+      ? vaultCapacityUnlimited(upcoming, nextLevel, creditCard)
+      : false;
   return {
     balance: vault.balance,
     level,
     tier,
     tierLabel: RULES.VAULT_TIER_LABEL[tier] ?? "Standard Vault",
     defense: vaultDefense(tier, level),
-    capacity: vaultCapacity(tier, level),
+    capacity: unlimited ? null : vaultCapacity(tier, level),
+    capacityUnlimited: unlimited,
+    creditCard,
+    withdrawEnabled: !creditCard,
     securedPercent: vaultSecuredPercent(tier, level),
     exposed,
     secured: vault.balance - exposed,
@@ -47,24 +69,28 @@ function presentVault(vault: {
     breached: Boolean(vault.breached) && !insured,
     insuredUntil: vault.insuredUntil?.toISOString() ?? null,
     maxLevel: RULES.VAULT_MAX_LEVEL,
+    modSlots,
+    modSlotsUsed,
     upgradeCost: upcoming ? upgradeCost : null,
-    next: upcoming && upgradeCost != null
-      ? {
-          tier: upcoming,
-          tierLabel: RULES.VAULT_TIER_LABEL[upcoming] ?? upcoming,
-          level: nextLevel,
-          defense: vaultDefense(upcoming, nextLevel),
-          capacity: vaultCapacity(upcoming, nextLevel),
-          converts: converting,
-        }
-      : null,
+    next:
+      upcoming && upgradeCost != null
+        ? {
+            tier: upcoming,
+            tierLabel: RULES.VAULT_TIER_LABEL[upcoming] ?? upcoming,
+            level: nextLevel,
+            defense: vaultDefense(upcoming, nextLevel),
+            capacity: nextUnlimited ? null : vaultCapacity(upcoming, nextLevel),
+            capacityUnlimited: nextUnlimited,
+            converts: converting,
+          }
+        : null,
   };
 }
 
 export async function getVault(userId: string) {
   const vault = await prisma.vault.findUnique({ where: { userId } });
   if (!vault) throw new GameError(404, "NOT_FOUND", "Vault not found.");
-  return presentVault(vault);
+  return presentVault(vault, userId);
 }
 
 export async function upgradeVault(userId: string) {
@@ -82,7 +108,7 @@ export async function upgradeVault(userId: string) {
       ? RULES.VAULT_CONVERSION_COSTS[tier]
       : RULES.VAULT_LEVEL_COSTS[tier]?.[level];
     if (!cost) throw new GameError(400, "MAX_LEVEL", "No further upgrade is priced.");
-    await debitCash(tx, userId, cost);
+    const paidFrom = await chargeSpend(tx, userId, cost);
     const updated = await tx.vault.update({
       where: { userId },
       data: converting
@@ -91,12 +117,12 @@ export async function upgradeVault(userId: string) {
     });
     await tx.transaction.create({
       data: {
-        type: "vault_upgrade",
+        type: paidFrom === "card" ? "vault_upgrade_card" : "vault_upgrade",
         amount: cost,
         fromUserId: userId,
       },
     });
-    return { ...presentVault(updated), spent: cost };
+    return { ...(await presentVault(updated, userId)), spent: cost, paidFrom };
   });
 }
 
@@ -109,12 +135,16 @@ export async function setInsurance(userId: string, enabled: boolean) {
         where: { userId },
         data: { insured: false, insuredUntil: null },
       });
-      return presentVault(updated);
+      return presentVault(updated, userId);
     }
     const premium = insurancePremium(vault.tier || "standard");
-    await debitCash(tx, userId, premium);
+    const paidFrom = await chargeSpend(tx, userId, premium);
     await tx.transaction.create({
-      data: { type: "insurance_premium", amount: premium, fromUserId: userId },
+      data: {
+        type: paidFrom === "card" ? "insurance_premium_card" : "insurance_premium",
+        amount: premium,
+        fromUserId: userId,
+      },
     });
     const updated = await tx.vault.update({
       where: { userId },
@@ -124,7 +154,7 @@ export async function setInsurance(userId: string, enabled: boolean) {
         breached: false,
       },
     });
-    return presentVault(updated);
+    return presentVault(updated, userId);
   });
 }
 
@@ -133,11 +163,18 @@ export async function depositVault(userId: string, amount: number | "all") {
     const vault = await tx.vault.findUnique({ where: { userId } });
     const user = await tx.user.findUnique({ where: { id: userId } });
     if (!vault || !user) throw new GameError(404, "NOT_FOUND", "Vault not found.");
-    const room = Math.max(0, vaultCapacity(vault.tier || "standard", vault.level) - vault.balance);
+    const unlimited = vaultCapacityUnlimited(vault.tier || "standard", vault.level, user.vaultCreditCard);
+    const room = unlimited
+      ? Number.MAX_SAFE_INTEGER
+      : Math.max(0, vaultCapacity(vault.tier || "standard", vault.level) - vault.balance);
     const requested = amount === "all" ? user.cash : amount;
     const moved = Math.min(requested, room, user.cash);
     if (moved <= 0) {
-      throw new GameError(400, "VAULT_FULL", "The vault cannot take any more cash.");
+      throw new GameError(
+        400,
+        "VAULT_FULL",
+        unlimited ? "No pocket cash to deposit." : "The vault cannot take any more cash.",
+      );
     }
     await debitCash(tx, userId, moved);
     await tx.vault.update({ where: { userId }, data: { balance: { increment: moved } } });
@@ -152,6 +189,17 @@ export async function depositVault(userId: string, amount: number | "all") {
 
 export async function withdrawVault(userId: string, amount: number | "all") {
   return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { vaultCreditCard: true },
+    });
+    if (user?.vaultCreditCard) {
+      throw new GameError(
+        400,
+        "CARD_ONLY",
+        "Withdrawals are closed after Level 11. Spend with your card from the vault.",
+      );
+    }
     const vaultRow = await tx.vault.findUnique({ where: { userId } });
     const moving = amount === "all" ? (vaultRow?.balance ?? 0) : amount;
     if (moving <= 0) throw new GameError(400, "INSUFFICIENT_FUNDS", "The vault is empty.");
@@ -169,7 +217,7 @@ export async function withdrawVault(userId: string, amount: number | "all") {
       },
     });
     const vault = await tx.vault.findUnique({ where: { userId } });
-    const user = await tx.user.findUnique({ where: { id: userId } });
-    return { balance: vault?.balance ?? 0, cash: user?.cash ?? 0, amount: moving };
+    const fresh = await tx.user.findUnique({ where: { id: userId } });
+    return { balance: vault?.balance ?? 0, cash: fresh?.cash ?? 0, amount: moving };
   });
 }

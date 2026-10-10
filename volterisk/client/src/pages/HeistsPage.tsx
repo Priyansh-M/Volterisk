@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { GainedMaterialRow } from '../components/MaterialIcon.tsx'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
 import { Notice, inputClass } from '../components/ui.tsx'
 import { ApiError, api, load, peek } from '../lib/api.ts'
@@ -299,7 +300,7 @@ export function HeistsPage() {
                 </div>
               ) : null}
               {result.success && (result.bountyPayout ?? 0) > 0 ? (
-                <div className="flex justify-between">
+                <div className="flex justify-between border-b border-border pb-2">
                   <dt className="font-mono text-[10px] uppercase text-muted-foreground">Bounty cut</dt>
                   <dd className="font-mono text-success">{money(result.bountyPayout ?? 0)}</dd>
                 </div>
@@ -311,6 +312,16 @@ export function HeistsPage() {
                 </div>
               ) : null}
             </dl>
+            {result.success && (result.materialsGained?.length ?? 0) > 0 ? (
+              <div className="mt-5 border-t border-border pt-4 text-left">
+                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Gained materials</p>
+                <div className="mt-2 space-y-2">
+                  {result.materialsGained!.map((m) => (
+                    <GainedMaterialRow key={`${m.id}-${m.quantity}`} id={m.id} name={m.name} quantity={m.quantity} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {result.broken ? <p className="mt-4 font-display text-xl uppercase text-destructive">Broken. Unlock stays; buy another copy anytime.</p> : null}
             <button type="button" className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={() => setResult(null)}>
               Close
@@ -394,7 +405,7 @@ function Dossier({
       <p className="font-mono text-[9px] uppercase text-muted-foreground">Target dossier</p>
       <h2 className="mt-1 font-display text-4xl font-semibold uppercase">{row.username}</h2>
       <div className="my-5 grid grid-cols-2 gap-4 border-y border-border py-4">
-        <Cell label="Vault" value={row.vaultLabel ?? `Lvl.${row.vaultLevel}`} />
+        <Cell label="Vault" value={row.vaultLabel ?? `Level ${row.vaultLevel}`} />
         <Cell label="Recommended clearance" value={row.clearanceLabel ?? `Level ${row.vaultLevel}`} />
         <Cell label="Estimated wealth" value={row.estimatedWealth ?? '—'} />
         <Cell label="Location" value={location} />
@@ -452,7 +463,7 @@ function Dossier({
               <div>
                 <p className="font-mono text-[9px] uppercase text-muted-foreground">Target vault</p>
                 <p className="font-display text-xl uppercase">{quote.vaultTier} vault</p>
-                <p className="text-sm">Lvl.{quote.vaultLevel}</p>
+                <p className="text-sm">Level {quote.vaultLevel}</p>
                 <p className="text-sm">Defense: {quote.defense}</p>
               </div>
               <p className="font-mono text-xs sm:col-span-2">

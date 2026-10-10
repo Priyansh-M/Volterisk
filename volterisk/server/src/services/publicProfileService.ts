@@ -20,18 +20,28 @@ export type PublicProfile = {
   netWorth: number;
 };
 
+const PROFILE_CACHE_MS = 45_000;
 let profileCache: { at: number; index: Map<string, PublicProfile> } | null = null;
 
 export async function loadPublicProfiles(): Promise<Map<string, PublicProfile>> {
-  if (process.env.VERCEL && profileCache && Date.now() - profileCache.at < 30_000) return profileCache.index;
+  if (profileCache && Date.now() - profileCache.at < PROFILE_CACHE_MS) return profileCache.index;
   const index = await computePublicProfiles();
-  if (process.env.VERCEL) profileCache = { at: Date.now(), index };
+  profileCache = { at: Date.now(), index };
   return index;
 }
 
 async function computePublicProfiles(): Promise<Map<string, PublicProfile>> {
   const [users, heists, properties, weapons] = await Promise.all([
-    prisma.user.findMany({ include: { vault: true } }),
+    prisma.user.findMany({
+      select: {
+        id: true,
+        username: true,
+        cash: true,
+        reputationLevel: true,
+        isBot: true,
+        vault: { select: { balance: true } },
+      },
+    }),
     prisma.heist.groupBy({ by: ["attackerId", "success"], _count: { _all: true } }),
     prisma.property.groupBy({ by: ["userId"], _count: { _all: true } }),
     prisma.userWeapon.groupBy({ by: ["userId"], _count: { _all: true } }),

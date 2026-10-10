@@ -17,7 +17,10 @@ import { unclaimedCount } from "./achievementService.js";
 import { settleHeatState } from "./heatService.js";
 import { settlePassivePay } from "./workService.js";
 import { publicProfileFor } from "./publicProfileService.js";
+import { CAREERS, isCareerId } from "../game/careersAndMods.js";
 import { assetById, assetMoneySpent } from "./propertyService.js";
+import { settlePropertyMaterialYields } from "./propertyMaterialYieldService.js";
+import { settleVaultYield } from "./vaultYieldService.js";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -184,6 +187,10 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 export async function getProfile(userId: string) {
   await settleHeatState(userId);
   await settlePassivePay(userId);
+  await Promise.all([
+    settleVaultYield(userId).catch(() => null),
+    settlePropertyMaterialYields(userId).catch(() => null),
+  ]);
   const [user, won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -222,9 +229,11 @@ export async function getProfile(userId: string) {
     title: titleForLevel(level),
     rank: standing?.rank ?? 1,
     cash: user.cash,
+    vaultCreditCard: Boolean(user.vaultCreditCard),
     vault: {
       balance: user.vault.balance,
       level: user.vault.level,
+      tier: user.vault.tier,
     },
     equippedWeapon: equipped
       ? {
@@ -277,6 +286,7 @@ type VaultStanding = {
   level: number;
   successfulHeists: number;
   base: string | null;
+  career: string | null;
 };
 
 type AssetStanding = {
@@ -311,13 +321,12 @@ export async function getLeaderboard(viewerId?: string) {
 }
 
 async function loadLeaderboard() {
-  if (process.env.VERCEL && leaderboardCache && Date.now() - leaderboardCache.at < BOARD_CACHE_MS) {
+  if (leaderboardCache && Date.now() - leaderboardCache.at < BOARD_CACHE_MS) {
     return leaderboardCache;
   }
   const built = await computeLeaderboard();
-  const cached = { at: Date.now(), ...built };
-  if (process.env.VERCEL) leaderboardCache = cached;
-  return cached;
+  leaderboardCache = { at: Date.now(), ...built };
+  return leaderboardCache;
 }
 
 async function computeLeaderboard() {
@@ -344,14 +353,18 @@ async function computeLeaderboard() {
   });
   const wins = new Map(grouped.map((row) => [row.attackerId, row._count._all]));
   const ordered = users
-    .map((user) => ({
-      id: user.id,
-      username: user.username,
-      netWorth: user.cash + (user.vault?.balance ?? 0),
-      level: user.reputationLevel,
-      successfulHeists: wins.get(user.id) ?? 0,
-      base: user.base?.regionName ?? null,
-    }))
+    .map((user) => {
+      const primary = isCareerId(user.primaryCareer) ? user.primaryCareer : null;
+      return {
+        id: user.id,
+        username: user.username,
+        netWorth: user.cash + (user.vault?.balance ?? 0),
+        level: user.reputationLevel,
+        successfulHeists: wins.get(user.id) ?? 0,
+        base: user.base?.regionName ?? null,
+        career: primary ? CAREERS.BONUSES[primary].label : null,
+      };
+    })
     .sort((a, b) => b.netWorth - a.netWorth || a.username.localeCompare(b.username));
   let placed = 0;
   let previousWorth: number | null = null;
@@ -360,7 +373,16 @@ async function computeLeaderboard() {
       placed = index + 1;
       previousWorth = row.netWorth;
     }
-    return { rank: placed, username: row.username, netWorth: row.netWorth, level: row.level, successfulHeists: row.successfulHeists, base: row.base, id: row.id };
+    return {
+      rank: placed,
+      username: row.username,
+      netWorth: row.netWorth,
+      level: row.level,
+      successfulHeists: row.successfulHeists,
+      base: row.base,
+      career: row.career,
+      id: row.id,
+    };
   });
   const richest = ranked.filter((row) => row.rank <= RULES.LEADERBOARD_SIZE).map(({ id: _id, ...row }) => row);
   const youById = new Map<string, VaultStanding>();
@@ -380,7 +402,7 @@ async function computeLeaderboard() {
         if (!item) continue;
         if (item.kind === "vehicle") vehicles += 1;
         else properties += 1;
-        assetWorth += assetMoneySpent(item.price, owned.level);
+        assetWorth += assetMoneySpent(item.price, owned.level, owned.catalogId);
       }
       const tier = user.vault?.tier ?? "standard";
       const vaultLevel = user.vault?.level ?? 1;

@@ -1,7 +1,7 @@
 import { GameError } from "../game/errors.js";
 import { RULES, achievementById } from "../game/rules.js";
 import { prisma } from "../prisma.js";
-import { creditCash } from "./economyService.js";
+import { creditEarn } from "./economyService.js";
 
 export type UnlockedAchievement = {
   id: string;
@@ -91,27 +91,34 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   });
   if (!user || user.isBot) return [];
 
-  const [contracts, heists, weaponRows, spend, ledger, longShot, inside] = await Promise.all([
-    prisma.contractRun.count({ where: { userId, collectedAt: { not: null } } }),
-    prisma.heist.count({ where: { attackerId: userId, success: true } }),
-    prisma.userWeapon.findMany({
-      where: { userId, durability: { gt: 0 } },
-      select: { weaponId: true },
-      distinct: ["weaponId"],
-    }),
-    prisma.transaction.aggregate({
-      where: { fromUserId: userId, type: { in: EQUIPMENT_SPEND } },
-      _sum: { amount: true },
-    }),
-    prisma.transaction.count({
-      where: { OR: [{ fromUserId: userId }, { toUserId: userId }] },
-    }),
-    prisma.heist.findFirst({
-      where: { attackerId: userId, success: true, successChance: { lt: RULES.AGAINST_THE_ODDS_CHANCE } },
-      select: { id: true },
-    }),
-    crossedRecently(userId),
-  ]);
+  const [contracts, heists, weaponRows, spend, ledger, longShot, inside, crafts, installedMods] =
+    await Promise.all([
+      prisma.contractRun.count({ where: { userId, collectedAt: { not: null } } }),
+      prisma.heist.count({ where: { attackerId: userId, success: true } }),
+      prisma.userWeapon.findMany({
+        where: { userId, durability: { gt: 0 } },
+        select: { weaponId: true },
+        distinct: ["weaponId"],
+      }),
+      prisma.transaction.aggregate({
+        where: { fromUserId: userId, type: { in: EQUIPMENT_SPEND } },
+        _sum: { amount: true },
+      }),
+      prisma.transaction.count({
+        where: { OR: [{ fromUserId: userId }, { toUserId: userId }] },
+      }),
+      prisma.heist.findFirst({
+        where: {
+          attackerId: userId,
+          success: true,
+          successChance: { lt: RULES.AGAINST_THE_ODDS_CHANCE },
+        },
+        select: { id: true },
+      }),
+      crossedRecently(userId),
+      prisma.craftingJob.count({ where: { userId, collectedAt: { not: null } } }),
+      prisma.modOwned.count({ where: { userId, status: "installed" } }),
+    ]);
 
   const weaponTypes = weaponRows.length;
   const owned = new Set(user.achievements.map((row) => row.achievementId));
@@ -126,6 +133,8 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   if ((spend._sum.amount ?? 0) >= RULES.BIG_SPENDER_CENTS && !owned.has("big-spender")) due.push("big-spender");
   if (ledger >= RULES.PAPER_TRAIL_COUNT && !owned.has("paper-trail")) due.push("paper-trail");
   if (user.base && !owned.has("first-entry")) due.push("first-entry");
+  if (crafts >= 1 && !owned.has("first-craft")) due.push("first-craft");
+  if (installedMods >= 1 && !owned.has("first-mod")) due.push("first-mod");
   if (contracts >= RULES.CLEAN_HANDS_CONTRACTS && !owned.has("clean-hands")) due.push("clean-hands");
   if ((user.vault?.level ?? 0) >= 5 && !owned.has("false-bottom")) due.push("false-bottom");
   if (heists >= RULES.REDACTED_HEIST_GOAL && !owned.has("redacted")) due.push("redacted");
@@ -201,7 +210,7 @@ export async function claimAchievement(userId: string, achievementId: string) {
       where: { id: row.id },
       data: { claimedAt: new Date(), announcedAt: row.announcedAt ?? new Date() },
     });
-    await creditCash(tx, userId, entry.reward);
+    await creditEarn(tx, userId, entry.reward);
     await tx.transaction.create({
       data: { type: "achievement_claim", amount: entry.reward, toUserId: userId },
     });

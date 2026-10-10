@@ -57,7 +57,7 @@ function draw(id: string) {
       </g>
     )
   }
-  if (id === 'warehouse') {
+  if (id === 'warehouse' || id === 'manufacturing-plant') {
     return (
       <g stroke={ink} strokeWidth="1.6">
         <path d="M24 100 V44 H196 V100" />
@@ -65,6 +65,12 @@ function draw(id: string) {
         <path d="M48 100 V62 H96 V100" />
         <path d="M124 100 V62 H172 V100" />
         <path d="M24 58 H196" stroke={rust} />
+        {id === 'manufacturing-plant' ? (
+          <>
+            <path d="M160 44 V28 H176 V44" stroke={steel} />
+            <path d="M56 78 H88 M136 78 H168" stroke={steel} />
+          </>
+        ) : null}
       </g>
     )
   }

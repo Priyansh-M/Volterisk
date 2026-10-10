@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.ts'
+import { bumpDesk, subscribeDesk } from '../lib/deskPoll.ts'
 import { money } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
 
@@ -19,6 +20,8 @@ export function LedgerAlerts({
 }) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const onUnclaimedRef = useRef(onUnclaimed)
+  onUnclaimedRef.current = onUnclaimed
   const [unlock, setUnlock] = useState<Unlock | null>(null)
   const [heist, setHeist] = useState<HeistNotice | null>(null)
   const [heatNote, setHeatNote] = useState<HeatNotice | null>(null)
@@ -27,76 +30,54 @@ export function LedgerAlerts({
   const navigate = useNavigate()
 
   useEffect(() => {
-    let cancelled = false
-    let busy = false
-    async function poll() {
-      if (cancelled || busy) return
-      busy = true
-      try {
-        const [alerts, notes] = await Promise.all([
-          api<{ unlocked: Unlock[]; unclaimed?: number }>('/api/achievements/unannounced'),
-          api<{ notifications: GameNotice[] }>('/api/notifications'),
-        ])
-        if (cancelled) return
-        onChangeRef.current(notes.notifications.filter((row) => row.read !== true).length)
-        if (typeof alerts.unclaimed === 'number') onUnclaimed?.(alerts.unclaimed)
-        const endedNote = notes.notifications.find((row) => row.read !== true && row.title === 'Game ended')
-        if (endedNote) setTableEnded(endedNote.id)
-        const tableInvite = notes.notifications.find((row) => row.read !== true && row.title === 'Roulette invite')
-        if (tableInvite) {
-          let parsed: { by?: string; lobbyId?: string } = {}
-          try {
-            parsed = JSON.parse(tableInvite.body) as typeof parsed
-          } catch {
-            parsed = {}
-          }
-          const here = new URLSearchParams(window.location.search).get('lobby')
-          if (parsed.lobbyId && parsed.lobbyId !== here) {
-            setInvite({ id: tableInvite.id, by: parsed.by ?? 'A player', lobbyId: parsed.lobbyId })
-            void import('../pages/RoulettePage.tsx')
-          } else if (parsed.lobbyId && parsed.lobbyId === here) {
-            void api(`/api/notifications/${tableInvite.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
-          }
-        }
-        const next = alerts.unlocked[0]
-        const report = notes.notifications.find(
-          (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
-        )
-        const heatReport = notes.notifications.find(
-          (row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'),
-        )
-        const robbed = report?.title === 'You were robbed'
-        if (next && !robbed) setUnlock(next)
-        if (report && (!next || robbed)) {
-          let parsed: { by?: string; success?: boolean; amountStolen?: number | null } = {}
-          try {
-            parsed = JSON.parse(report.body) as typeof parsed
-          } catch {
-            parsed = { by: report.body, success: false, amountStolen: null }
-          }
-          setHeist({
-            id: report.id,
-            by: parsed.by ?? 'Unknown',
-            success: Boolean(parsed.success),
-            amountStolen: parsed.amountStolen ?? null,
-          })
-        } else if (heatReport && !next) {
-          setHeatNote({ id: heatReport.id, title: heatReport.title, body: heatReport.body })
-        }
-      } catch {
-        /* the desk will try again */
-      } finally {
-        busy = false
-      }
-    }
     if (paused) return
-    const start = window.setTimeout(() => void poll(), 400)
-    const timer = window.setInterval(() => void poll(), 8000)
-    return () => {
-      cancelled = true
-      window.clearTimeout(start)
-      window.clearInterval(timer)
-    }
+    return subscribeDesk((snap) => {
+      onChangeRef.current(snap.notifications.filter((row) => row.read !== true).length)
+      if (typeof snap.unclaimed === 'number') onUnclaimedRef.current?.(snap.unclaimed)
+      const endedNote = snap.notifications.find((row) => row.read !== true && row.title === 'Game ended')
+      if (endedNote) setTableEnded(endedNote.id)
+      const tableInvite = snap.notifications.find((row) => row.read !== true && row.title === 'Roulette invite')
+      if (tableInvite) {
+        let parsed: { by?: string; lobbyId?: string } = {}
+        try {
+          parsed = JSON.parse(tableInvite.body) as typeof parsed
+        } catch {
+          parsed = {}
+        }
+        const here = new URLSearchParams(window.location.search).get('lobby')
+        if (parsed.lobbyId && parsed.lobbyId !== here) {
+          setInvite({ id: tableInvite.id, by: parsed.by ?? 'A player', lobbyId: parsed.lobbyId })
+          void import('../pages/RoulettePage.tsx')
+        } else if (parsed.lobbyId && parsed.lobbyId === here) {
+          void api(`/api/notifications/${tableInvite.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+        }
+      }
+      const next = snap.unlocked[0]
+      const report = snap.notifications.find(
+        (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
+      )
+      const heatReport = snap.notifications.find(
+        (row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'),
+      )
+      const robbed = report?.title === 'You were robbed'
+      if (next && !robbed) setUnlock(next)
+      if (report && (!next || robbed)) {
+        let parsed: { by?: string; success?: boolean; amountStolen?: number | null } = {}
+        try {
+          parsed = JSON.parse(report.body) as typeof parsed
+        } catch {
+          parsed = { by: report.body, success: false, amountStolen: null }
+        }
+        setHeist({
+          id: report.id,
+          by: parsed.by ?? 'Unknown',
+          success: Boolean(parsed.success),
+          amountStolen: parsed.amountStolen ?? null,
+        })
+      } else if (heatReport && !next) {
+        setHeatNote({ id: heatReport.id, title: heatReport.title, body: heatReport.body })
+      }
+    })
   }, [paused])
 
   function ackUnlock(id: string) {
@@ -108,11 +89,13 @@ export function LedgerAlerts({
     const id = heist.id
     setHeist(null)
     await api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+    bumpDesk()
     onChange()
   }
 
   async function dismissHeat() {
     if (!heatNote) return
+    const current = heatNote
     setHeatNote(null)
     try {
       const notes = await api<{ notifications: GameNotice[] }>('/api/notifications')
@@ -123,8 +106,9 @@ export function LedgerAlerts({
         heatIds.map((id) => api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)),
       )
     } catch {
-      await api(`/api/notifications/${heatNote.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+      await api(`/api/notifications/${current.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
     }
+    bumpDesk()
     onChange()
   }
 

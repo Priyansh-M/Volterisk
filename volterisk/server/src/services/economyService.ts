@@ -41,3 +41,43 @@ export async function debitVault(tx: Tx, userId: string, amount: number): Promis
   });
   return updated.count === 1;
 }
+
+/**
+ * L11+ credit card: spends debit vault as "card". Pre-L11 unchanged (pocket cash).
+ */
+export async function chargeSpend(tx: Tx, userId: string, amount: number): Promise<"cash" | "card"> {
+  assertPositiveInteger(amount, "Spend amount");
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { vaultCreditCard: true },
+  });
+  if (user?.vaultCreditCard) {
+    const ok = await debitVault(tx, userId, amount);
+    if (!ok) {
+      throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough card balance in the vault.");
+    }
+    return "card";
+  }
+  await debitCash(tx, userId, amount);
+  return "cash";
+}
+
+/**
+ * L11+ credit card: earnings credit vault. Pre-L11 unchanged (pocket cash).
+ */
+export async function creditEarn(tx: Tx, userId: string, amount: number): Promise<"cash" | "card"> {
+  assertPositiveInteger(amount, "Earn amount");
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { vaultCreditCard: true },
+  });
+  if (user?.vaultCreditCard) {
+    await tx.vault.update({
+      where: { userId },
+      data: { balance: { increment: amount } },
+    });
+    return "card";
+  }
+  await creditCash(tx, userId, amount);
+  return "cash";
+}

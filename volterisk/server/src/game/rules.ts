@@ -1,3 +1,5 @@
+import { buildLateReputation } from "./lateReputation.js";
+
 /**
  * Every gameplay number lives on this object. Services must not hardcode them.
  *
@@ -13,8 +15,66 @@ export const RULES = {
   HEIST_COOLDOWN_MINUTES: 15,
   /** Per crew. A player can hit a different crew while this one is cooling. No vault penalty. */
   NPC_COOLDOWN_MINUTES: 120,
-  /** Hard ceiling is 10. rewards.ts clamps to this and never pays more. */
-  HEIST_REWARD_PERCENT: 10,
+  /** Flat defense added on every stationed-crew vault. */
+  NPC_DEFENSE_FLAT: 6,
+  /**
+   * After reputation 10, each NPC gets +10 defense per player level above 10
+   * (L11 → +10, L12 → +20, …) on top of NPC_DEFENSE_FLAT.
+   */
+  NPC_DEFENSE_LEVEL_START: 10,
+  NPC_DEFENSE_PER_LEVEL: 10,
+  /** Pre–reputation 10: NPC take is this percent band of the purse. */
+  NPC_STEAL_PERCENT_MIN: 1,
+  NPC_STEAL_PERCENT_MAX: 15,
+  /**
+   * Reputation 10+: absolute NPC take bands (dollars). Tier 0 sits high in the band;
+   * tier 4 sits low. Inclusive [from, to) on attacker reputation except the last band.
+   */
+  NPC_PAYOUT_BANDS: [
+    { from: 10, to: 15, min: 1_000, max: 25_000 },
+    { from: 15, to: 20, min: 3_000, max: 27_000 },
+    { from: 20, to: 25, min: 5_000, max: 33_000 },
+    { from: 25, to: 30, min: 7_000, max: 35_000 },
+    { from: 30, to: 35, min: 10_000, max: 37_000 },
+    { from: 35, to: 40, min: 10_000, max: 40_000 },
+    { from: 40, to: 51, min: 10_000, max: 42_000 },
+  ] as { from: number; to: number; min: number; max: number }[],
+  /**
+   * Max asset level required by reputation rungs ≤ 10. Upgrades past these
+   * add POST_L10_UPGRADE_BASE + steps × POST_L10_UPGRADE_STEP (Manufacturing Plant excluded).
+   */
+  L10_ASSET_LEVEL_BASELINE: {
+    garage: 10,
+    car: 10,
+    hangar: 10,
+    airplane: 10,
+    truck: 10,
+    bike: 8,
+    front: 7,
+    warehouse: 8,
+    safehouse: 5,
+    caravan: 5,
+    dock: 5,
+    speedboat: 5,
+    helipad: 5,
+    helicopter: 5,
+    "chop-shop": 5,
+    "armored-van": 5,
+    casino: 3,
+    limousine: 3,
+    estate: 1,
+    yacht: 1,
+  } as Record<string, number>,
+  POST_L10_UPGRADE_BASE: 200_000,
+  POST_L10_UPGRADE_STEP: 50_000,
+  /** Player heist cash take — usual inclusive percent band of the full vault. */
+  PLAYER_STEAL_PERCENT_MIN: 1,
+  PLAYER_STEAL_PERCENT_MAX: 15,
+  /** Chance (percent) that a player hit rolls the jackpot band instead. */
+  PLAYER_STEAL_JACKPOT_CHANCE: 4,
+  /** Inclusive jackpot percent band of the full vault. */
+  PLAYER_STEAL_JACKPOT_MIN: 35,
+  PLAYER_STEAL_JACKPOT_MAX: 55,
   STARTING_CASH: 1_000,
   STARTING_VAULT_BALANCE: 25_000,
   STARTING_VAULT_LEVEL: 1,
@@ -85,6 +145,8 @@ export const RULES = {
     { id: "big-spender", name: "Big Spender", description: "Spend $1,000,000 on weapons, upgrades and equipment", reward: 50_000, sealed: true },
     { id: "paper-trail", name: "Paper Trail", description: "Accumulate 100 recorded transactions in your ledger", reward: 25_000, sealed: true },
     { id: "first-entry", name: "First Entry", description: "Establish your first operational base.", reward: 1_000 },
+    { id: "first-craft", name: "First Craft", description: "Collect your first crafted modification from the workshop.", reward: 5_000 },
+    { id: "first-mod", name: "Fitted", description: "Install your first modification on a weapon or vault.", reward: 100_000 },
     { id: "clean-hands", name: "Clean Hands", description: "Complete 10 contracts without raising heat.", reward: 5_000 },
     { id: "false-bottom", name: "False Bottom", description: "Upgrade your vault to level 5.", reward: 5_000 },
     { id: "redacted", name: "Redacted", description: "Complete 15 successful heists.", reward: 5_000, sealed: true },
@@ -167,18 +229,50 @@ export const RULES = {
     gold: [72, 76, 80, 84, 88],
     diamond: [90, 92, 94, 96, 98],
   } as Record<string, number[]>,
-  /** Cash to raise a vault one level inside the current tier. */
+  /** Cash to raise a vault one level inside the current tier. Diamond L1→L5 steps are flat $100k. */
   VAULT_LEVEL_COSTS: {
     standard: { 1: 8_000, 2: 36_000, 3: 80_000, 4: 180_000 },
     silver: { 1: 120_000, 2: 400_000, 3: 640_000, 4: 960_000 },
     gold: { 1: 700_000, 2: 2_200_000, 3: 3_200_000, 4: 4_400_000 },
-    diamond: { 1: 3_000_000, 2: 9_000_000, 3: 12_000_000, 4: 16_000_000 },
+    diamond: { 1: 100_000, 2: 100_000, 3: 100_000, 4: 100_000 },
   } as Record<string, Record<number, number>>,
   VAULT_CONVERSION_COSTS: {
     standard: 500_000,
     silver: 3_000_000,
     gold: 20_000_000,
   } as Record<string, number>,
+  /**
+   * Modification slot unlocks by player level (independent of vault tier).
+   * Actual mods install in a later stage; slots are authoritative here.
+   */
+  VAULT_MOD_SLOTS_BY_LEVEL: [
+    { minLevel: 35, slots: 4 },
+    { minLevel: 25, slots: 3 },
+    { minLevel: 20, slots: 2 },
+    { minLevel: 15, slots: 1 },
+    { minLevel: 1, slots: 0 },
+  ] as { minLevel: number; slots: number }[],
+  WEAPON_MOD_SLOTS_BY_LEVEL: [
+    { minLevel: 35, slots: 3 },
+    { minLevel: 25, slots: 2 },
+    { minLevel: 15, slots: 1 },
+    { minLevel: 1, slots: 0 },
+  ] as { minLevel: number; slots: number }[],
+  /** Property levels 11–20 use this curve; 1–10 keep the legacy propertyService formula. */
+  PROPERTY_MAX_LEVEL: 20,
+  PROPERTY_LEGACY_MAX_LEVEL: 10,
+  PROPERTY_UPGRADE_GROWTH: 1.45,
+  PROPERTY_UPGRADE_MILESTONE_MULT: {
+    12: 1,
+    13: 1,
+    14: 1,
+    15: 1.5,
+    16: 1,
+    17: 1,
+    18: 1.25,
+    19: 1,
+    20: 2,
+  } as Record<number, number>,
   /** One price per tier, for one day. Insurance closes the vault again after a hit. */
   INSURANCE_DAILY: {
     standard: 1_750,
@@ -194,13 +288,72 @@ export const RULES = {
     { minLevel: 3, title: "Expert Negotiator" },
     { minLevel: 4, title: "Peak Businessman" },
     { minLevel: 5, title: "Mob Boss" },
+    { minLevel: 11, title: "Territory Baron" },
+    { minLevel: 12, title: "Established Criminal" },
+    { minLevel: 20, title: "Regional Power" },
+    { minLevel: 30, title: "Criminal Empire" },
+    { minLevel: 40, title: "Underworld Elite" },
+    { minLevel: 50, title: "Underworld Elite" },
   ] as { minLevel: number; title: string }[],
   /**
    * Reputation is the player level. Claiming a rung pays the reward and
    * raises the level that work and the dossier use. Everyone starts at 1.
    * Level 5 finishes every holding that the earlier rungs left short of level 5.
+   * Levels 12–50 each pay exactly $100,000 once (see lateReputation).
+   * Existing Level 11+ accounts are grandfathered past the new Diamond L5 gate
+   * (that gate only applies when advancing into Level 11).
    */
-  REPUTATION_MAX_LEVEL: 10,
+  REPUTATION_MAX_LEVEL: 50,
+  LEVEL_UP_REWARD_FROM: 12,
+  LEVEL_UP_REWARD_CASH: 100_000,
+  /**
+   * Post-10 territory org. Config only — do not hardcode limits in services.
+   * maxSectorsByLevel: total holdings including original base.
+   */
+  TERRITORY: {
+    UNLOCK_LEVEL: 11,
+    MAX_SECTORS_BY_LEVEL: { 11: 2, 25: 3, 40: 4, 50: 5 } as Record<number, number>,
+    VAULT_CAPITAL_REQUIRED: 500_000,
+    STAGE_MINUTES: { scout: 0, claim: 0 } as Record<string, number>,
+    STAGES: ["scout", "claim"] as const,
+    POLICE_PER_EXPAND: 15,
+    POLICE_DECAY_PER_UTC_DAY: 5,
+    POLICE_BANDS: [
+      { under: 20, label: "LOW" },
+      { under: 50, label: "ELEVATED" },
+      { under: 80, label: "HIGH" },
+      { under: 1_000_000, label: "CRITICAL" },
+    ] as { under: number; label: string }[],
+    CRITICAL_BLOCKS_EXPAND: 80,
+    VAULT_YIELD_PCT_PER_HOUR: 0.25,
+    VAULT_YIELD_REQUIRES_TIER: "diamond",
+    VAULT_YIELD_NOON_MINUTE: 15,
+    /**
+     * Account-wide while you own specialized holdings. Same type stacks with diminishing extras:
+     * Industrial base +4% / −2%; each extra Industrial +1% / −1%.
+     * Financial base −5 min / +10%; each extra Financial −2 min / +2%.
+     */
+    SPECIALIZATIONS: {
+      industrial: {
+        attackBuffPercent: 4,
+        attackBuffExtraPerStack: 1,
+        defenseFlat: 2,
+        defenseExtraPerStack: 1,
+        label: "Industrial",
+        blurb:
+          "+4% heist success (+1% per extra Industrial). Enemies −2% success (−1% per extra). Same type stacks.",
+      },
+      financial: {
+        workCooldownCutMinutes: 5,
+        workCooldownExtraPerStack: 2,
+        collectBonusPercent: 10,
+        collectBonusExtraPerStack: 2,
+        label: "Financial",
+        blurb:
+          "−5 min work cooldown (−2 min per extra Financial). +10% contract & passive pay (+2% per extra). Same type stacks.",
+      },
+    },
+  },
   REPUTATION: [
     {
       level: 2,
@@ -319,10 +472,50 @@ export const RULES = {
         { kind: "asset", id: "truck", minLevel: 10, label: "Raise your truck to level 10" },
       ],
     },
+    {
+      level: 11,
+      reward: 0,
+      fee: 5_000_000,
+      unlocks: ["Territory expansion", "Vault credit card", "Diamond vault yield"],
+      conditions: [
+        { kind: "vaultTier", tier: "diamond", minLevel: 5, label: "Diamond Vault Level 5" },
+        { kind: "asset", id: "garage", minLevel: 5, label: "Garage at least level 5" },
+        { kind: "asset", id: "safehouse", minLevel: 5, label: "Safehouse at least level 5" },
+        { kind: "asset", id: "hangar", minLevel: 5, label: "Hangar at least level 5" },
+        { kind: "asset", id: "caravan", minLevel: 5, label: "Caravan at least level 5" },
+        { kind: "asset", id: "warehouse", minLevel: 5, label: "Warehouse at least level 5" },
+        { kind: "asset", id: "front", minLevel: 5, label: "Front business at least level 5" },
+        { kind: "asset", id: "dock", minLevel: 5, label: "Dock at least level 5" },
+        { kind: "asset", id: "helipad", minLevel: 5, label: "Helipad at least level 5" },
+        { kind: "asset", id: "chop-shop", minLevel: 5, label: "Chop shop at least level 5" },
+        { kind: "asset", id: "casino", minLevel: 5, label: "Casino at least level 5" },
+        { kind: "asset", id: "estate", minLevel: 5, label: "Estate at least level 5" },
+        { kind: "asset", id: "car", minLevel: 5, label: "Car at least level 5" },
+        { kind: "asset", id: "bike", minLevel: 5, label: "Bike at least level 5" },
+        { kind: "asset", id: "truck", minLevel: 5, label: "Truck at least level 5" },
+        { kind: "asset", id: "airplane", minLevel: 5, label: "Airplane at least level 5" },
+        { kind: "asset", id: "speedboat", minLevel: 5, label: "Speedboat at least level 5" },
+        { kind: "asset", id: "helicopter", minLevel: 5, label: "Helicopter at least level 5" },
+        { kind: "asset", id: "armored-van", minLevel: 5, label: "Armored van at least level 5" },
+        { kind: "asset", id: "limousine", minLevel: 5, label: "Limousine at least level 5" },
+        { kind: "asset", id: "yacht", minLevel: 5, label: "Yacht at least level 5" },
+      ],
+    },
+    ...buildLateReputation(),
   ] as {
     level: number;
     reward: number;
-    conditions: { kind: "asset" | "passive"; id?: string; minLevel?: number; label: string }[];
+    fee?: number;
+    unlocks?: string[];
+    milestone?: boolean;
+    conditions: {
+      kind: "asset" | "passive" | "cash" | "vault" | "vaultTier" | "heists" | "contracts" | "territory" | "weaponLevel" | "craft";
+      id?: string;
+      minLevel?: number;
+      min?: number;
+      tier?: string;
+      label: string;
+    }[];
   }[],
   /**
    * Public wealth bands. Net worth is only ever reported as one of these labels,
@@ -348,7 +541,7 @@ export const RULES = {
   LANDMASS_ID_MAX_LENGTH: 48,
   REGION_NAME_MAX_LENGTH: 80,
   /** Shared board: this many contracts, redrawn at random each window. */
-  WORK_BOARD_SIZE: 7,
+  WORK_BOARD_SIZE: 9,
   WORK_BOARD_ROTATION_MINUTES: 60,
   /** After collecting, that one contract is unavailable for this long. */
   WORK_CONTRACT_COOLDOWN_MINUTES: 20,
@@ -380,6 +573,52 @@ export const RULES = {
     { id: "convoy-desk", name: "Convoy Desk", payPerDay: 8_000, minReputation: 5, requires: [{ id: "truck", minLevel: 5 }, { id: "airplane", minLevel: 5 }, { id: "caravan", minLevel: 5 }, { id: "warehouse", minLevel: 5 }] },
     { id: "harbor-watch", name: "Harbor Watch", payPerDay: 8_500, minReputation: 6, requires: [{ id: "hangar", minLevel: 6 }, { id: "dock", minLevel: 2 }, { id: "speedboat", minLevel: 2 }] },
     { id: "coast-run", name: "Coast Run", payPerDay: 9_000, minReputation: 6, requires: [{ id: "truck", minLevel: 6 }, { id: "car", minLevel: 6 }, { id: "garage", minLevel: 6 }, { id: "speedboat", minLevel: 2 }] },
+    {
+      id: "plant-payroll",
+      name: "Plant Payroll",
+      payPerDay: 20_000,
+      minReputation: 14,
+      requires: [
+        { id: "manufacturing-plant", minLevel: 2 },
+        { id: "warehouse", minLevel: 8 },
+        { id: "front", minLevel: 7 },
+      ],
+    },
+    {
+      id: "sector-tithe",
+      name: "Sector Tithe",
+      payPerDay: 25_000,
+      minReputation: 20,
+      requires: [
+        { id: "manufacturing-plant", minLevel: 3 },
+        { id: "chop-shop", minLevel: 5 },
+        { id: "dock", minLevel: 5 },
+        { id: "warehouse", minLevel: 10 },
+      ],
+    },
+    {
+      id: "casino-skim",
+      name: "Casino Skim",
+      payPerDay: 27_000,
+      minReputation: 19,
+      requires: [
+        { id: "casino", minLevel: 16 },
+        { id: "limousine", minLevel: 16 },
+        { id: "garage", minLevel: 14 },
+      ],
+    },
+    {
+      id: "airbridge-lease",
+      name: "Airbridge Lease",
+      payPerDay: 30_000,
+      minReputation: 23,
+      requires: [
+        { id: "hangar", minLevel: 18 },
+        { id: "airplane", minLevel: 18 },
+        { id: "warehouse", minLevel: 16 },
+        { id: "manufacturing-plant", minLevel: 3 },
+      ],
+    },
   ] as { id: string; name: string; payPerDay: number; minReputation: number; requires: { id?: string; anyVehicle?: boolean; minLevel: number }[] }[],
   /** The whole contract pool. Rewards and durations are never taken from the client. */
   WORK_CONTRACTS: [
@@ -528,7 +767,7 @@ export const RULES = {
       id: "customs-favour",
       name: "Customs Favour",
       minLevel: 4,
-      durationMinutes: 70,
+      durationMinutes: 95,
       reward: 55_000,
       risk: "HIGH",
       locationLabel: "Freeport Annex",
@@ -557,7 +796,7 @@ export const RULES = {
       id: "armoured-tail",
       name: "Armoured Tail",
       minLevel: 5,
-      durationMinutes: 95,
+      durationMinutes: 210,
       reward: 96_000,
       risk: "HIGH",
       locationLabel: "Ring Road North",
@@ -566,7 +805,7 @@ export const RULES = {
       id: "vault-survey",
       name: "Vault Survey",
       minLevel: 5,
-      durationMinutes: 120,
+      durationMinutes: 300,
       reward: 165_000,
       risk: "HIGH",
       locationLabel: "Iron Hour Depository",
@@ -577,7 +816,7 @@ export const RULES = {
       id: "lot-audit",
       name: "Lot Audit",
       minLevel: 5,
-      durationMinutes: 48,
+      durationMinutes: 95,
       reward: 54_000,
       risk: "HIGH",
       locationLabel: "Marrow Lane Garage",
@@ -591,7 +830,7 @@ export const RULES = {
       id: "yard-convoy",
       name: "Yard Convoy",
       minLevel: 5,
-      durationMinutes: 60,
+      durationMinutes: 95,
       reward: 58_000,
       risk: "HIGH",
       locationLabel: "Ring Road North",
@@ -606,7 +845,7 @@ export const RULES = {
       id: "pier-watch",
       name: "Pier Watch",
       minLevel: 6,
-      durationMinutes: 70,
+      durationMinutes: 300,
       reward: 128_000,
       risk: "HIGH",
       locationLabel: "Pier Fourteen",
@@ -620,7 +859,7 @@ export const RULES = {
       id: "coast-haul",
       name: "Coast Haul",
       minLevel: 6,
-      durationMinutes: 80,
+      durationMinutes: 300,
       reward: 135_000,
       risk: "HIGH",
       locationLabel: "Freeport Annex",
@@ -629,6 +868,175 @@ export const RULES = {
         { id: "car", minLevel: 6 },
         { id: "garage", minLevel: 6 },
         { id: "speedboat", minLevel: 2 },
+      ],
+    },
+    {
+      id: "territory-courier",
+      name: "Territory Courier",
+      minLevel: 11,
+      durationMinutes: 120,
+      reward: 60_000,
+      risk: "HIGH",
+      locationLabel: "Claimed Sector Perimeter",
+      difficulty: "HARD",
+      requires: [
+        { id: "car", minLevel: 8 },
+        { id: "garage", minLevel: 8 },
+        { id: "safehouse", minLevel: 8 },
+      ],
+    },
+    {
+      id: "airfield-handoff",
+      name: "Airfield Handoff",
+      minLevel: 13,
+      durationMinutes: 80,
+      reward: 45_000,
+      risk: "HIGH",
+      locationLabel: "Freeport Annex",
+      difficulty: "HARD",
+      requires: [
+        { id: "hangar", minLevel: 12 },
+        { id: "airplane", minLevel: 12 },
+        { id: "warehouse", minLevel: 10 },
+      ],
+    },
+    {
+      id: "plant-night-shift",
+      name: "Plant Night Shift",
+      minLevel: 15,
+      durationMinutes: 150,
+      reward: 70_000,
+      risk: "HIGH",
+      locationLabel: "Manufacturing Plant Yard",
+      difficulty: "VERY HARD",
+      requires: [
+        { id: "manufacturing-plant", minLevel: 2 },
+        { id: "truck", minLevel: 8 },
+        { id: "warehouse", minLevel: 8 },
+      ],
+    },
+    {
+      id: "floor-manager",
+      name: "Floor Manager",
+      minLevel: 19,
+      durationMinutes: 95,
+      reward: 70_000,
+      risk: "HIGH",
+      locationLabel: "Casino Pit",
+      difficulty: "VERY HARD",
+      requires: [
+        { id: "casino", minLevel: 16 },
+        { id: "limousine", minLevel: 16 },
+        { id: "garage", minLevel: 14 },
+      ],
+    },
+    {
+      id: "diamond-escort",
+      name: "Diamond Escort",
+      minLevel: 20,
+      durationMinutes: 210,
+      reward: 80_000,
+      risk: "HIGH",
+      locationLabel: "Iron Hour Corridor",
+      difficulty: "ELITE",
+      requires: [
+        { id: "manufacturing-plant", minLevel: 3 },
+        { id: "chop-shop", minLevel: 5 },
+        { id: "caravan", minLevel: 8 },
+        { id: "front", minLevel: 10 },
+      ],
+    },
+    {
+      id: "safehouse-relay",
+      name: "Safehouse Relay",
+      minLevel: 21,
+      durationMinutes: 210,
+      reward: 85_000,
+      risk: "HIGH",
+      locationLabel: "Outer Safehouse Ring",
+      difficulty: "ELITE",
+      requires: [
+        { id: "safehouse", minLevel: 18 },
+        { id: "caravan", minLevel: 18 },
+        { id: "dock", minLevel: 14 },
+      ],
+    },
+    {
+      id: "warehouse-blackout",
+      name: "Warehouse Blackout",
+      minLevel: 26,
+      durationMinutes: 210,
+      reward: 99_000,
+      risk: "HIGH",
+      locationLabel: "Bonded Warehouse Row",
+      difficulty: "ELITE",
+      requires: [
+        { id: "warehouse", minLevel: 20 },
+        { id: "truck", minLevel: 20 },
+        { id: "casino", minLevel: 16 },
+      ],
+    },
+    {
+      id: "dockside-ledger",
+      name: "Dockside Ledger",
+      minLevel: 31,
+      durationMinutes: 300,
+      reward: 110_000,
+      risk: "HIGH",
+      locationLabel: "Deepwater Quay",
+      difficulty: "ELITE",
+      requires: [
+        { id: "safehouse", minLevel: 20 },
+        { id: "caravan", minLevel: 20 },
+        { id: "dock", minLevel: 20 },
+        { id: "manufacturing-plant", minLevel: 4 },
+      ],
+    },
+    {
+      id: "rotor-sweep",
+      name: "Rotor Sweep",
+      minLevel: 35,
+      durationMinutes: 300,
+      reward: 120_000,
+      risk: "HIGH",
+      locationLabel: "Helipad Spine",
+      difficulty: "ELITE",
+      requires: [
+        { id: "helipad", minLevel: 20 },
+        { id: "helicopter", minLevel: 20 },
+        { id: "chop-shop", minLevel: 20 },
+      ],
+    },
+    {
+      id: "black-rotor-run",
+      name: "Black Rotor Run",
+      minLevel: 45,
+      durationMinutes: 300,
+      reward: 135_000,
+      risk: "HIGH",
+      locationLabel: "Night Helipad Circuit",
+      difficulty: "ELITE",
+      requires: [
+        { id: "helipad", minLevel: 20 },
+        { id: "helicopter", minLevel: 20 },
+        { id: "chop-shop", minLevel: 20 },
+        { id: "manufacturing-plant", minLevel: 5 },
+      ],
+    },
+    {
+      id: "estate-endgame",
+      name: "Estate Endgame",
+      minLevel: 50,
+      durationMinutes: 300,
+      reward: 150_000,
+      risk: "HIGH",
+      locationLabel: "Estate & Yacht Corridor",
+      difficulty: "ELITE",
+      requires: [
+        { id: "estate", minLevel: 20 },
+        { id: "yacht", minLevel: 20 },
+        { id: "hangar", minLevel: 20 },
+        { id: "manufacturing-plant", minLevel: 5 },
       ],
     },
   ] as {
@@ -689,6 +1097,11 @@ export function vaultCapacity(tier: string, level: number): number {
   return capacity;
 }
 
+/** L11+ card holders on Diamond L5+: no storage cap. Pre-L11 unchanged. */
+export function vaultCapacityUnlimited(tier: string, level: number, creditCard: boolean): boolean {
+  return Boolean(creditCard && tier === "diamond" && level >= RULES.VAULT_MAX_LEVEL);
+}
+
 export function vaultSecuredPercent(tier: string, level: number): number {
   const row = RULES.VAULT_SECURED_PERCENT[tier] ?? RULES.VAULT_SECURED_PERCENT.standard;
   return row[vaultIndex(level)] ?? 0;
@@ -738,6 +1151,30 @@ export function titleForLevel(level: number): string {
     if (level >= entry.minLevel) title = entry.title;
   }
   return title;
+}
+
+export function vaultModSlotsForLevel(playerLevel: number): number {
+  for (const row of RULES.VAULT_MOD_SLOTS_BY_LEVEL) {
+    if (playerLevel >= row.minLevel) return row.slots;
+  }
+  return 0;
+}
+
+export function weaponModSlotsForLevel(playerLevel: number): number {
+  for (const row of RULES.WEAPON_MOD_SLOTS_BY_LEVEL) {
+    if (playerLevel >= row.minLevel) return row.slots;
+  }
+  return 0;
+}
+
+/** Progression phase label for UI (not a separate level system). */
+export function progressionPhase(level: number): string {
+  if (level >= 40) return "Underworld Elite";
+  if (level >= 30) return "Criminal Empire";
+  if (level >= 20) return "Regional Power";
+  if (level >= 12) return "Established Criminal";
+  if (level >= 11) return "Territory Baron";
+  return "Street ladder";
 }
 
 /** Coarse public band for a net worth. Exact figures never leave the server. */

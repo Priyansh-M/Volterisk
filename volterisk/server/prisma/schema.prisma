@@ -20,6 +20,8 @@ model User {
   passiveJobId     String?
   passivePaidFor   DateTime?
   reputationLevel  Int       @default(1)
+  /** Set when a reputation rung is claimed — heist conditions count only after this. */
+  reputationClaimedAt DateTime?
   vaultExposedUntil DateTime?
   heat             Int       @default(0)
   heatSettledAt    DateTime  @default(now())
@@ -28,25 +30,148 @@ model User {
   rouletteDay      String?
   rouletteStaked   Int       @default(0)
   rouletteCap      Int       @default(0)
+  policeAttention  Int       @default(0)
+  policeSettledOn  String?
+  vaultCreditCard  Boolean   @default(false)
+  lastVaultYieldAt DateTime?
+  primaryCareer    String?
+  secondaryCareer  String?
+  careerChangedAt  DateTime?
   createdAt        DateTime  @default(now())
 
-  vault          Vault?
-  base           Base?
-  weapons        UserWeapon[]
-  properties     Property[]
-  contracts      ContractRun[]
-  achievements   UserAchievement[]
-  heistsAttacked Heist[]           @relation("HeistAttacker")
-  heistsDefended Heist[]           @relation("HeistTarget")
-  notifications  Notification[]
-  txFrom         Transaction[]     @relation("TxFrom")
-  txTo           Transaction[]     @relation("TxTo")
-  inventory      InventoryItem[]
-  bountiesPosted Bounty[]          @relation("BountyPoster")
-  bountiesOn     Bounty[]          @relation("BountyTarget")
-  bountiesHunted Bounty[]          @relation("BountyHunter")
-  bountyFunds    BountyFund[]
-  bountyCuts     BountyCut[]
+  vault             Vault?
+  base              Base?
+  weapons           UserWeapon[]
+  properties        Property[]
+  contracts         ContractRun[]
+  achievements      UserAchievement[]
+  heistsAttacked    Heist[]              @relation("HeistAttacker")
+  heistsDefended    Heist[]              @relation("HeistTarget")
+  notifications     Notification[]
+  txFrom            Transaction[]        @relation("TxFrom")
+  txTo              Transaction[]        @relation("TxTo")
+  inventory         InventoryItem[]
+  bountiesPosted    Bounty[]             @relation("BountyPoster")
+  bountiesOn        Bounty[]             @relation("BountyTarget")
+  bountiesHunted    Bounty[]             @relation("BountyHunter")
+  bountyFunds       BountyFund[]
+  bountyCuts        BountyCut[]
+  territoryHoldings TerritoryHolding[]
+  expansionOps      ExpansionOp[]
+  modsOwned         ModOwned[]
+  craftJobs         CraftingJob[]
+  craftLedger       CraftLedger[]
+  reputationCredits ReputationCredit[]
+  marketListings    MarketListing[]     @relation("MarketSeller")
+  marketPurchases   MarketListing[]     @relation("MarketBuyer")
+}
+
+model CraftingJob {
+  id          String    @id @default(cuid())
+  userId      String
+  recipeId    String
+  startsAt    DateTime  @default(now())
+  completesAt DateTime
+  collectedAt DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, collectedAt, cancelledAt])
+}
+
+/** Lifetime workshop crafts per mod — used by reputation craft conditions. */
+model CraftLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  modId     String
+  count     Int      @default(0)
+  firstAt   DateTime @default(now())
+  lastAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, modId])
+  @@index([userId])
+}
+
+/**
+ * Lifetime reputation condition credits (assets, vault money, crafts, etc.).
+ * Heists are never stored — those reset every claimed level.
+ */
+model ReputationCredit {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+/** P2P Black Market. kind: material | weapon | mod. status: open | sold | cancelled | expired */
+model MarketListing {
+  id              String    @id @default(cuid())
+  sellerId        String
+  buyerId         String?
+  kind            String
+  itemId          String
+  quantity        Int       @default(1)
+  price           Int
+  status          String    @default("open")
+  userWeaponId    String?
+  modOwnedId      String?
+  expiresAt       DateTime
+  soldAt          DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  seller User @relation("MarketSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer  User? @relation("MarketBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+
+  @@index([status, expiresAt])
+  @@index([sellerId, status])
+  @@index([kind, status])
+}
+
+/** Extra sectors beyond the original Base. sectorId unique across all players. */
+model TerritoryHolding {
+  id             String   @id @default(cuid())
+  userId         String
+  sectorId       String   @unique
+  landmassId     String
+  regionName     String
+  specialization String?
+  /** Custom map fill hex from Sector Pigment Kit (null = default purple). */
+  mapColor       String?
+  securedAt      DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([landmassId])
+}
+
+/** Multi-step expansion: scout → select → prepare → secure → claim. */
+model ExpansionOp {
+  id          String    @id @default(cuid())
+  userId      String
+  sectorId    String
+  landmassId  String
+  regionName  String
+  stage       String
+  completesAt DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, closedAt])
+  @@index([sectorId])
 }
 
 /**
@@ -173,11 +298,37 @@ model UserWeapon {
   durability     Int     @default(50)
   maxDurability  Int     @default(50)
   equipped       Boolean @default(false)
+  listed         Boolean @default(false)
   user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   weapon         Weapon  @relation(fields: [weaponId], references: [id])
+  mods           ModOwned[]
 
   @@index([userId, weaponId])
   @@index([userId, equipped])
+}
+
+/**
+ * Owned modification instance. status: inventory | installed | listed
+ * kind: weapon | vault. Installed weapon mods set userWeaponId.
+ * Installed vault mods set vaultSlot (>=0). Emergency Lockdown uses activatedAt.
+ */
+model ModOwned {
+  id           String    @id @default(cuid())
+  userId       String
+  modId        String
+  kind         String
+  status       String    @default("inventory")
+  userWeaponId String?
+  vaultSlot    Int?
+  activatedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userWeapon UserWeapon? @relation(fields: [userWeaponId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([userId, modId])
+  @@index([userWeaponId])
 }
 
 model Heist {

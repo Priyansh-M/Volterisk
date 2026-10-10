@@ -13,6 +13,7 @@ type Row = {
   level: number | null
   heists: number | null
   base: string | null
+  career: string | null
 }
 
 function RankRow({ row, mine }: { row: Row; mine: boolean }) {
@@ -24,6 +25,7 @@ function RankRow({ row, mine }: { row: Row; mine: boolean }) {
       <td className="px-3 py-2 text-gold">{money(row.netWorth)}</td>
       <td className="px-3 py-2">{row.heists ?? '—'}</td>
       <td className="px-3 py-2">{row.base ?? '—'}</td>
+      <td className="px-3 py-2 text-right">{row.career ?? '—'}</td>
     </tr>
   )
 }
@@ -36,6 +38,7 @@ function toRow(row: Leaderboard['richest'][number]): Row {
     level: row.level ?? null,
     heists: row.successfulHeists ?? null,
     base: row.base ?? null,
+    career: row.career ?? null,
   }
 }
 
@@ -135,7 +138,7 @@ export function LeaderboardPage() {
       {view === 'assets' && assets.listed.length === 0 ? <Notice tone="muted">No accounts on the book yet.</Notice> : null}
       {view === 'vault' ? (
       <div className="overflow-x-auto border border-line">
-        <table className="w-full min-w-[640px] text-left text-sm">
+        <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="bg-panel text-[10px] tracking-[0.16em] text-muted uppercase">
             <tr>
               <th className="px-3 py-2 font-medium">Rank</th>
@@ -144,6 +147,7 @@ export function LeaderboardPage() {
               <th className="px-3 py-2 font-medium">Net worth</th>
               <th className="px-3 py-2 font-medium">Heists</th>
               <th className="px-3 py-2 font-medium">Base</th>
+              <th className="px-3 py-2 text-right font-medium">Career</th>
             </tr>
           </thead>
           <tbody>

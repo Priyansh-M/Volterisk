@@ -1,6 +1,6 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
-import { heistStealAmount } from "../src/game/rewards.js";
+import { heistStealAmount, heistStealAmountNpc } from "../src/game/rewards.js";
 import { successChance } from "../src/game/probability.js";
 import { RULES, attackPower, vaultDefense } from "../src/game/rules.js";
 import { prisma } from "../src/prisma.js";
@@ -9,14 +9,45 @@ import { setHeistRng } from "../src/services/heistService.js";
 import { app, auth, books, registerUser, userState } from "./helpers.js";
 
 describe("reward math", () => {
-  it("transfers an exact percent and rejects negatives", () => {
-    expect(heistStealAmount(100_000)).toBe(10_000);
-    expect(heistStealAmount(25_000)).toBe(2_500);
-    expect(heistStealAmount(10_001)).toBe(1_000);
-    expect(heistStealAmount(100_000, 100)).toBe(10_000);
-    expect(heistStealAmount(100_000, 50)).toBe(10_000);
+  it("rolls player take in the normal or jackpot band of the full vault", () => {
+    expect(heistStealAmount(100_000, { jackpot: false, percent: 1 })).toBe(1_000);
+    expect(heistStealAmount(100_000, { jackpot: false, percent: 15 })).toBe(15_000);
+    expect(heistStealAmount(100_000, { jackpot: true, percent: 35 })).toBe(35_000);
+    expect(heistStealAmount(100_000, { jackpot: true, percent: 55 })).toBe(55_000);
+    expect(heistStealAmount(100_000, { jackpot: false, percent: 0 })).toBe(1_000);
+    expect(heistStealAmount(100_000, { jackpot: true, percent: 99 })).toBe(55_000);
     expect(() => heistStealAmount(-1)).toThrow(/non-negative/);
-    expect(() => heistStealAmount(1000, -5)).toThrow(/non-negative/);
+    for (let i = 0; i < 80; i++) {
+      const take = heistStealAmount(100_000);
+      const normal = take >= 1_000 && take <= 15_000;
+      const jackpot = take >= 35_000 && take <= 55_000;
+      expect(normal || jackpot).toBe(true);
+    }
+  });
+
+  it("rolls NPC take between 1% and 15% of the full vault before reputation 10", () => {
+    expect(heistStealAmountNpc(100_000, 1)).toBe(1_000);
+    expect(heistStealAmountNpc(100_000, 15)).toBe(15_000);
+    expect(heistStealAmountNpc(100_000, 7)).toBe(7_000);
+    expect(heistStealAmountNpc(100_000, 0)).toBe(1_000);
+    expect(heistStealAmountNpc(100_000, 99)).toBe(15_000);
+    expect(() => heistStealAmountNpc(-1)).toThrow(/non-negative/);
+    for (let i = 0; i < 40; i++) {
+      const take = heistStealAmountNpc(100_000);
+      expect(take).toBeGreaterThanOrEqual(1_000);
+      expect(take).toBeLessThanOrEqual(15_000);
+    }
+  });
+
+  it("rolls NPC take inside the reputation-10 dollar band by tier", () => {
+    for (let i = 0; i < 40; i++) {
+      const take = heistStealAmountNpc(1_000_000, {
+        attackerLevel: 12,
+        tierIndex: 0,
+      });
+      expect(take).toBeGreaterThanOrEqual(1_000);
+      expect(take).toBeLessThanOrEqual(25_000);
+    }
   });
 });
 
@@ -25,7 +56,7 @@ describe("heist money", () => {
     setHeistRng(() => 1);
   });
 
-  it("moves the exact percent from vault to cash on success", async () => {
+  it("moves a rolled percent of the vault to cash on success", async () => {
     const attacker = await registerUser("Ada Crowe");
     const target = await registerUser("Bea Crowe");
     await prisma.vault.update({
@@ -41,17 +72,20 @@ describe("heist money", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.amountStolen).toBe(10_000);
+    const stolen = res.body.amountStolen as number;
+    const normal = stolen >= 1_000 && stolen <= 15_000;
+    const jackpot = stolen >= 35_000 && stolen <= 55_000;
+    expect(normal || jackpot).toBe(true);
     expect(res.body.successChance).toBe(successChance(attackPower(1, 1), vaultDefense("standard", 1)));
 
     const attackerAfter = await userState(attacker.id);
     const targetAfter = await userState(target.id);
-    expect(attackerAfter.cash).toBe(attacker.cash + 10_000);
-    expect(targetAfter.vault).toBe(90_000);
+    expect(attackerAfter.cash).toBe(attacker.cash + stolen);
+    expect(targetAfter.vault).toBe(100_000 - stolen);
 
     const tx = await prisma.transaction.findFirst({ where: { heistId: res.body.id } });
     expect(tx?.type).toBe("heist_payout");
-    expect(tx?.amount).toBe(10_000);
+    expect(tx?.amount).toBe(stolen);
     expect(tx?.fromUserId).toBe(target.id);
     expect(tx?.toUserId).toBe(attacker.id);
 

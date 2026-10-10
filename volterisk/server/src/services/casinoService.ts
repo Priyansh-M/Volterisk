@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import { GameError } from "../game/errors.js";
 import { prisma } from "../prisma.js";
-import { creditCash, debitCash } from "./economyService.js";
+import { chargeSpend, creditEarn } from "./economyService.js";
 import { writeNotification } from "./notificationService.js";
 
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -87,14 +87,14 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
     if (stake > user.cash) {
       throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough cash. Check your vault.");
     }
-    await debitCash(tx, userId, stake);
+    await chargeSpend(tx, userId, stake);
     await tx.user.update({
       where: { id: userId },
       data: { rouletteDay: day, rouletteCap: cap, rouletteStaked: already + stake },
     });
     const number = fixedNumber ?? randomInt(0, 37);
     const returned = bets.reduce((sum, bet) => sum + (hits(bet.id, number) ? bet.amount * bet.payout : 0), 0);
-    if (returned > 0) await creditCash(tx, userId, returned);
+    if (returned > 0) await creditEarn(tx, userId, returned);
     await tx.transaction.create({
       data: { type: "roulette", amount: stake, fromUserId: userId },
     });

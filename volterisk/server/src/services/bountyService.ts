@@ -1,6 +1,6 @@
 import { GameError } from "../game/errors.js";
 import { prisma } from "../prisma.js";
-import { creditCash, debitCash, type Tx } from "./economyService.js";
+import { chargeSpend, creditEarn, type Tx } from "./economyService.js";
 import { writeNotification } from "./notificationService.js";
 
 const MIN_BOUNTY = 5_000;
@@ -96,7 +96,7 @@ async function settleCuts(
     const raw = Math.floor((cut.stolen * funded) / goal);
     const pay = Math.min(remaining, Math.max(0, raw - cut.paid));
     if (pay <= 0) continue;
-    await creditCash(tx, cut.userId, pay);
+    await creditEarn(tx, cut.userId, pay);
     await tx.bountyCut.update({
       where: { id: cut.id },
       data: { paid: { increment: pay } },
@@ -136,7 +136,7 @@ async function refundFunders(
         ? remaining - paidBack
         : Math.floor((fund.amount * remaining) / funded);
     if (share <= 0) continue;
-    await creditCash(tx, fund.userId, share);
+    await creditEarn(tx, fund.userId, share);
     await tx.transaction.create({
       data: { type: "bounty_cancel", amount: share, toUserId: fund.userId },
     });
@@ -236,7 +236,7 @@ export async function createBounty(
       );
     }
 
-    await debitCash(tx, posterId, amount);
+    await chargeSpend(tx, posterId, amount);
 
     const existing = await tx.bounty.findFirst({
       where: { targetId: targetUserId, status: { in: [...ACTIVE] }, amount: { gt: 0 } },
@@ -307,7 +307,7 @@ export async function fundBounty(userId: string, bountyId: string, amountRaw: nu
     if (row.targetId === userId) {
       throw new GameError(400, "SELF_BOUNTY", "You cannot fund a bounty on yourself.");
     }
-    await debitCash(tx, userId, amount);
+    await chargeSpend(tx, userId, amount);
     await tx.bountyFund.create({ data: { bountyId, userId, amount } });
     const next = await tx.bounty.update({
       where: { id: bountyId },
@@ -421,7 +421,7 @@ async function completeBounty(tx: Tx, bountyId: string, stolenTotal: number): Pr
   const paidOut = await settleCuts(tx, bounty, bounty.cuts);
   const leftover = Math.max(0, bounty.amount - paidOut);
   if (leftover > 0) {
-    await creditCash(tx, bounty.posterId, leftover);
+    await creditEarn(tx, bounty.posterId, leftover);
     await tx.transaction.create({
       data: { type: "bounty_leftover", amount: leftover, toUserId: bounty.posterId },
     });

@@ -1,15 +1,14 @@
 import { randomInt } from "node:crypto";
 import { GameError } from "../game/errors.js";
-import { successChance } from "../game/probability.js";
-import { heistStealAmount } from "../game/rewards.js";
+import { heistStealAmount, heistStealAmountNpc } from "../game/rewards.js";
 import {
   RULES,
   attackPower,
-  exposedBalance,
   hoursAgo,
   hoursFromNow,
   minutesAgo,
   minutesFromNow,
+  vaultCapacity,
   vaultDefense,
   wealthBandLabel,
   wealthBucket,
@@ -17,12 +16,24 @@ import {
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { noteBountyHeist } from "./bountyService.js";
-import { creditCash, debitVault, type Tx } from "./economyService.js";
+import { careerBonuses } from "./careerService.js";
+import { resolveCombat } from "./combatMods.js";
+import { rollHeistMaterials } from "../game/workshopEconomy.js";
+import { creditEarn, debitVault, type Tx } from "./economyService.js";
+import { creditItem } from "./inventoryService.js";
+import { consumeLockdown, lockdownIsArmed, vaultModIds, weaponModIds } from "./modService.js";
+import { applyHeistChance, territoryPassives } from "./territoryPassives.js";
 import {
   isDiamondHardNpc,
   isNpcGated,
   isStationedNpc,
   loadNpcPurses,
+  maxNpcCooldownMinutes,
+  npcCooldownMinutes,
+  npcDefenseBonus,
+  npcEffectiveLevel,
+  npcTierIndex,
+  npcVaultModsForLevel,
   NPC_STATIONS,
   openNpcPurse,
   stationForUsername,
@@ -161,7 +172,7 @@ async function readTargets(attackerId: string) {
     if (!previous || ends.getTime() > previous.getTime()) protectedUntil.set(hit.targetId, ends);
   }
   const npcRecent = await prisma.heist.findMany({
-    where: { attackerId, createdAt: { gt: minutesAgo(RULES.NPC_COOLDOWN_MINUTES) }, target: { isBot: true } },
+    where: { attackerId, createdAt: { gt: minutesAgo(maxNpcCooldownMinutes()) }, target: { isBot: true } },
     select: { targetId: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });
@@ -176,6 +187,7 @@ async function readTargets(attackerId: string) {
     stationedUsers.map((user) => ({ id: user.id, username: user.username })),
     attackerLevel,
   );
+  const nowMs = Date.now();
   const cards = users
     .filter((user) => user.vault && (stationForUsername(user.username) || user.vault.balance >= RULES.MIN_VAULT_BALANCE))
     .map((user) => {
@@ -187,6 +199,12 @@ async function readTargets(attackerId: string) {
         const vaultTier = purse?.vaultTier ?? user.vault!.tier ?? "standard";
         const tierName = vaultTier.charAt(0).toUpperCase() + vaultTier.slice(1);
         const balance = purse?.balance ?? user.vault!.balance;
+        const clearance = station ? npcEffectiveLevel(user.username, attackerLevel) : vaultLevel;
+        const cdMins = station ? npcCooldownMinutes(user.username) : RULES.NPC_COOLDOWN_MINUTES;
+        const cooling =
+          station && npcHitAt
+            ? nowMs < npcHitAt.getTime() + cdMins * 60_000
+            : false;
         return {
           isBot: user.isBot,
           card: {
@@ -196,12 +214,12 @@ async function readTargets(attackerId: string) {
             vaultTier,
             vaultLabel: `${tierName} Lvl.${vaultLevel}`,
             clearanceLabel: isDiamondHardNpc(user.username)
-              ? "Level 5 (At least)"
-              : `Level ${vaultLevel}`,
+              ? `Level ${clearance} (diamond hard)`
+              : `Level ${clearance}`,
             wealthBucket: wealthBucket(balance),
             estimatedWealth: wealthBandLabel(balance),
             vulnerable: station
-              ? !npcHitAt && !gated && balance >= RULES.MIN_VAULT_BALANCE
+              ? !cooling && !gated && balance >= RULES.MIN_VAULT_BALANCE
               : !protectedUntil.has(user.id),
             sectorId: user.base?.sectorId ?? null,
             regionName: user.base?.regionName ?? null,
@@ -209,8 +227,8 @@ async function readTargets(attackerId: string) {
             cadence: station?.cadence ?? null,
             locked: gated,
             cooldownEndsAt: station
-              ? npcHitAt
-                ? minutesFromNow(RULES.NPC_COOLDOWN_MINUTES, npcHitAt).toISOString()
+              ? cooling && npcHitAt
+                ? minutesFromNow(cdMins, npcHitAt).toISOString()
                 : null
               : protectedUntil.get(user.id)?.toISOString() ?? null,
           } satisfies TargetCard,
@@ -266,14 +284,47 @@ async function previewChance(
     throw new GameError(404, "INVALID_TARGET", "No such target.");
   }
   assertTargetKind(target, kind);
-  const attack = attackPower(owned.weapon.number, owned.upgradeLevel);
+  const attacker = await prisma.user.findUnique({
+    where: { id: attackerId },
+    select: { reputationLevel: true },
+  });
+  const baseAttack = attackPower(owned.weapon.number, owned.upgradeLevel);
   const facing = await npcFacing(attackerId, { ...target, vault: target.vault }, kind);
-  const defense = vaultDefense(facing.tier, facing.vaultLevel);
+  const defense =
+    vaultDefense(facing.tier, facing.vaultLevel) +
+    (kind === "npc" ? npcDefenseBonus(attacker?.reputationLevel ?? 1) : 0);
+  const [atkBuff, defBuff, career, wMods, playerVMods, lockdownRow] = await Promise.all([
+    territoryPassives(attackerId),
+    territoryPassives(targetUserId),
+    careerBonuses(attackerId),
+    weaponModIds(owned.id),
+    kind === "npc" ? Promise.resolve([] as string[]) : vaultModIds(targetUserId),
+    prisma.modOwned.findFirst({
+      where: { userId: targetUserId, modId: "emergency-lockdown", status: "installed" },
+      select: { activatedAt: true },
+    }),
+  ]);
+  const vMods = kind === "npc" ? facing.modIds : playerVMods;
+  const resolved = resolveCombat({
+    baseAttack,
+    baseDefense: defense,
+    camera: facing.camera,
+    vaultTier: facing.tier,
+    vaultLevel: facing.vaultLevel,
+    vaultBalance: facing.balance ?? target.vault.balance,
+    vaultCapacity: vaultCapacity(facing.tier, facing.vaultLevel),
+    weaponModIds: wMods,
+    vaultModIds: vMods,
+    lockdownActive: kind === "npc" ? false : lockdownIsArmed(lockdownRow?.activatedAt),
+    careerAttackFlat: career.heistAttackFlat,
+    careerChanceFlat: career.heistChanceFlat,
+  });
+  const estimatedChance = applyHeistChance(resolved.chance, atkBuff, defBuff);
   return {
-    estimatedChance: successChance(attack, defense, facing.camera),
-    attack,
-    defense,
-    advantage: attack - defense,
+    estimatedChance,
+    attack: resolved.attack,
+    defense: resolved.defense,
+    advantage: resolved.attack - resolved.defense,
     weaponName: owned.weapon.name,
     weaponLevel: owned.upgradeLevel,
     vaultTier: facing.tier,
@@ -287,7 +338,15 @@ async function npcFacing(
   kind: HeistKind,
 ) {
   if (kind !== "npc") {
-    return { tier: target.vault.tier, vaultLevel: target.vault.level, camera: target.cameraLevel, purseId: null as string | null, balance: null as number | null };
+    return {
+      tier: target.vault.tier,
+      vaultLevel: target.vault.level,
+      camera: target.cameraLevel,
+      purseId: null as string | null,
+      balance: null as number | null,
+      clearanceLevel: target.vault.level,
+      modIds: [] as string[],
+    };
   }
   const attacker = await prisma.user.findUnique({ where: { id: attackerId }, select: { reputationLevel: true } });
   const level = attacker?.reputationLevel ?? 1;
@@ -295,39 +354,38 @@ async function npcFacing(
     throw new GameError(403, "LEVEL_LOCKED", "That crew is locked until you reach level 5.");
   }
   const purse = await openNpcPurse(attackerId, target.id, target.username, level);
+  const clearanceLevel = npcEffectiveLevel(target.username, level);
   return {
     tier: purse.vaultTier || "standard",
     vaultLevel: purse.vaultLevel,
     camera: 0,
     purseId: purse.id,
     balance: purse.balance,
+    clearanceLevel,
+    modIds: npcVaultModsForLevel(clearanceLevel),
   };
 }
 
-async function wearWeapon(tx: Tx, instanceId: string): Promise<boolean> {
+async function wearWeapon(tx: Tx, instanceId: string, loss = 1): Promise<boolean> {
+  const current = await tx.userWeapon.findUnique({ where: { id: instanceId } });
+  if (!current) return false;
+  const next = Math.max(0, current.durability - Math.max(1, loss));
   const row = await tx.userWeapon.update({
     where: { id: instanceId },
-    data: { durability: { decrement: 1 } },
+    data: { durability: next, ...(next <= 0 ? { equipped: false } : {}) },
   });
-  if (row.durability <= 0) {
-    await tx.userWeapon.update({
-      where: { id: row.id },
-      data: { durability: 0, equipped: false },
-    });
-    return true;
-  }
-  return false;
+  return row.durability <= 0;
 }
 
 async function pickWeapon(attackerId: string, weaponId: string, instanceId?: string) {
   if (instanceId) {
     return prisma.userWeapon.findFirst({
-      where: { id: instanceId, userId: attackerId, durability: { gt: 0 } },
+      where: { id: instanceId, userId: attackerId, durability: { gt: 0 }, listed: false },
       include: { weapon: true },
     });
   }
   return prisma.userWeapon.findFirst({
-    where: { userId: attackerId, weaponId, durability: { gt: 0 } },
+    where: { userId: attackerId, weaponId, durability: { gt: 0 }, listed: false },
     include: { weapon: true },
     orderBy: [{ equipped: "desc" }, { upgradeLevel: "desc" }],
   });
@@ -358,11 +416,21 @@ export async function attemptHeist(
     throw new GameError(400, "WEAPON_NOT_OWNED", "That weapon is not in your arsenal.");
   }
   const weaponLevel = owned.upgradeLevel;
-  const attack = attackPower(owned.weapon.number, owned.upgradeLevel);
+  const baseAttack = attackPower(owned.weapon.number, owned.upgradeLevel);
   const previewTarget = await prisma.user.findUnique({ where: { id: targetUserId }, include: { vault: true } });
   if (!previewTarget?.vault) throw new GameError(404, "INVALID_TARGET", "No such target.");
   assertTargetKind(previewTarget, kind);
   const facing = await npcFacing(attackerId, { ...previewTarget, vault: previewTarget.vault }, kind);
+  const [preCareer, preWMods, playerVMods, preLock] = await Promise.all([
+    careerBonuses(attackerId),
+    weaponModIds(owned.id),
+    kind === "npc" ? Promise.resolve([] as string[]) : vaultModIds(targetUserId),
+    prisma.modOwned.findFirst({
+      where: { userId: targetUserId, modId: "emergency-lockdown", status: "installed" },
+      select: { activatedAt: true },
+    }),
+  ]);
+  const preVMods = kind === "npc" ? facing.modIds : playerVMods;
 
   const heist = await withSqliteRetry(() =>
     prisma.$transaction(
@@ -403,13 +471,14 @@ export async function attemptHeist(
           if (!station) {
             throw new GameError(400, "WRONG_TARGET_KIND", "Only the stationed crews are NPC targets.");
           }
+          const cdMins = npcCooldownMinutes(target.username);
           const already = await tx.heist.findFirst({
-            where: { attackerId, targetId: targetUserId, createdAt: { gt: minutesAgo(RULES.NPC_COOLDOWN_MINUTES, now) } },
+            where: { attackerId, targetId: targetUserId, createdAt: { gt: minutesAgo(cdMins, now) } },
             orderBy: { createdAt: "desc" },
           });
           if (already) {
             throw new GameError(409, "COOLDOWN", "That crew is still cooling off for you.", {
-              cooldownEndsAt: minutesFromNow(RULES.NPC_COOLDOWN_MINUTES, already.createdAt).toISOString(),
+              cooldownEndsAt: minutesFromNow(cdMins, already.createdAt).toISOString(),
             });
           }
         } else {
@@ -428,11 +497,35 @@ export async function attemptHeist(
         }
 
         const vaultLevel = facing.vaultLevel;
-        const defense = vaultDefense(facing.tier, vaultLevel);
-        const chance = successChance(attack, defense, target.cameraLevel);
+        const defense =
+          vaultDefense(facing.tier, vaultLevel) +
+          (kind === "npc" ? npcDefenseBonus(attacker.reputationLevel) : 0);
+        const [atkBuff, defBuff] = await Promise.all([
+          territoryPassives(attackerId),
+          territoryPassives(targetUserId),
+        ]);
+        const resolved = resolveCombat({
+          baseAttack,
+          baseDefense: defense,
+          camera: kind === "npc" ? facing.camera : target.cameraLevel,
+          vaultTier: facing.tier,
+          vaultLevel,
+          vaultBalance: facing.balance ?? target.vault.balance,
+          vaultCapacity: vaultCapacity(facing.tier, vaultLevel),
+          weaponModIds: preWMods,
+          vaultModIds: preVMods,
+          lockdownActive: kind === "npc" ? false : lockdownIsArmed(preLock?.activatedAt),
+          careerAttackFlat: preCareer.heistAttackFlat,
+          careerChanceFlat: preCareer.heistChanceFlat,
+        });
+        const attack = resolved.attack;
+        const chance = applyHeistChance(resolved.chance, atkBuff, defBuff);
         const roll = rollPercent();
         const success = roll <= chance;
-        const broken = await wearWeapon(tx, owned.id);
+        const broken = await wearWeapon(tx, owned.id, resolved.durabilityLoss);
+        if (kind !== "npc" && lockdownIsArmed(preLock?.activatedAt)) {
+          await consumeLockdown(targetUserId);
+        }
 
         if (!success) {
           const exposedUntil = kind === "player" ? hoursFromNow(RULES.FAILED_HEIST_EXPOSURE_HOURS, now) : null;
@@ -489,10 +582,16 @@ export async function attemptHeist(
           target.vault.insured &&
           target.vault.insuredUntil !== null &&
           target.vault.insuredUntil.getTime() > now.getTime();
-        const openVault = !facing.purseId && target.vault.breached && !insuredNow;
         const pool = facing.balance ?? target.vault.balance;
-        const exposed = openVault ? pool : exposedBalance(pool, facing.tier, vaultLevel);
-        const amount = heistStealAmount(exposed);
+        const rawTake =
+          kind === "npc"
+            ? heistStealAmountNpc(pool, {
+                attackerLevel: attacker.reputationLevel,
+                tierIndex: npcTierIndex(target.username),
+                diamondHard: isDiamondHardNpc(target.username),
+              })
+            : heistStealAmount(pool);
+        const amount = Math.max(0, Math.floor(rawTake * resolved.rewardMult * resolved.lossMult));
         const debited = facing.purseId
           ? (await tx.npcPurse.updateMany({ where: { id: facing.purseId, balance: { gte: amount } }, data: { balance: { decrement: amount } } })).count === 1
           : await debitVault(tx, targetUserId, amount);
@@ -500,7 +599,11 @@ export async function attemptHeist(
           throw new GameError(409, "VAULT_CHANGED", "The vault shifted before the take landed.");
         }
         await gainHeat(tx, attackerId, heistHeatGain(true, amount));
-        await creditCash(tx, attackerId, amount);
+        await creditEarn(tx, attackerId, amount);
+        const materialsGained = rollHeistMaterials(amount);
+        for (const drop of materialsGained) {
+          await creditItem(tx, attackerId, drop.id, drop.quantity);
+        }
 
         const heist = await tx.heist.create({
           data: {
@@ -548,6 +651,7 @@ export async function attemptHeist(
             broken,
             cash: paid?.cash ?? null,
             bountyPayout,
+            materialsGained,
           };
         }
         const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
@@ -560,6 +664,7 @@ export async function attemptHeist(
           broken,
           cash: paid?.cash ?? null,
           bountyPayout: 0,
+          materialsGained,
         };
       },
       { timeout: 15_000 },

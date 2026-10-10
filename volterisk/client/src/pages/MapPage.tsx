@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { setL11Guide } from '../components/Level11Guide.tsx'
 import { WorldMap, claimErrorCopy } from '../components/WorldMap.tsx'
 import { Notice, PageTitle } from '../components/ui.tsx'
 import { ApiError, api, isMissing, load, peek } from '../lib/api.ts'
@@ -79,6 +80,7 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
       setEstablished(result.base)
       if (firstBase) {
         sessionStorage.setItem('volterisk-welcome', '1')
+        sessionStorage.setItem('volterisk-first-toasts', '1')
         sessionStorage.setItem('volterisk-brief', '1')
         navigate('/')
       }
@@ -97,7 +99,29 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
     }
   }
 
+  async function scoutSector(sector: Sector) {
+    setBusy(true)
+    setError(null)
+    try {
+      await api('/api/territory/scout', {
+        method: 'POST',
+        body: JSON.stringify({
+          sectorId: sector.id,
+          landmassId: sector.landmassId,
+          regionName: sector.regionName,
+        }),
+      })
+      setL11Guide('entails')
+      navigate('/territory')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Scout did not file.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const filed = established ?? me.base
+  const canScout = !needsKit && !needsBase && (me.level ?? 0) >= 11
 
   return (
     <div className="space-y-4">
@@ -132,9 +156,19 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
           focusSectorId={params.get('sector')}
           pins={pins ?? []}
           canClaim={!needsKit && needsBase}
-          claimHint={needsKit ? 'Take the kit before you plant a flag.' : needsBase ? null : 'This square is for reading. Your base is already filed.'}
+          canScout={canScout}
+          claimHint={
+            needsKit
+              ? 'Take the kit before you plant a flag.'
+              : needsBase
+                ? null
+                : canScout
+                  ? 'Any empty sector can be scouted for territory expansion.'
+                  : 'This square is for reading. Your base is already filed.'
+          }
           busy={busy}
           onClaim={(sector, name) => void claimSector(sector, name)}
+          onScout={(sector) => void scoutSector(sector)}
         />
         {onboarding ? null : (
           <aside className="border border-line bg-panel p-4">
@@ -146,6 +180,14 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
               <Intel label="Your base" value={filed ? filed.regionName : '—'} />
               <Intel label="Block" value={filed?.name?.trim() || 'Unnamed'} />
             </dl>
+            {canScout ? (
+              <Link
+                to="/territory"
+                className="mt-4 inline-block border border-gold/40 px-3 py-1.5 text-[11px] tracking-[0.14em] text-gold uppercase no-underline"
+              >
+                Territory desk
+              </Link>
+            ) : null}
             {established ? (
               <Link to="/" className="mt-4 inline-block border border-gold/40 px-3 py-1.5 text-[11px] tracking-[0.14em] text-gold uppercase no-underline">
                 Open the ledger
@@ -153,7 +195,8 @@ function ChartScreen({ onboarding = false }: { onboarding?: boolean }) {
             ) : null}
             <p className="mt-5 text-[11px] tracking-[0.14em] text-muted uppercase">Legend</p>
             <ul className="mt-2 space-y-2 text-sm">
-              <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#2e9e48]" /> Yours</li>
+              <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#2e9e48]" /> Home base</li>
+              <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#7c3aed]" /> Territory</li>
               <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#c45c26]" /> NPC</li>
               <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#2f5f9e]" /> Player</li>
               <li className="flex items-center gap-2"><span className="h-3 w-3 border border-[#1c1c1c] bg-[#f7f1e4]" /> Open</li>
