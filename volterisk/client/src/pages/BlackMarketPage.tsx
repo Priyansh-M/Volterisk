@@ -237,10 +237,22 @@ export function BlackMarketPage() {
                       })
                         .then((paid) => {
                           applyCash(paid.cash)
-                          return reload()
+                          setBlack((cur) =>
+                            cur
+                              ? {
+                                  ...cur,
+                                  listings: cur.listings.filter((l) => l.id !== row.id),
+                                  mine: cur.mine.filter((l) => l.id !== row.id),
+                                }
+                              : cur,
+                          )
+                          setBusy(null)
+                          void reload().catch(() => undefined)
                         })
-                        .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Buy failed.'))
-                        .finally(() => setBusy(null))
+                        .catch((err: unknown) => {
+                          setError(err instanceof ApiError ? err.message : 'Buy failed.')
+                          setBusy(null)
+                        })
                     }}
                   >
                     {busy === row.id ? 'Buying…' : `Buy ${money(row.price)}`}

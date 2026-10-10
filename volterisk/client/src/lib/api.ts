@@ -45,7 +45,7 @@ export function peek<T>(path: string): T | null {
 export function invalidateGets() {
   generation += 1
   memory.clear()
-  inflight.clear()
+  // Keep in-flight promises — clearing them duplicated requests and froze buys behind a stuck queue.
 }
 
 function fetchGet<T>(path: string): Promise<T> {
@@ -86,35 +86,36 @@ function shouldRetryBusy(status: number, code?: string) {
 }
 
 /**
- * Cap parallel API calls so one page load cannot open many Vercel isolates
- * against Supabase's 15 session slots. Features unchanged — requests queue.
+ * Cap parallel GETs so a page load cannot open many Vercel isolates.
+ * Mutations (buy/equip/etc.) bypass the queue — user actions must never freeze
+ * behind desk polls or long busy backoffs.
  */
-const MAX_PARALLEL = 2
-let parallel = 0
-const waiters: Array<() => void> = []
+const MAX_PARALLEL_GETS = 2
+let parallelGets = 0
+const getWaiters: Array<() => void> = []
 
-function acquireSlot(): Promise<void> {
-  if (parallel < MAX_PARALLEL) {
-    parallel += 1
+function acquireGetSlot(): Promise<void> {
+  if (parallelGets < MAX_PARALLEL_GETS) {
+    parallelGets += 1
     return Promise.resolve()
   }
   return new Promise((resolve) => {
-    waiters.push(() => {
-      parallel += 1
+    getWaiters.push(() => {
+      parallelGets += 1
       resolve()
     })
   })
 }
 
-function releaseSlot() {
-  parallel = Math.max(0, parallel - 1)
-  const next = waiters.shift()
+function releaseGetSlot() {
+  parallelGets = Math.max(0, parallelGets - 1)
+  const next = getWaiters.shift()
   if (next) next()
 }
 
 /**
  * Retry only on ledger-busy. Auth/validation/server bugs fail immediately.
- * A few longer backoffs give session slots time to free under free-tier pressure.
+ * GET slots are released during backoff so buys/UI are not frozen.
  */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
@@ -122,11 +123,13 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const method = (options.method ?? 'GET').toUpperCase()
-  if (method !== 'GET') invalidateGets()
+  const isGet = method === 'GET'
+  if (!isGet) invalidateGets()
 
-  await acquireSlot()
+  if (isGet) await acquireGetSlot()
+  let holdingGet = isGet
   try {
-    const maxAttempts = 4
+    const maxAttempts = isGet ? 3 : 4
     let lastError: ApiError | null = null
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const response = await fetch(requestUrl(path), { ...options, headers })
@@ -153,13 +156,21 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       const detail = data.issues?.find((issue) => issue.message)?.message
       lastError = new ApiError(detail || message, response.status, code, data.issues)
       if (attempt + 1 < maxAttempts && shouldRetryBusy(response.status, code)) {
-        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.floor(Math.random() * 200)))
+        if (holdingGet) {
+          releaseGetSlot()
+          holdingGet = false
+        }
+        await new Promise((r) => setTimeout(r, 300 * 2 ** attempt + Math.floor(Math.random() * 150)))
+        if (isGet) {
+          await acquireGetSlot()
+          holdingGet = true
+        }
         continue
       }
       throw lastError
     }
     throw lastError ?? new ApiError('Request failed', 500)
   } finally {
-    releaseSlot()
+    if (holdingGet) releaseGetSlot()
   }
 }

@@ -68,8 +68,12 @@ export function MarketPage() {
         const item = WEAPON_CATALOG.find((row) => row.id === itemId)
         await api('/api/weapons/buy', { method: 'POST', body: JSON.stringify({ weaponId: itemId }) })
         if (me && item) applyCash(me.cash - item.price)
-        const weapons = await load<Arsenal>('/api/me/weapons')
-        setArsenal(weapons)
+        // Unblock UI immediately; arsenal refreshes in the background.
+        setBusy(null)
+        void load<Arsenal>('/api/me/weapons')
+          .then(setArsenal)
+          .catch(() => undefined)
+        return
       } else if (itemId === 'estimate-predictor' || itemId === 'security-camera') {
         const paid = await api<{ cash: number; quantity?: number; level?: number; nextCost?: number | null }>('/api/shop/buy', {
           method: 'POST',
