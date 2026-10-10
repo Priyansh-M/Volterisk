@@ -475,7 +475,7 @@ export const RULES = {
     {
       level: 11,
       reward: 0,
-      fee: 5_000_000,
+      fee: 2_000_000,
       unlocks: ["Territory expansion", "Vault credit card", "Diamond vault yield"],
       conditions: [
         { kind: "vaultTier", tier: "diamond", minLevel: 5, label: "Diamond Vault Level 5" },
@@ -1117,7 +1117,8 @@ export function insurancePremium(tier: string): number {
 }
 
 export function nextVaultTier(tier: string): VaultTierName | null {
-  const index = RULES.VAULT_TIERS.indexOf(tier as VaultTierName);
+  const key = tier.trim().toLowerCase() as VaultTierName;
+  const index = RULES.VAULT_TIERS.indexOf(key);
   if (index < 0 || index >= RULES.VAULT_TIERS.length - 1) return null;
   return RULES.VAULT_TIERS[index + 1];
 }

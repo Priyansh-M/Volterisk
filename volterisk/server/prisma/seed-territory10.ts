@@ -142,7 +142,7 @@ async function main() {
         assets: owned,
         vault: vault ? { balance: vault.balance, tier: vault.tier, level: vault.level } : null,
         base: baseSector,
-        next: "POST /api/reputation/claim when ready (L11 fee $5M)",
+        next: "POST /api/reputation/claim when ready (L11 fee $2M)",
       },
       null,
       2,

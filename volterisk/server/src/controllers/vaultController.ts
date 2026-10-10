@@ -15,7 +15,7 @@ export async function upgrade(req: Request, res: Response): Promise<void> {
   emptySchema.parse(req.body ?? {});
   const userId = currentUserId(req);
   const vault = await upgradeVault(userId);
-  const unlocked = await syncAchievements(userId);
+  const unlocked = await syncAchievements(userId).catch(() => []);
   res.json({ ...vault, unlocked });
 }
 

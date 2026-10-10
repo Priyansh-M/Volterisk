@@ -26,13 +26,13 @@ async function presentVault(
   },
   userId: string,
 ) {
-  const tier = vault.tier || "standard";
-  const level = Math.min(Math.max(vault.level, 1), RULES.VAULT_MAX_LEVEL);
+  const tier = (vault.tier || "standard").trim().toLowerCase();
+  const level = Math.min(Math.max(Number(vault.level) || 1, 1), RULES.VAULT_MAX_LEVEL);
   const converting = level >= RULES.VAULT_MAX_LEVEL;
   const upcoming = converting ? nextVaultTier(tier) : tier;
   const upgradeCost = converting
     ? (RULES.VAULT_CONVERSION_COSTS[tier] ?? null)
-    : (RULES.VAULT_LEVEL_COSTS[tier]?.[level] ?? null);
+    : levelUpgradeCost(tier, level);
   const nextLevel = converting ? 1 : level + 1;
   const exposed = exposedBalance(vault.balance, tier, level);
   const insured =
@@ -93,20 +93,28 @@ export async function getVault(userId: string) {
   return presentVault(vault, userId);
 }
 
+function levelUpgradeCost(tier: string, level: number): number | null {
+  const key = tier.trim().toLowerCase();
+  const row = RULES.VAULT_LEVEL_COSTS[key];
+  if (!row) return null;
+  const cost = row[level] ?? row[Number(level)];
+  return typeof cost === "number" && cost > 0 ? cost : null;
+}
+
 export async function upgradeVault(userId: string) {
-  return prisma.$transaction(async (tx) => {
+  // Keep the transaction short: do not call presentVault (extra queries) while tx is open —
+  // that deadlocks / times out on Supabase transaction pooling and shows up as a 500.
+  const result = await prisma.$transaction(async (tx) => {
     const vault = await tx.vault.findUnique({ where: { userId } });
     if (!vault) throw new GameError(404, "NOT_FOUND", "Vault not found.");
-    const tier = vault.tier || "standard";
-    const level = Math.min(Math.max(vault.level, 1), RULES.VAULT_MAX_LEVEL);
+    const tier = (vault.tier || "standard").trim().toLowerCase();
+    const level = Math.min(Math.max(Number(vault.level) || 1, 1), RULES.VAULT_MAX_LEVEL);
     const converting = level >= RULES.VAULT_MAX_LEVEL;
     const nextTier = converting ? nextVaultTier(tier) : null;
     if (converting && !nextTier) {
       throw new GameError(400, "MAX_LEVEL", "This vault is already at the top floor.");
     }
-    const cost = converting
-      ? RULES.VAULT_CONVERSION_COSTS[tier]
-      : RULES.VAULT_LEVEL_COSTS[tier]?.[level];
+    const cost = converting ? (RULES.VAULT_CONVERSION_COSTS[tier] ?? null) : levelUpgradeCost(tier, level);
     if (!cost) throw new GameError(400, "MAX_LEVEL", "No further upgrade is priced.");
     const paidFrom = await chargeSpend(tx, userId, cost);
     const updated = await tx.vault.update({
@@ -122,20 +130,24 @@ export async function upgradeVault(userId: string) {
         fromUserId: userId,
       },
     });
-    return { ...(await presentVault(updated, userId)), spent: cost, paidFrom };
+    return { updated, cost, paidFrom };
   });
+  return {
+    ...(await presentVault(result.updated, userId)),
+    spent: result.cost,
+    paidFrom: result.paidFrom,
+  };
 }
 
 export async function setInsurance(userId: string, enabled: boolean) {
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const vault = await tx.vault.findUnique({ where: { userId } });
     if (!vault) throw new GameError(404, "NOT_FOUND", "Vault not found.");
     if (!enabled) {
-      const updated = await tx.vault.update({
+      return tx.vault.update({
         where: { userId },
         data: { insured: false, insuredUntil: null },
       });
-      return presentVault(updated, userId);
     }
     const premium = insurancePremium(vault.tier || "standard");
     const paidFrom = await chargeSpend(tx, userId, premium);
@@ -146,7 +158,7 @@ export async function setInsurance(userId: string, enabled: boolean) {
         fromUserId: userId,
       },
     });
-    const updated = await tx.vault.update({
+    return tx.vault.update({
       where: { userId },
       data: {
         insured: true,
@@ -154,8 +166,8 @@ export async function setInsurance(userId: string, enabled: boolean) {
         breached: false,
       },
     });
-    return presentVault(updated, userId);
   });
+  return presentVault(updated, userId);
 }
 
 export async function depositVault(userId: string, amount: number | "all") {
