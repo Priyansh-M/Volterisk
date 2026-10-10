@@ -233,7 +233,7 @@ export const RULES = {
   VAULT_LEVEL_COSTS: {
     standard: { 1: 8_000, 2: 36_000, 3: 80_000, 4: 180_000 },
     silver: { 1: 120_000, 2: 400_000, 3: 640_000, 4: 960_000 },
-    gold: { 1: 700_000, 2: 2_200_000, 3: 3_200_000, 4: 4_400_000 },
+    gold: { 1: 700_000, 2: 2_200_000, 3: 1_000_000, 4: 1_000_000 },
     diamond: { 1: 100_000, 2: 100_000, 3: 100_000, 4: 100_000 },
   } as Record<string, Record<number, number>>,
   VAULT_CONVERSION_COSTS: {
