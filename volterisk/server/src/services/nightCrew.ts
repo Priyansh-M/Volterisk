@@ -94,10 +94,22 @@ let crewReady = false;
  * so a restart does not undo a completed heist.
  */
 export async function ensureNightCrew(): Promise<void> {
-  if (process.env.VERCEL && crewReady) return;
+  if (crewReady) return;
   await ensureWeaponCatalog();
   const keys = NIGHT_CREW.map((bot) => bot.username.toLowerCase());
-  const existing = await prisma.user.findMany({ where: { usernameKey: { in: keys } } });
+  const existing = await prisma.user.findMany({
+    where: { usernameKey: { in: keys } },
+    select: { id: true, usernameKey: true, isBot: true },
+  });
+  // Production already has the roster — skip inserts + station reshuffles on every cold start.
+  if (existing.length >= keys.length) {
+    const stationIds = NPC_STATIONS.map((s) => s.sectorId);
+    const stationed = await prisma.base.count({ where: { sectorId: { in: stationIds } } });
+    if (stationed >= stationIds.length) {
+      crewReady = true;
+      return;
+    }
+  }
   const byKey = new Map(existing.map((user) => [user.usernameKey, user]));
   for (const bot of NIGHT_CREW) {
     const usernameKey = bot.username.toLowerCase();
@@ -116,7 +128,7 @@ export async function ensureNightCrew(): Promise<void> {
     });
   }
   await ensureNpcStations();
-  if (process.env.VERCEL) crewReady = true;
+  crewReady = true;
 }
 
 /** Plants the twenty roster squares. Moves a bot onto its square when that square is free. */

@@ -29,6 +29,13 @@ export function isMissing(err: unknown) {
   return err instanceof ApiError && (err.status === 404 || err.status === 501)
 }
 
+export function isBusy(err: unknown) {
+  return (
+    err instanceof ApiError &&
+    (err.status === 503 || err.status === 502 || err.code === 'DB_BUSY' || err.code === 'BOOT')
+  )
+}
+
 const memory = new Map<string, unknown>()
 const inflight = new Map<string, Promise<unknown>>()
 let generation = 0
@@ -76,6 +83,15 @@ function requestUrl(path: string) {
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }
 
+function shouldRetryBusy(status: number, code?: string) {
+  return status === 503 || status === 502 || code === 'DB_BUSY' || code === 'BOOT'
+}
+
+/**
+ * All verbs retry on free-tier pool pressure (delay, don't drop the action).
+ * Auth/validation errors never retry. Mutations are safe to retry on DB_BUSY —
+ * interactive txs roll back when the pool rejects them mid-flight.
+ */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
   if (options.body) headers.set('Content-Type', 'application/json')
@@ -83,29 +99,38 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const method = (options.method ?? 'GET').toUpperCase()
   if (method !== 'GET') invalidateGets()
-  const response = await fetch(requestUrl(path), { ...options, headers })
-  const text = await response.text()
-  let data: {
-    error?: string | { code?: string; message?: string }
-    code?: string
-    issues?: { path: string; message: string }[]
-  } = {}
-  if (text) {
-    try {
-      data = JSON.parse(text) as typeof data
-    } catch {
-      throw new ApiError(
-        'The API did not answer. This site reached the page instead of /api.',
-        response.status || 502,
-      )
+
+  const maxAttempts = 3
+  let lastError: ApiError | null = null
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await fetch(requestUrl(path), { ...options, headers })
+    const text = await response.text()
+    let data: {
+      error?: string | { code?: string; message?: string }
+      code?: string
+      issues?: { path: string; message: string }[]
+    } = {}
+    if (text) {
+      try {
+        data = JSON.parse(text) as typeof data
+      } catch {
+        throw new ApiError(
+          'The API did not answer. This site reached the page instead of /api.',
+          response.status || 502,
+        )
+      }
     }
-  }
-  if (!response.ok) {
+    if (response.ok) return data as T
     const nested = data.error && typeof data.error === 'object' ? data.error : null
     const message = nested?.message || (typeof data.error === 'string' ? data.error : response.statusText)
     const code = nested?.code || data.code
     const detail = data.issues?.find((issue) => issue.message)?.message
-    throw new ApiError(detail || message, response.status, code, data.issues)
+    lastError = new ApiError(detail || message, response.status, code, data.issues)
+    if (attempt + 1 < maxAttempts && shouldRetryBusy(response.status, code)) {
+      await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.floor(Math.random() * 120)))
+      continue
+    }
+    throw lastError
   }
-  return data as T
+  throw lastError ?? new ApiError('Request failed', 500)
 }

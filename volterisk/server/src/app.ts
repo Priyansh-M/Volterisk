@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ZodError } from "zod";
 import { GameError } from "./game/errors.js";
+import { isDbBusyError } from "./prisma.js";
 import { api } from "./routes/index.js";
 import { bootError, ready } from "./runtime.js";
 
@@ -47,6 +48,13 @@ export function createApp() {
           path: issue.path.join("."),
           message: issue.message,
         })),
+      });
+      return;
+    }
+    if (isDbBusyError(error)) {
+      res.status(503).json({
+        error: "The ledger is busy. Try again in a moment.",
+        code: "DB_BUSY",
       });
       return;
     }

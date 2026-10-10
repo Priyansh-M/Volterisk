@@ -239,7 +239,7 @@ export const RULES = {
   VAULT_CONVERSION_COSTS: {
     standard: 500_000,
     silver: 3_000_000,
-    gold: 20_000_000,
+    gold: 7_000_000,
   } as Record<string, number>,
   /**
    * Modification slot unlocks by player level (independent of vault tier).

@@ -27,8 +27,8 @@ export function ReputationAlert() {
         /* the desk will try again */
       }
     }
-    const start = window.setTimeout(() => void look(), 4000)
-    const timer = window.setInterval(() => void look(), 45_000)
+    const start = window.setTimeout(() => void look(), 8_000)
+    const timer = window.setInterval(() => void look(), 90_000)
     const onVis = () => {
       if (!document.hidden) void look()
     }

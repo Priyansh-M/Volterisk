@@ -55,6 +55,28 @@ export function WorkshopPage() {
     reload().catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Workshop did not open.'))
   }, [locked])
 
+  // Flip crafting → ready from completesAt on a local clock (no API polling).
+  useEffect(() => {
+    const crafting = workshop?.jobs.filter((j) => j.status === 'crafting') ?? []
+    if (crafting.length === 0) return
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      setWorkshop((current) => {
+        if (!current) return current
+        let changed = false
+        const jobs = current.jobs.map((job) => {
+          if (job.status !== 'crafting') return job
+          const end = Date.parse(job.completesAt)
+          if (!Number.isFinite(end) || now < end) return job
+          changed = true
+          return { ...job, status: 'ready', progress: 1, remainingMs: 0 }
+        })
+        return changed ? { ...current, jobs } : current
+      })
+    }, 1_000)
+    return () => window.clearInterval(timer)
+  }, [workshop?.jobs.filter((j) => j.status === 'crafting').map((j) => j.completesAt).join('|')])
+
   if (locked) {
     return <Notice tone="muted">Minimum reputation level five to access.</Notice>
   }

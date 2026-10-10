@@ -35,24 +35,23 @@ import {
   IconVault,
 } from './Icons.tsx'
 
+/** Prefetch only the primary payload for a route — keep free-tier pool pressure low. */
 const warm: Record<string, string[]> = {
-  '/': ['/api/heists/history', '/api/work/contracts', '/api/community'],
-  '/heists': ['/api/heists/targets', '/api/me/weapons', '/api/shop'],
-  '/assets': ['/api/properties', '/api/materials'],
-  '/workshop': ['/api/workshop', '/api/materials'],
-  '/market': ['/api/me/weapons', '/api/shop', '/api/properties'],
-  '/black-market': ['/api/black-market', '/api/mods', '/api/me/weapons'],
-  '/arsenal': ['/api/me/weapons', '/api/shop', '/api/mods'],
+  '/': ['/api/community'],
+  '/heists': ['/api/heists/targets'],
+  '/assets': ['/api/properties'],
+  '/workshop': ['/api/workshop'],
+  '/market': ['/api/shop'],
+  '/black-market': ['/api/black-market'],
+  '/arsenal': ['/api/me/weapons'],
   '/vault': ['/api/me/vault'],
-  '/work': ['/api/work/contracts', '/api/work/passive'],
-  '/reputation': ['/api/reputation', '/api/career'],
-  '/territory': ['/api/territory', '/api/career'],
+  '/work': ['/api/work/contracts'],
+  '/reputation': ['/api/reputation'],
+  '/territory': ['/api/territory'],
   '/map': ['/api/map/bases'],
   '/leaderboard': ['/api/leaderboard'],
   '/achievements': ['/api/achievements'],
   '/notifications': ['/api/notifications'],
-  '/profile': ['/api/me'],
-  '/heat': ['/api/me'],
   '/bounties': ['/api/bounties'],
 }
 
@@ -312,7 +311,7 @@ export function Shell() {
       }
     }
     void look()
-    const timer = window.setInterval(() => void look(), 30_000)
+    const timer = window.setInterval(() => void look(), 60_000)
     const onVis = () => {
       if (!document.hidden) void look()
     }

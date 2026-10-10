@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, clearToken, getToken, setToken } from './api.ts'
+import { ApiError, api, clearToken, getToken, setToken } from './api.ts'
 import type { Profile } from './types.ts'
 
 type AuthValue = {
@@ -21,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(Boolean(getToken()))
 
   async function refresh() {
+    // api() already delays/retries on DB_BUSY (free-tier pool pressure).
     setMe(await api<Profile>('/api/me'))
   }
 
@@ -50,12 +51,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    refresh()
-      .catch(() => {
-        clearToken()
-        setMe(null)
-      })
-      .finally(() => setLoading(false))
+    let cancelled = false
+    async function bootProfile() {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const profile = await api<Profile>('/api/me')
+          if (!cancelled) setMe(profile)
+          return
+        } catch (err) {
+          // Pool / boot blips must not wipe the session — only real 401s.
+          if (err instanceof ApiError && err.status === 401) {
+            if (!cancelled) {
+              clearToken()
+              setMe(null)
+            }
+            return
+          }
+          await new Promise((r) => setTimeout(r, 350 * 2 ** attempt))
+        }
+      }
+    }
+    void bootProfile().finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function login(token: string) {

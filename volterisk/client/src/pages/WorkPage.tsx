@@ -23,6 +23,7 @@ export function WorkPage() {
   const [missing, setMissing] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [, setClock] = useState(0)
 
   async function reload() {
     const [data, jobs] = await Promise.all([
@@ -44,6 +45,27 @@ export function WorkPage() {
       setError(err instanceof ApiError ? err.message : 'The board did not come down.')
     })
   }, [])
+
+  // Local clock only — no background API polling for the countdown.
+  useEffect(() => {
+    if (!board?.active || board.active.ready) return
+    const ends = Date.parse(board.active.completesAt)
+    if (!Number.isFinite(ends)) return
+    const tick = () => {
+      if (Date.now() < ends) {
+        setClock((n) => n + 1)
+        return
+      }
+      setBoard((current) =>
+        current?.active && !current.active.ready
+          ? { ...current, active: { ...current.active, ready: true } }
+          : current,
+      )
+    }
+    tick()
+    const timer = window.setInterval(tick, 1_000)
+    return () => window.clearInterval(timer)
+  }, [board?.active?.completesAt, board?.active?.ready])
 
   async function accept(contractId: string) {
     setBusy(true)

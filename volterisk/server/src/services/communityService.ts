@@ -5,9 +5,10 @@ const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
 let communityCache: { at: number; value: Awaited<ReturnType<typeof readCommunityBoard>> } | null = null;
 
 export async function communityBoard() {
-  if (process.env.VERCEL && communityCache && Date.now() - communityCache.at < 20_000) return communityCache.value;
+  // Shared board — short TTL cuts free-tier load for every online player.
+  if (communityCache && Date.now() - communityCache.at < 20_000) return communityCache.value;
   const value = await readCommunityBoard();
-  if (process.env.VERCEL) communityCache = { at: Date.now(), value };
+  communityCache = { at: Date.now(), value };
   return value;
 }
 

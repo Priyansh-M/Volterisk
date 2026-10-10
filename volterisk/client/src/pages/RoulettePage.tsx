@@ -110,7 +110,7 @@ export function RoulettePage() {
         .finally(() => {
           pending = false
         })
-    }, 1500)
+    }, 2_500)
     return () => window.clearInterval(timer)
   }, [mode, lobby?.id, seenSpin])
 

@@ -17,8 +17,8 @@ let inflight: Promise<void> | null = null
 let last: DeskSnapshot | null = null
 let visBound = false
 
-/** One shared poll for SoftToast + LedgerAlerts instead of two overlapping loops. */
-const INTERVAL_MS = 30_000
+/** One shared poll for SoftToast + LedgerAlerts. Keep light on free-tier Supabase. */
+const INTERVAL_MS = 45_000
 
 async function tick() {
   if (typeof document !== 'undefined' && document.hidden) return
