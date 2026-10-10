@@ -15,26 +15,38 @@ if (!usesPostgres()) {
   fs.mkdirSync(path.join(serverRoot, "data"), { recursive: true });
 }
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+  prismaInflight?: number;
+};
 
 /**
- * Supabase port 6543 is transaction mode. Prisma interactive transactions, which
- * register and every cash move use, never finish there, so the button spins.
- * The same pooler on port 5432 is session mode and can run those transactions.
+ * Supabase port 6543 is transaction mode. Prisma interactive `$transaction`
+ * callbacks (every cash move) never finish there. Port 5432 is session mode
+ * and can run them — but Supabase free tier caps session clients at pool_size
+ * (often 15). Each PrismaClient with connection_limit>1, or each idle isolate
+ * that never disconnects, burns a slot until EMAXCONNSESSION.
  *
- * Keep connection_limit=1 per serverless isolate so we do not exhaust Supabase
- * free-tier slots. Never open nested global-prisma queries inside $transaction.
+ * Always force connection_limit=1 on the session pooler, and release the
+ * connection when no request is in flight (see trackPrismaRequest).
+ * Never open nested global-prisma queries inside `$transaction`.
  */
 function runtimeDatabaseUrl(): string | undefined {
   const raw = process.env.DATABASE_URL;
-  if (!process.env.VERCEL || !raw) return undefined;
+  if (!raw) return undefined;
+  if (!(raw.startsWith("postgres://") || raw.startsWith("postgresql://"))) return undefined;
   try {
     const url = new URL(raw);
-    if (url.port === "6543") {
+    const host = url.hostname.toLowerCase();
+    const isSupabasePooler = host.includes("pooler.supabase.com") || host.includes("pooler.supabase");
+    const isTxnPort = url.port === "6543";
+    // Remap transaction-mode pooler → session mode whenever interactive txs are required.
+    if (isTxnPort && (process.env.VERCEL || isSupabasePooler)) {
       url.port = "5432";
       url.searchParams.delete("pgbouncer");
     }
-    if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "1");
+    // Session pool is tiny — never let a single isolate open more than one client.
+    url.searchParams.set("connection_limit", "1");
     if (!url.searchParams.has("connect_timeout")) url.searchParams.set("connect_timeout", "10");
     if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "20");
     return url.toString();
@@ -54,6 +66,62 @@ export const prisma =
     },
   });
 globalForPrisma.prisma = prisma;
+globalForPrisma.prismaInflight ??= 0;
+
+function isMaxConnError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return /EMAXCONNSESSION|max clients reached|too many clients/i.test(msg);
+}
+
+/** Drop the session-mode client when the isolate is idle so other isolates can connect. */
+export async function releasePrismaConnection(): Promise<void> {
+  if ((globalForPrisma.prismaInflight ?? 0) > 0) return;
+  // Brief defer so a follow-up request on the same isolate can claim the client
+  // before we tear it down (avoids disconnect racing the next query).
+  await new Promise<void>((r) => setTimeout(r, 25));
+  if ((globalForPrisma.prismaInflight ?? 0) > 0) return;
+  try {
+    await prisma.$disconnect();
+  } catch {
+    /* already closed */
+  }
+}
+
+/**
+ * Wrap a Vercel request so the session connection is released after the last
+ * concurrent handler finishes. Safe to call locally (no-op disconnect cost is fine).
+ */
+export function trackPrismaRequest(res: { once: (event: "finish" | "close", fn: () => void) => void }): void {
+  globalForPrisma.prismaInflight = (globalForPrisma.prismaInflight ?? 0) + 1;
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    globalForPrisma.prismaInflight = Math.max(0, (globalForPrisma.prismaInflight ?? 1) - 1);
+    if ((globalForPrisma.prismaInflight ?? 0) === 0 && process.env.VERCEL) {
+      void releasePrismaConnection();
+    }
+  };
+  res.once("finish", finish);
+  res.once("close", finish);
+}
+
+async function withConnRetry<T>(label: string, fn: () => Promise<T>, attempts = 4): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      last = error;
+      if (!isMaxConnError(error) || i === attempts - 1) throw error;
+      const wait = 200 * 2 ** i + Math.floor(Math.random() * 100);
+      console.warn(`[prisma] ${label}: pool busy, retry in ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+      await releasePrismaConnection();
+    }
+  }
+  throw last;
+}
 
 function missingWeaponTable(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
@@ -70,11 +138,23 @@ async function tableExists(probe: () => Promise<unknown>): Promise<boolean> {
 }
 
 async function weaponTableExists(): Promise<boolean> {
-  return tableExists(() => prisma.weapon.findFirst({ select: { id: true } }));
+  return withConnRetry("weaponTableExists", () => tableExists(() => prisma.weapon.findFirst({ select: { id: true } })));
 }
 
 async function bountyTableExists(): Promise<boolean> {
-  return tableExists(() => prisma.bounty.findFirst({ select: { id: true } }));
+  return withConnRetry("bountyTableExists", () => tableExists(() => prisma.bounty.findFirst({ select: { id: true } })));
+}
+
+async function territoryHoldingExists(): Promise<boolean> {
+  return withConnRetry("territoryHoldingExists", () =>
+    tableExists(() => prisma.territoryHolding.findFirst({ select: { id: true } })),
+  );
+}
+
+async function marketListingExists(): Promise<boolean> {
+  return withConnRetry("marketListingExists", () =>
+    tableExists(() => prisma.marketListing.findFirst({ select: { id: true } })),
+  );
 }
 
 function pushSchema(): void {
@@ -233,6 +313,11 @@ export async function configureSqlite(): Promise<void> {
 /** Add L11 territory columns/tables when db push was skipped (esp. Postgres). */
 export async function ensureTerritorySchema(): Promise<void> {
   if (territorySchemaReady) return;
+  // Fast path: production already has TerritoryHolding — skip a dozen ALTERs per cold start.
+  if (await territoryHoldingExists()) {
+    territorySchemaReady = true;
+    return;
+  }
   const alters = [
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "policeAttention" INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "policeSettledOn" TEXT`,
@@ -315,6 +400,16 @@ export async function ensureTerritorySchema(): Promise<void> {
 /** Careers + ModOwned + UserWeapon.listed (safe ADD COLUMN / CREATE TABLE). */
 export async function ensureCareerModsSchema(): Promise<void> {
   if (careerModsSchemaReady) return;
+  // Fast path: MarketListing + ModOwned means black market / mods schema is live.
+  if (await marketListingExists()) {
+    const hasMods = await withConnRetry("modOwnedProbe", () =>
+      tableExists(() => prisma.modOwned.findFirst({ select: { id: true } })),
+    );
+    if (hasMods) {
+      careerModsSchemaReady = true;
+      return;
+    }
+  }
   const userCols = [
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "primaryCareer" TEXT`,
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "secondaryCareer" TEXT`,

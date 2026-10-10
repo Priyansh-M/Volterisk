@@ -10,14 +10,17 @@ async function expireOpen() {
   const now = new Date();
   const stale = await prisma.marketListing.findMany({
     where: { status: "open", expiresAt: { lte: now } },
+    take: 40,
   });
-  for (const row of stale) {
-    await prisma.$transaction(async (tx) => {
+  if (stale.length === 0) return;
+  // One interactive transaction — connection_limit=1 cannot run N parallel txs.
+  await prisma.$transaction(async (tx) => {
+    for (const row of stale) {
       const closed = await tx.marketListing.updateMany({
         where: { id: row.id, status: "open" },
         data: { status: "expired" },
       });
-      if (closed.count !== 1) return;
+      if (closed.count !== 1) continue;
       if (row.kind === "material") {
         await creditItem(tx, row.sellerId, row.itemId, row.quantity);
       } else if (row.kind === "weapon" && row.userWeaponId) {
@@ -31,8 +34,8 @@ async function expireOpen() {
           data: { status: "inventory" },
         });
       }
-    });
-  }
+    }
+  });
 }
 
 function sellerProceeds(price: number) {

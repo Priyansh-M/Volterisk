@@ -7,6 +7,7 @@ import {
   ensureCareerModsSchema,
   ensureDatabase,
   ensureTerritorySchema,
+  releasePrismaConnection,
   usesPostgres,
 } from "./prisma.js";
 import { setReady } from "./runtime.js";
@@ -27,6 +28,11 @@ async function boot(): Promise<void> {
     if (!usesPostgres()) {
       throw new Error("Set DATABASE_URL to the Supabase pooler URL (postgresql://).");
     }
+  } else if (usesPostgres() && process.env.ALLOW_REMOTE_DB !== "1") {
+    // .env often has the Supabase pooler URL; local servers must not steal session slots from prod.
+    throw new Error(
+      "Local API refused remote DATABASE_URL (would exhaust Supabase session pool). Use npm run dev (SQLite) or set ALLOW_REMOTE_DB=1.",
+    );
   }
   if (!usesPostgres()) {
     await ensureDatabase();
@@ -44,6 +50,9 @@ async function boot(): Promise<void> {
     };
     tick();
     setInterval(tick, 15 * 60_000);
+  } else {
+    // Boot held a session client for probes — free it until the first request.
+    await releasePrismaConnection();
   }
 }
 
