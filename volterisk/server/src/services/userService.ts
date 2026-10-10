@@ -165,8 +165,8 @@ export async function loginPlayer(username: string, password: string) {
   }
   const token = signToken(user);
   try {
-    // Skip heat/passive/yield settles on login — /api/me right after handles them.
-    // That kept login off the heavy path that was 500ing under pool pressure.
+    // Light profile on login (no settles). Client already has the user payload —
+    // avoid a second heavy /api/me that was surfacing as "Server error".
     const profile = await getProfile(user.id, { settle: false });
     return { token, user: profile };
   } catch (error) {
@@ -206,33 +206,37 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
     await settleVaultYield(userId).catch(() => null);
     await settlePropertyMaterialYields(userId).catch(() => null);
   }
-  // Sequential reads on purpose under connection_limit=1 (parallel still queues; keep simple).
-  const [user, won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        vault: true,
-        base: true,
-        weapons: { where: { equipped: true }, include: { weapon: true } },
-      },
-    }),
-    prisma.heist.aggregate({
-      where: { attackerId: userId, success: true },
-      _sum: { amountStolen: true },
-      _count: true,
-    }),
-    prisma.heist.count({ where: { attackerId: userId, success: false } }),
-    prisma.heist.aggregate({
-      where: { targetId: userId, success: true },
-      _sum: { amountStolen: true },
-    }),
-    publicProfileFor(userId),
-    unclaimedCount(userId),
-    cooldownEndsAt(userId),
-  ]);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      vault: true,
+      base: true,
+      weapons: { where: { equipped: true }, include: { weapon: true } },
+    },
+  });
   if (!user || !user.vault) {
     throw new GameError(404, "NOT_FOUND", "Player not found.");
   }
+  // Secondary stats — never fail the whole profile if one aggregate is slow/busy.
+  const [won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
+    prisma.heist
+      .aggregate({
+        where: { attackerId: userId, success: true },
+        _sum: { amountStolen: true },
+        _count: true,
+      })
+      .catch(() => ({ _sum: { amountStolen: 0 }, _count: 0 })),
+    prisma.heist.count({ where: { attackerId: userId, success: false } }).catch(() => 0),
+    prisma.heist
+      .aggregate({
+        where: { targetId: userId, success: true },
+        _sum: { amountStolen: true },
+      })
+      .catch(() => ({ _sum: { amountStolen: 0 } })),
+    publicProfileFor(userId).catch(() => null),
+    unclaimedCount(userId).catch(() => 0),
+    cooldownEndsAt(userId).catch(() => null),
+  ]);
 
   const successfulHeists = won._count;
   const level = user.reputationLevel;

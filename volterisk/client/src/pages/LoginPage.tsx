@@ -24,9 +24,10 @@ export function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       })
-      if (!result.token || !result.user?.onboarding) throw new ApiError('The API did not return a session.', 502)
-      await login(result.token)
-      navigate(result.user.onboarding.hasBase ? '/' : '/map')
+      if (!result.token || !result.user) throw new ApiError('The API did not return a session.', 502)
+      // Use the login payload directly — a second /api/me was failing as "Server error".
+      await login(result.token, result.user)
+      navigate(result.user.onboarding?.hasBase ? '/' : '/map')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in.')
     } finally {

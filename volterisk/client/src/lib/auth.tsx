@@ -10,7 +10,7 @@ type AuthValue = {
   /** Optimistic spend: card users debit vault; others debit pocket cash. */
   applySpend: (amount: number) => void
   patchMe: (update: (current: Profile) => Profile) => void
-  login: (token: string) => Promise<void>
+  login: (token: string, profile?: Profile) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -21,7 +21,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(Boolean(getToken()))
 
   async function refresh() {
-    // api() already delays/retries on DB_BUSY (free-tier pool pressure).
     setMe(await api<Profile>('/api/me'))
   }
 
@@ -59,7 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!cancelled) setMe(profile)
           return
         } catch (err) {
-          // Pool / boot blips must not wipe the session — only real 401s.
           if (err instanceof ApiError && err.status === 401) {
             if (!cancelled) {
               clearToken()
@@ -79,8 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  async function login(token: string) {
+  async function login(token: string, profile?: Profile) {
     setToken(token)
+    if (profile) {
+      setMe(profile)
+      // Refresh in background so settles/rank catch up without blocking sign-in.
+      void refresh().catch(() => undefined)
+      return
+    }
     await refresh()
   }
 

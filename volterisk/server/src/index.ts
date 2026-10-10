@@ -7,7 +7,6 @@ import {
   ensureCareerModsSchema,
   ensureDatabase,
   ensureTerritorySchema,
-  releasePrismaConnection,
   usesPostgres,
 } from "./prisma.js";
 import { setReady } from "./runtime.js";
@@ -50,9 +49,6 @@ async function boot(): Promise<void> {
     };
     tick();
     setInterval(tick, 15 * 60_000);
-  } else {
-    // Boot held a session client for probes — free it until the first request.
-    await releasePrismaConnection({ immediate: true });
   }
 }
 

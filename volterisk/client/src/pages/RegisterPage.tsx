@@ -70,7 +70,7 @@ export function RegisterPage() {
         body: JSON.stringify({ username, password }),
       })
       if (!result.token) throw new ApiError('The API did not return a session.', 502)
-      await login(result.token)
+      await login(result.token, result.user)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not open a ledger.')
     } finally {
