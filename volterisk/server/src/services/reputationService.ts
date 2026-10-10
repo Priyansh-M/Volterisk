@@ -218,7 +218,7 @@ function heistLabel(min: number): string {
 }
 
 const reputationFresh = new Map<string, { at: number; value: Awaited<ReturnType<typeof buildReputation>> }>();
-const REPUTATION_TTL_MS = 20_000;
+const REPUTATION_TTL_MS = 45_000;
 
 async function buildReputation(userId: string) {
   const { user, ctx } = await loadProgress(userId);

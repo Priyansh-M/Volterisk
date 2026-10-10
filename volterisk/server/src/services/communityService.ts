@@ -6,7 +6,7 @@ let communityCache: { at: number; value: Awaited<ReturnType<typeof readCommunity
 
 export async function communityBoard() {
   // Shared board — short TTL cuts free-tier load for every online player.
-  if (communityCache && Date.now() - communityCache.at < 20_000) return communityCache.value;
+  if (communityCache && Date.now() - communityCache.at < 45_000) return communityCache.value;
   const value = await readCommunityBoard();
   communityCache = { at: Date.now(), value };
   return value;

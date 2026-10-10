@@ -67,6 +67,27 @@ export function isDbBusyError(error: unknown): boolean {
   );
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Retry pool saturation / reconnect races. Does not change game outcomes. */
+export async function withDbRetry<T>(fn: () => Promise<T>, attempts = 6): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      if (i > 0) await prisma.$connect().catch(() => undefined);
+      return await fn();
+    } catch (error) {
+      last = error;
+      if (!isDbBusyError(error) || i + 1 >= attempts) throw error;
+      // Back off so other isolates can free a session slot (pool_size 15).
+      await sleep(120 * 2 ** i + Math.floor(Math.random() * 180));
+    }
+  }
+  throw last;
+}
+
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
@@ -78,24 +99,61 @@ export const prisma =
   });
 globalForPrisma.prisma = prisma;
 
-/** Warm the engine during boot so the first HTTP request is not racing connect. */
+/**
+ * Free-tier session pool is ~15 slots. Each Vercel isolate that stays connected
+ * forever starves login. Hold the connection only while requests are in flight,
+ * then idle-release. Always $connect() again before the next request (see app).
+ */
+let prismaInFlight = 0;
+let idleReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+const IDLE_RELEASE_MS = process.env.VERCEL ? 2_000 : 30_000;
+
+function clearIdleRelease(): void {
+  if (idleReleaseTimer) {
+    clearTimeout(idleReleaseTimer);
+    idleReleaseTimer = null;
+  }
+}
+
+function scheduleIdleRelease(): void {
+  if (prismaInFlight > 0) return;
+  clearIdleRelease();
+  idleReleaseTimer = setTimeout(() => {
+    idleReleaseTimer = null;
+    if (prismaInFlight > 0) return;
+    void prisma.$disconnect().catch(() => undefined);
+  }, IDLE_RELEASE_MS);
+}
+
+/** Warm / reconnect the engine. Safe to call every request. */
 export async function ensurePrismaConnected(): Promise<void> {
-  await prisma.$connect();
+  clearIdleRelease();
+  await withDbRetry(() => prisma.$connect());
 }
 
-/**
- * @deprecated No-op. Idle $disconnect after requests caused
- * "Engine is not yet connected" on Vercel — never disconnect between HTTP requests.
- */
-export async function releasePrismaConnection(_opts?: { immediate?: boolean }): Promise<void> {
-  /* intentionally empty */
+/** Release after idle — never mid-request. */
+export async function releasePrismaConnection(opts?: { immediate?: boolean }): Promise<void> {
+  if (opts?.immediate) {
+    clearIdleRelease();
+    if (prismaInFlight === 0) await prisma.$disconnect().catch(() => undefined);
+    return;
+  }
+  scheduleIdleRelease();
 }
 
-/**
- * @deprecated No-op. Kept so older api/index call sites compile; do not reconnect disconnect logic.
- */
-export function trackPrismaRequest(_res: { once: (event: "finish" | "close", fn: () => void) => void }): void {
-  /* intentionally empty */
+/** Count HTTP work so idle disconnect cannot race an open response. */
+export function trackPrismaRequest(res: { once: (event: "finish" | "close", fn: () => void) => void }): void {
+  prismaInFlight += 1;
+  clearIdleRelease();
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    prismaInFlight = Math.max(0, prismaInFlight - 1);
+    scheduleIdleRelease();
+  };
+  res.once("finish", end);
+  res.once("close", end);
 }
 
 function missingWeaponTable(error: unknown): boolean {

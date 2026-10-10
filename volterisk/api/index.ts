@@ -40,6 +40,6 @@ function withApiPrefix(req: RequestWithUrl): string {
 
 export default function handler(req: RequestWithUrl, res: ServerResponse): void {
   req.url = withApiPrefix(req);
-  // Keep the Prisma client warm for the isolate lifetime — do not disconnect after requests.
+  // Idle release + reconnect live in app middleware (frees Supabase session slots).
   app(req, res);
 }

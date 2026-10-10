@@ -86,8 +86,35 @@ function shouldRetryBusy(status: number, code?: string) {
 }
 
 /**
+ * Cap parallel API calls so one page load cannot open many Vercel isolates
+ * against Supabase's 15 session slots. Features unchanged — requests queue.
+ */
+const MAX_PARALLEL = 2
+let parallel = 0
+const waiters: Array<() => void> = []
+
+function acquireSlot(): Promise<void> {
+  if (parallel < MAX_PARALLEL) {
+    parallel += 1
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => {
+    waiters.push(() => {
+      parallel += 1
+      resolve()
+    })
+  })
+}
+
+function releaseSlot() {
+  parallel = Math.max(0, parallel - 1)
+  const next = waiters.shift()
+  if (next) next()
+}
+
+/**
  * Retry only on ledger-busy. Auth/validation/server bugs fail immediately.
- * Max 2 attempts so a busy blip delays ~0.4s instead of hanging for seconds.
+ * A few longer backoffs give session slots time to free under free-tier pressure.
  */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
@@ -97,37 +124,42 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const method = (options.method ?? 'GET').toUpperCase()
   if (method !== 'GET') invalidateGets()
 
-  const maxAttempts = 2
-  let lastError: ApiError | null = null
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const response = await fetch(requestUrl(path), { ...options, headers })
-    const text = await response.text()
-    let data: {
-      error?: string | { code?: string; message?: string }
-      code?: string
-      issues?: { path: string; message: string }[]
-    } = {}
-    if (text) {
-      try {
-        data = JSON.parse(text) as typeof data
-      } catch {
-        throw new ApiError(
-          'The API did not answer. This site reached the page instead of /api.',
-          response.status || 502,
-        )
+  await acquireSlot()
+  try {
+    const maxAttempts = 4
+    let lastError: ApiError | null = null
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const response = await fetch(requestUrl(path), { ...options, headers })
+      const text = await response.text()
+      let data: {
+        error?: string | { code?: string; message?: string }
+        code?: string
+        issues?: { path: string; message: string }[]
+      } = {}
+      if (text) {
+        try {
+          data = JSON.parse(text) as typeof data
+        } catch {
+          throw new ApiError(
+            'The API did not answer. This site reached the page instead of /api.',
+            response.status || 502,
+          )
+        }
       }
+      if (response.ok) return data as T
+      const nested = data.error && typeof data.error === 'object' ? data.error : null
+      const message = nested?.message || (typeof data.error === 'string' ? data.error : response.statusText)
+      const code = nested?.code || data.code
+      const detail = data.issues?.find((issue) => issue.message)?.message
+      lastError = new ApiError(detail || message, response.status, code, data.issues)
+      if (attempt + 1 < maxAttempts && shouldRetryBusy(response.status, code)) {
+        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.floor(Math.random() * 200)))
+        continue
+      }
+      throw lastError
     }
-    if (response.ok) return data as T
-    const nested = data.error && typeof data.error === 'object' ? data.error : null
-    const message = nested?.message || (typeof data.error === 'string' ? data.error : response.statusText)
-    const code = nested?.code || data.code
-    const detail = data.issues?.find((issue) => issue.message)?.message
-    lastError = new ApiError(detail || message, response.status, code, data.issues)
-    if (attempt + 1 < maxAttempts && shouldRetryBusy(response.status, code)) {
-      await new Promise((r) => setTimeout(r, 350 + Math.floor(Math.random() * 100)))
-      continue
-    }
-    throw lastError
+    throw lastError ?? new ApiError('Request failed', 500)
+  } finally {
+    releaseSlot()
   }
-  throw lastError ?? new ApiError('Request failed', 500)
 }

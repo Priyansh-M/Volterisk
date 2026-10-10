@@ -8,6 +8,7 @@ import {
   ensureDatabase,
   ensurePrismaConnected,
   ensureTerritorySchema,
+  releasePrismaConnection,
   usesPostgres,
 } from "./prisma.js";
 import { setReady } from "./runtime.js";
@@ -34,7 +35,6 @@ async function boot(): Promise<void> {
       "Local API refused remote DATABASE_URL (would exhaust Supabase session pool). Use npm run dev (SQLite) or set ALLOW_REMOTE_DB=1.",
     );
   }
-  // Connect once per isolate; never $disconnect between requests on Vercel.
   await ensurePrismaConnected();
   if (!usesPostgres()) {
     await ensureDatabase();
@@ -45,6 +45,10 @@ async function boot(): Promise<void> {
   await ensureTerritorySchema();
   await ensureCareerModsSchema();
   await ensureNightCrew();
+  // Free session slot after boot probes — next HTTP request reconnects.
+  if (process.env.VERCEL) {
+    await releasePrismaConnection({ immediate: true });
+  }
   if (!process.env.VERCEL) {
     const tick = () => {
       void settleVaultYieldNoonGmt().catch(() => null);

@@ -5,7 +5,7 @@ import { Portrait } from './Portrait.tsx'
 import { Level11Guide } from './Level11Guide.tsx'
 import { ReputationAlert } from './ReputationAlert.tsx'
 import { SoftToast } from './SoftToast.tsx'
-import { api, prefetch } from '../lib/api.ts'
+import { api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
@@ -34,26 +34,6 @@ import {
   IconTool,
   IconVault,
 } from './Icons.tsx'
-
-/** Prefetch only the primary payload for a route — keep free-tier pool pressure low. */
-const warm: Record<string, string[]> = {
-  '/': ['/api/community'],
-  '/heists': ['/api/heists/targets'],
-  '/assets': ['/api/properties'],
-  '/workshop': ['/api/workshop'],
-  '/market': ['/api/shop'],
-  '/black-market': ['/api/black-market'],
-  '/arsenal': ['/api/me/weapons'],
-  '/vault': ['/api/me/vault'],
-  '/work': ['/api/work/contracts'],
-  '/reputation': ['/api/reputation'],
-  '/territory': ['/api/territory'],
-  '/map': ['/api/map/bases'],
-  '/leaderboard': ['/api/leaderboard'],
-  '/achievements': ['/api/achievements'],
-  '/notifications': ['/api/notifications'],
-  '/bounties': ['/api/bounties'],
-}
 
 type NavItem = { to: string; label: string; end?: boolean; Icon: typeof IconHome; casino?: boolean }
 
@@ -311,7 +291,7 @@ export function Shell() {
       }
     }
     void look()
-    const timer = window.setInterval(() => void look(), 60_000)
+    const timer = window.setInterval(() => void look(), 120_000)
     const onVis = () => {
       if (!document.hidden) void look()
     }
@@ -614,8 +594,7 @@ export function Shell() {
                           to={link.to}
                           end={link.end}
                           title={collapsed ? link.label : undefined}
-                          onMouseEnter={() => warm[link.to]?.forEach(prefetch)}
-                          onFocus={() => warm[link.to]?.forEach(prefetch)}
+                          /* Prefetch on click path only — hover warm was opening extra isolates. */
                           onClick={(event) => {
                             if (link.to === '/workshop' && (me?.level ?? 0) < WORKSHOP_MIN_REPUTATION) {
                               event.preventDefault()

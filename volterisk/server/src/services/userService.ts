@@ -11,7 +11,7 @@ import {
   titleForLevel,
   weaponById,
 } from "../game/rules.js";
-import { isDbBusyError, prisma } from "../prisma.js";
+import { isDbBusyError, prisma, withDbRetry } from "../prisma.js";
 import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js";
 import { unclaimedCount } from "./achievementService.js";
 import { settleHeatState } from "./heatService.js";
@@ -157,16 +157,16 @@ export async function usernameAvailable(raw: string): Promise<{ available: boole
 
 export async function loginPlayer(username: string, password: string) {
   const usernameKey = username.trim().toLowerCase();
-  const user = await prisma.user.findUnique({ where: { usernameKey } });
+  const user = await withDbRetry(() => prisma.user.findUnique({ where: { usernameKey } }));
   const valid = user ? await bcrypt.compare(password, user.passwordHash) : false;
   if (!user || !valid) {
     throw new GameError(401, "BAD_CREDENTIALS", "Wrong username or password.");
   }
   const token = signToken(user);
   try {
-    // Light profile on login (no settles). Client already has the user payload —
-    // avoid a second heavy /api/me that was surfacing as "Server error".
-    const profile = await getProfile(user.id, { settle: false });
+    // Light profile on login (no settles / no heist aggregates). Client uses this
+    // payload to enter; /api/me fills stats in the background.
+    const profile = await withDbRetry(() => getProfile(user.id, { settle: false }));
     return { token, user: profile };
   } catch (error) {
     if (error instanceof GameError) throw error;
@@ -198,8 +198,9 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 }
 
 export async function getProfile(userId: string, opts?: { settle?: boolean }) {
+  const light = opts?.settle === false;
   // Settles are independent of the profile read. Never let them fail login/me.
-  if (opts?.settle !== false) {
+  if (!light) {
     await settleHeatState(userId).catch(() => null);
     await settlePassivePay(userId).catch(() => null);
     await settleVaultYield(userId).catch(() => null);
@@ -216,28 +217,41 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
   if (!user || !user.vault) {
     throw new GameError(404, "NOT_FOUND", "Player not found.");
   }
-  // Secondary stats — never fail the whole profile if one aggregate is slow/busy.
-  // Rank comes from the leaderboard page; scanning every player here timed out login.
-  const [won, failed, lost, unclaimed, cooldown] = await Promise.all([
-    prisma.heist
-      .aggregate({
-        where: { attackerId: userId, success: true },
-        _sum: { amountStolen: true },
-        _count: true,
-      })
-      .catch(() => ({ _sum: { amountStolen: 0 }, _count: 0 })),
-    prisma.heist.count({ where: { attackerId: userId, success: false } }).catch(() => 0),
-    prisma.heist
-      .aggregate({
-        where: { targetId: userId, success: true },
-        _sum: { amountStolen: true },
-      })
-      .catch(() => ({ _sum: { amountStolen: 0 } })),
-    unclaimedCount(userId).catch(() => 0),
-    cooldownEndsAt(userId).catch(() => null),
-  ]);
+  // Login uses light=true: one user read only. Full /api/me loads heist stats.
+  // Same profile shape either way — features unchanged, login just arrives sooner.
+  let successfulHeists = 0;
+  let failed = 0;
+  let totalStolen = 0;
+  let totalLost = 0;
+  let unclaimed = 0;
+  let cooldown: string | null = null;
+  if (!light) {
+    const [won, failedCount, lost, unclaimedCountValue, cooldownValue] = await Promise.all([
+      prisma.heist
+        .aggregate({
+          where: { attackerId: userId, success: true },
+          _sum: { amountStolen: true },
+          _count: true,
+        })
+        .catch(() => ({ _sum: { amountStolen: 0 }, _count: 0 })),
+      prisma.heist.count({ where: { attackerId: userId, success: false } }).catch(() => 0),
+      prisma.heist
+        .aggregate({
+          where: { targetId: userId, success: true },
+          _sum: { amountStolen: true },
+        })
+        .catch(() => ({ _sum: { amountStolen: 0 } })),
+      unclaimedCount(userId).catch(() => 0),
+      cooldownEndsAt(userId).catch(() => null),
+    ]);
+    successfulHeists = won._count;
+    failed = failedCount;
+    totalStolen = won._sum.amountStolen ?? 0;
+    totalLost = lost._sum.amountStolen ?? 0;
+    unclaimed = unclaimedCountValue;
+    cooldown = cooldownValue;
+  }
 
-  const successfulHeists = won._count;
   const level = user.reputationLevel;
   const equipped = user.weapons[0];
   return {
@@ -290,13 +304,13 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
     stats: {
       successfulHeists,
       failedHeists: failed,
-      totalStolen: won._sum.amountStolen ?? 0,
-      totalLost: lost._sum.amountStolen ?? 0,
+      totalStolen,
+      totalLost,
     },
   };
 }
 
-const BOARD_CACHE_MS = 20_000;
+const BOARD_CACHE_MS = 45_000;
 
 type VaultStanding = {
   rank: number;

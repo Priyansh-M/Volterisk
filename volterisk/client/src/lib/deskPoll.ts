@@ -18,17 +18,16 @@ let last: DeskSnapshot | null = null
 let visBound = false
 
 /** One shared poll for SoftToast + LedgerAlerts. Keep light on free-tier Supabase. */
-const INTERVAL_MS = 45_000
+const INTERVAL_MS = 90_000
 
 async function tick() {
   if (typeof document !== 'undefined' && document.hidden) return
   if (inflight) return
   inflight = (async () => {
     try {
-      const [alerts, notes] = await Promise.all([
-        api<{ unlocked: Unlock[]; unclaimed?: number }>('/api/achievements/unannounced'),
-        api<{ notifications: GameNotice[] }>('/api/notifications'),
-      ])
+      // Sequential — same data, half the concurrent session pressure.
+      const alerts = await api<{ unlocked: Unlock[]; unclaimed?: number }>('/api/achievements/unannounced')
+      const notes = await api<{ notifications: GameNotice[] }>('/api/notifications')
       last = {
         notifications: notes.notifications,
         unlocked: alerts.unlocked,

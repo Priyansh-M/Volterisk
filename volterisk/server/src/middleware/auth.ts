@@ -1,13 +1,17 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { GameError } from "../game/errors.js";
-import { isDbBusyError, prisma } from "../prisma.js";
+import { isDbBusyError, prisma, withDbRetry } from "../prisma.js";
 
 function jwtSecret(): string {
   return process.env.JWT_SECRET || "iron-hour-local-dev";
 }
 
-/** Simple auth — no session cache / retry wrappers (those caused flaky logouts). */
+/** Short positive cache keyed by sub:tv — logout bumps tv so old keys never match. */
+const sessionOkUntil = new Map<string, number>();
+const SESSION_CACHE_MS = 45_000;
+
+/** Auth with pool-safe DB check. Cache cuts findUnique spam; never maps busy → 401. */
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
     const header = req.header("authorization") ?? "";
@@ -24,13 +28,26 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     if (!payload.sub || typeof payload.tv !== "number") {
       throw new GameError(401, "UNAUTHORIZED", "Invalid token.");
     }
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, tokenVersion: true },
-    });
-    if (!user || user.tokenVersion !== payload.tv) {
+    const sub = payload.sub;
+    const tv = payload.tv;
+    const cacheKey = `${sub}:${tv}`;
+    const cachedUntil = sessionOkUntil.get(cacheKey);
+    if (cachedUntil && cachedUntil > Date.now()) {
+      req.userId = sub;
+      next();
+      return;
+    }
+    const user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: sub },
+        select: { id: true, tokenVersion: true },
+      }),
+    );
+    if (!user || user.tokenVersion !== tv) {
+      sessionOkUntil.delete(cacheKey);
       throw new GameError(401, "UNAUTHORIZED", "Session expired.");
     }
+    sessionOkUntil.set(cacheKey, Date.now() + SESSION_CACHE_MS);
     req.userId = user.id;
     next();
   } catch (error) {

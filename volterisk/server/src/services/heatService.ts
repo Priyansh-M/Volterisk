@@ -329,8 +329,8 @@ export async function settleHeatState(userId: string): Promise<void> {
       data: { heat: cooled.heat, heatSettledAt: cooled.settledAt },
     });
   });
-  // Decay ticks every 2h; keep a short TTL so warning polls stay cheap.
-  heatStateFreshUntil.set(userId, now + 90_000);
+  // Decay ticks every 2h; longer TTL cuts free-tier settle spam from polls.
+  heatStateFreshUntil.set(userId, now + 120_000);
 }
 
 function latestCheckAt(nowMs: number): number | null {

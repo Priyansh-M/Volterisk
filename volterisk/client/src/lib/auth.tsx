@@ -81,8 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(token)
     if (profile) {
       setMe(profile)
-      // Refresh in background so settles/rank catch up without blocking sign-in.
-      void refresh().catch(() => undefined)
+      // Delay background /api/me so login is not fighting the same 15 session slots.
+      window.setTimeout(() => {
+        void refresh().catch(() => undefined)
+      }, 1_500)
       return
     }
     await refresh()

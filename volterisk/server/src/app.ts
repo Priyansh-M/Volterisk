@@ -2,7 +2,7 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ZodError } from "zod";
 import { GameError } from "./game/errors.js";
-import { isDbBusyError } from "./prisma.js";
+import { ensurePrismaConnected, isDbBusyError, trackPrismaRequest } from "./prisma.js";
 import { api } from "./routes/index.js";
 import { bootError, ready } from "./runtime.js";
 
@@ -15,13 +15,29 @@ export function createApp() {
       next();
       return;
     }
-    void ready.then(() => {
-      if (bootError) {
-        res.status(500).json({ error: bootError.message, code: "BOOT" });
-        return;
-      }
-      next();
-    });
+    // Hold one session slot only while this response is alive; reconnect before work.
+    trackPrismaRequest(res);
+    void ready
+      .then(async () => {
+        if (bootError) {
+          res.status(500).json({ error: bootError.message, code: "BOOT" });
+          return;
+        }
+        try {
+          await ensurePrismaConnected();
+          next();
+        } catch (error) {
+          if (isDbBusyError(error)) {
+            res.status(503).json({
+              error: "The ledger is busy. Try again in a moment.",
+              code: "DB_BUSY",
+            });
+            return;
+          }
+          next(error);
+        }
+      })
+      .catch(next);
   });
   app.use("/api", api);
   app.use("/api", (req, res) => {
