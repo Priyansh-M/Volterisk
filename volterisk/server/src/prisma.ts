@@ -57,25 +57,18 @@ function runtimeDatabaseUrl(): string | undefined {
 
 const databaseUrl = runtimeDatabaseUrl();
 
-/** Pool / unreachable DB — free-tier pressure should delay, not look like auth failure. */
+/** True pool exhaustion only — do not treat mid-request disconnects as "busy" (that broke login). */
 export function isDbBusyError(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P1001" || error.code === "P2024") return true;
   }
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   const msg = error instanceof Error ? error.message : String(error);
-  return /EMAXCONNSESSION|max clients reached|too many clients|timed out fetching a new connection|Can't reach database|Connection reset|Server has closed the connection|Transaction already closed/i.test(
-    msg,
-  );
+  return /EMAXCONNSESSION|max clients reached|too many clients|timed out fetching a new connection/i.test(msg);
 }
 
 /** Retry on pool pressure so actions delay instead of hard-failing on free tier. */
-export async function withConnRetry<T>(
-  label: string,
-  fn: () => Promise<T>,
-  attempts = 4,
-  disconnect?: () => Promise<void>,
-): Promise<T> {
+export async function withConnRetry<T>(label: string, fn: () => Promise<T>, attempts = 4): Promise<T> {
   let last: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -86,56 +79,32 @@ export async function withConnRetry<T>(
       const wait = 250 * 2 ** i + Math.floor(Math.random() * 150);
       console.warn(`[prisma] ${label}: pool busy, retry in ${wait}ms`);
       await new Promise((r) => setTimeout(r, wait));
-      if (disconnect && (globalForPrisma.prismaInflight ?? 0) <= 1) {
-        try {
-          await disconnect();
-        } catch {
-          /* closed */
-        }
-      }
     }
   }
   throw last;
 }
 
-function buildPrisma(): PrismaClient {
-  const client = new PrismaClient({
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
     ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
     transactionOptions: {
       maxWait: 10_000,
       timeout: 15_000,
     },
   });
-  // Free tier: if the pool is full when opening a transaction, wait/retry instead of failing the action.
-  const originalTx = client.$transaction.bind(client) as PrismaClient["$transaction"];
-  const softDisconnect = async () => {
-    try {
-      await client.$disconnect();
-    } catch {
-      /* closed */
-    }
-  };
-  client.$transaction = ((...args: Parameters<PrismaClient["$transaction"]>) =>
-    withConnRetry(
-      "$transaction",
-      () => (originalTx as (...a: unknown[]) => Promise<unknown>)(...args),
-      4,
-      softDisconnect,
-    )) as typeof client.$transaction;
-  return client;
-}
-
-export const prisma = globalForPrisma.prisma ?? buildPrisma();
 globalForPrisma.prisma = prisma;
 globalForPrisma.prismaInflight ??= 0;
 
 /** Drop the session-mode client when the isolate is idle so other isolates can connect. */
-export async function releasePrismaConnection(): Promise<void> {
+export async function releasePrismaConnection(opts?: { immediate?: boolean }): Promise<void> {
   if ((globalForPrisma.prismaInflight ?? 0) > 0) return;
   // Hold the session a few seconds so a page's burst of GETs can reuse it.
-  // Disconnecting after 25ms caused reconnect storms → lag + fake "Invalid token".
-  await new Promise<void>((r) => setTimeout(r, 4_000));
-  if ((globalForPrisma.prismaInflight ?? 0) > 0) return;
+  // Boot uses immediate so ready() is not blocked for 4s.
+  if (!opts?.immediate) {
+    await new Promise<void>((r) => setTimeout(r, 4_000));
+    if ((globalForPrisma.prismaInflight ?? 0) > 0) return;
+  }
   try {
     await prisma.$disconnect();
   } catch {

@@ -11,7 +11,7 @@ import {
   titleForLevel,
   weaponById,
 } from "../game/rules.js";
-import { prisma } from "../prisma.js";
+import { isDbBusyError, prisma } from "../prisma.js";
 import { recordStarterGrant, onboardingStateFrom } from "./onboardingService.js";
 import { unclaimedCount } from "./achievementService.js";
 import { settleHeatState } from "./heatService.js";
@@ -164,8 +164,21 @@ export async function loginPlayer(username: string, password: string) {
     throw new GameError(401, "BAD_CREDENTIALS", "Wrong username or password.");
   }
   const token = signToken(user);
-  const profile = await getProfile(user.id);
-  return { token, user: profile };
+  try {
+    const profile = await getProfile(user.id);
+    return { token, user: profile };
+  } catch (error) {
+    // Never turn a settle/pool blip into a blank "Server error" on an otherwise good login.
+    if (error instanceof GameError) throw error;
+    console.error("[login] getProfile failed after credentials ok", error);
+    throw new GameError(
+      503,
+      "DB_BUSY",
+      isDbBusyError(error)
+        ? "The ledger is busy. Try again in a moment."
+        : "Could not load your file. Try again in a moment.",
+    );
+  }
 }
 
 export async function logoutPlayer(userId: string): Promise<void> {
@@ -186,9 +199,9 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 
 export async function getProfile(userId: string) {
   // Sequential on purpose: Vercel uses connection_limit=1, so parallel $transactions deadlock.
-  // Caches inside each settle make repeat /api/me cheap after the first pass.
-  await settleHeatState(userId);
-  await settlePassivePay(userId);
+  // Settles must not fail login/me — pay/heat can catch up on the next load.
+  await settleHeatState(userId).catch(() => null);
+  await settlePassivePay(userId).catch(() => null);
   await settleVaultYield(userId).catch(() => null);
   await settlePropertyMaterialYields(userId).catch(() => null);
   const [user, won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([

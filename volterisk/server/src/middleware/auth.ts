@@ -33,21 +33,11 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       next();
       return;
     }
-    const user = await withConnRetry(
-      "auth.session",
-      () =>
-        prisma.user.findUnique({
-          where: { id: payload.sub },
-          select: { id: true, tokenVersion: true },
-        }),
-      4,
-      async () => {
-        try {
-          await prisma.$disconnect();
-        } catch {
-          /* closed */
-        }
-      },
+    const user = await withConnRetry("auth.session", () =>
+      prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, tokenVersion: true },
+      }),
     );
     if (!user || user.tokenVersion !== payload.tv) {
       throw new GameError(401, "UNAUTHORIZED", "Session expired.");
