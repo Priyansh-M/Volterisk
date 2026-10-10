@@ -3,6 +3,9 @@ import { prisma } from "../prisma.js";
 import { creditItem } from "./inventoryService.js";
 import { writeNotification } from "./notificationService.js";
 
+/** Skip re-checking the same UTC noon after a full settle (or confirmed empty). */
+const materialYieldSettledNoon = new Map<string, number>();
+
 /** Most recent 12:00 GMT that has already passed. */
 export function latestMaterialNoon(now = new Date()) {
   const noon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0, 0));
@@ -22,6 +25,7 @@ export async function settlePropertyMaterialYields(userId: string): Promise<numb
   const noon = latestMaterialNoon();
   const now = new Date();
   if (now.getTime() < noon.getTime()) return 0;
+  if ((materialYieldSettledNoon.get(userId) ?? 0) >= noon.getTime()) return 0;
 
   const catalogIds = PROPERTY_MATERIAL_YIELDS.map((r) => r.catalogId);
   const txTypes = PROPERTY_MATERIAL_YIELDS.map((r) => r.txType);
@@ -35,7 +39,10 @@ export async function settlePropertyMaterialYields(userId: string): Promise<numb
       select: { type: true },
     }),
   ]);
-  if (props.length === 0) return 0;
+  if (props.length === 0) {
+    materialYieldSettledNoon.set(userId, noon.getTime());
+    return 0;
+  }
   const paidTypes = new Set(already.map((row) => row.type));
 
   let paid = 0;
@@ -74,6 +81,7 @@ export async function settlePropertyMaterialYields(userId: string): Promise<numb
     });
     paid += 1;
   }
+  materialYieldSettledNoon.set(userId, noon.getTime());
   return paid;
 }
 

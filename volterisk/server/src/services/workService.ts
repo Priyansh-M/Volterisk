@@ -190,6 +190,9 @@ export async function acceptContract(userId: string, contractId: string) {
   const definition = workContractById(contractId);
   if (!definition) throw new GameError(400, "UNKNOWN_CONTRACT", "That contract is not on the books.");
 
+  const buffs = await territoryPassives(userId);
+  const cooldownMins = Math.max(0, RULES.WORK_CONTRACT_COOLDOWN_MINUTES - buffs.workCooldownCutMinutes);
+
   const active = await withSqliteRetry(() =>
     prisma.$transaction(async (tx) => {
       const now = new Date();
@@ -216,8 +219,6 @@ export async function acceptContract(userId: string, contractId: string) {
       if (!onBoard) {
         throw new GameError(409, "NOT_OFFERED", "That contract is not on the board right now.");
       }
-      const buffs = await territoryPassives(userId);
-      const cooldownMins = Math.max(0, RULES.WORK_CONTRACT_COOLDOWN_MINUTES - buffs.workCooldownCutMinutes);
       const cooling = await tx.contractRun.findFirst({
         where: {
           userId,
@@ -259,6 +260,7 @@ export async function acceptContract(userId: string, contractId: string) {
 }
 
 export async function collectContract(userId: string) {
+  const [buffs, career] = await Promise.all([territoryPassives(userId), careerBonuses(userId)]);
   const paid = await withSqliteRetry(() =>
     prisma.$transaction(async (tx) => {
       const active = await tx.contractRun.findUnique({ where: { activeSlot: userId } });
@@ -283,8 +285,6 @@ export async function collectContract(userId: string) {
       if (claimed.count !== 1) {
         throw new GameError(409, "ALREADY_COLLECTED", "That payout was already taken.");
       }
-      const buffs = await territoryPassives(userId);
-      const career = await careerBonuses(userId);
       const bonusPct = buffs.collectBonusPercent + career.workCollectBonusPercent;
       const bonus = Math.floor((active.reward * bonusPct) / 100);
       const payout = active.reward + bonus;
@@ -392,6 +392,7 @@ export async function settlePassivePay(userId: string): Promise<number> {
   }
   const owned = await prisma.property.findMany({ where: { userId }, select: { catalogId: true, level: true } });
   if (!passiveQualified(owned, job, user.reputationLevel)) return 0;
+  const [buffs, career] = await Promise.all([territoryPassives(userId), careerBonuses(userId)]);
   let covered = false;
   await prisma.$transaction(async (tx) => {
     const fresh = await tx.user.findUnique({ where: { id: userId } });
@@ -400,8 +401,6 @@ export async function settlePassivePay(userId: string): Promise<number> {
       covered = true;
       return;
     }
-    const buffs = await territoryPassives(userId);
-    const career = await careerBonuses(userId);
     const bonus = Math.floor((job.payPerDay * (buffs.collectBonusPercent + career.workCollectBonusPercent)) / 100);
     const payout = job.payPerDay + bonus;
     await creditEarn(tx, userId, payout);

@@ -119,12 +119,14 @@ export async function setSecondaryCareer(userId: string, careerId: string | null
 
 /** Resolved flat bonuses for heist/work. Secondary at half strength. */
 export async function careerBonuses(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { primaryCareer: true, secondaryCareer: true },
-  });
-  const holdings = await prisma.territoryHolding.count({ where: { userId } });
-  const base = await prisma.base.findUnique({ where: { userId }, select: { id: true } });
+  const [user, holdings, base] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { primaryCareer: true, secondaryCareer: true },
+    }),
+    prisma.territoryHolding.count({ where: { userId } }),
+    prisma.base.findUnique({ where: { userId }, select: { id: true } }),
+  ]);
   const sectors = (base ? 1 : 0) + holdings;
 
   let heistChanceFlat = 0;

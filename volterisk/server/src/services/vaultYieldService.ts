@@ -2,20 +2,35 @@ import { RULES } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { writeNotification } from "./notificationService.js";
 
+const vaultYieldFreshUntil = new Map<string, number>();
+
 /** Diamond vault compound yield since last settle. Called from profile load. */
 export async function settleVaultYield(userId: string): Promise<{ credited: number } | null> {
+  const nowMs = Date.now();
+  if ((vaultYieldFreshUntil.get(userId) ?? 0) > nowMs) return null;
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { vault: true },
   });
   if (!user?.vault) return null;
-  if (user.vault.tier !== RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER) return null;
-  if (user.reputationLevel < RULES.TERRITORY.UNLOCK_LEVEL) return null;
+  if (user.vault.tier !== RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER) {
+    vaultYieldFreshUntil.set(userId, nowMs + 3_600_000);
+    return null;
+  }
+  if (user.reputationLevel < RULES.TERRITORY.UNLOCK_LEVEL) {
+    vaultYieldFreshUntil.set(userId, nowMs + 3_600_000);
+    return null;
+  }
 
-  const now = new Date();
+  const now = new Date(nowMs);
   const last = user.lastVaultYieldAt ?? user.createdAt;
   const hours = Math.floor((now.getTime() - last.getTime()) / 3_600_000);
-  if (hours < 1) return null;
+  if (hours < 1) {
+    const nextHour = last.getTime() + 3_600_000;
+    vaultYieldFreshUntil.set(userId, Math.min(nextHour, nowMs + 3_600_000));
+    return null;
+  }
 
   const rate = RULES.TERRITORY.VAULT_YIELD_PCT_PER_HOUR / 100;
   const balance = user.vault.balance;
@@ -53,6 +68,7 @@ export async function settleVaultYield(userId: string): Promise<{ credited: numb
       severity: "INFO",
     });
   });
+  vaultYieldFreshUntil.set(userId, nowMs + 3_600_000);
   return { credited };
 }
 

@@ -421,7 +421,9 @@ export async function attemptHeist(
   if (!previewTarget?.vault) throw new GameError(404, "INVALID_TARGET", "No such target.");
   assertTargetKind(previewTarget, kind);
   const facing = await npcFacing(attackerId, { ...previewTarget, vault: previewTarget.vault }, kind);
-  const [preCareer, preWMods, playerVMods, preLock] = await Promise.all([
+  // Prefetch anything that uses the global prisma client — never call those inside
+  // $transaction (connection_limit=1 on Vercel/Supabase deadlocks the pool).
+  const [preCareer, preWMods, playerVMods, preLock, atkBuff, defBuff] = await Promise.all([
     careerBonuses(attackerId),
     weaponModIds(owned.id),
     kind === "npc" ? Promise.resolve([] as string[]) : vaultModIds(targetUserId),
@@ -429,6 +431,8 @@ export async function attemptHeist(
       where: { userId: targetUserId, modId: "emergency-lockdown", status: "installed" },
       select: { activatedAt: true },
     }),
+    territoryPassives(attackerId),
+    territoryPassives(targetUserId),
   ]);
   const preVMods = kind === "npc" ? facing.modIds : playerVMods;
 
@@ -500,10 +504,6 @@ export async function attemptHeist(
         const defense =
           vaultDefense(facing.tier, vaultLevel) +
           (kind === "npc" ? npcDefenseBonus(attacker.reputationLevel) : 0);
-        const [atkBuff, defBuff] = await Promise.all([
-          territoryPassives(attackerId),
-          territoryPassives(targetUserId),
-        ]);
         const resolved = resolveCombat({
           baseAttack,
           baseDefense: defense,
@@ -524,7 +524,7 @@ export async function attemptHeist(
         const success = roll <= chance;
         const broken = await wearWeapon(tx, owned.id, resolved.durabilityLoss);
         if (kind !== "npc" && lockdownIsArmed(preLock?.activatedAt)) {
-          await consumeLockdown(targetUserId);
+          await consumeLockdown(tx, targetUserId);
         }
 
         if (!success) {
@@ -670,7 +670,7 @@ export async function attemptHeist(
       { timeout: 15_000 },
     ),
   );
-  const unlocked: UnlockedAchievement[] = await syncAchievements(attackerId);
+  const unlocked: UnlockedAchievement[] = await syncAchievements(attackerId).catch(() => []);
   return { ...heist, unlocked };
 }
 

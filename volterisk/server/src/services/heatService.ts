@@ -269,31 +269,50 @@ export async function settleHeat(userId: string): Promise<number> {
   return prisma.$transaction((tx) => seizeDueChecks(tx, userId, new Date()));
 }
 
+/** In-memory skip so heat warning / profile polls do not hammer noon + decay every few seconds. */
+const noonSettledKey = new Map<string, number>();
+const heatStateFreshUntil = new Map<string, number>();
+
 /** Applies the 12:00 GMT wipe when that noon has passed and has not been recorded yet. */
 export async function settleHeatNoonIfDue(userId: string): Promise<void> {
   const noon = latestHeatNoon();
+  const noonMs = noon.getTime();
+  if ((noonSettledKey.get(userId) ?? 0) >= noonMs) return;
   const already = await prisma.transaction.findFirst({
     where: { type: NOON_RESET_TYPE, fromUserId: userId, createdAt: { gte: noon } },
     select: { id: true },
   });
-  if (already) return;
+  if (already) {
+    noonSettledKey.set(userId, noonMs);
+    return;
+  }
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { id: userId } });
-    if (!user || user.isBot) return;
-    if (await noonResetExists(tx, userId, noon)) return;
+    if (!user || user.isBot) {
+      noonSettledKey.set(userId, noonMs);
+      return;
+    }
+    if (await noonResetExists(tx, userId, noon)) {
+      noonSettledKey.set(userId, noonMs);
+      return;
+    }
     const wiped = await wipeHeatAtNoon(tx, userId, user.heat, user.heatSettledAt, noon);
     await tx.user.update({
       where: { id: userId },
       data: { heat: wiped.heat, heatSettledAt: wiped.settledAt },
     });
   });
+  noonSettledKey.set(userId, noonMs);
 }
 
 /**
  * Noon wipe plus idle decay (−5 / 2h). Profile loads must call this or heat
  * only moves when a heist, job, or police check touches the meter.
+ * Skips DB work for ~90s per isolate after a no-op / successful settle.
  */
 export async function settleHeatState(userId: string): Promise<void> {
+  const now = Date.now();
+  if ((heatStateFreshUntil.get(userId) ?? 0) > now) return;
   await settleHeatNoonIfDue(userId);
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { id: userId } });
@@ -310,6 +329,8 @@ export async function settleHeatState(userId: string): Promise<void> {
       data: { heat: cooled.heat, heatSettledAt: cooled.settledAt },
     });
   });
+  // Decay ticks every 2h; keep a short TTL so warning polls stay cheap.
+  heatStateFreshUntil.set(userId, now + 90_000);
 }
 
 function latestCheckAt(nowMs: number): number | null {

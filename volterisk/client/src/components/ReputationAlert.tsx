@@ -17,6 +17,7 @@ export function ReputationAlert() {
   useEffect(() => {
     let cancelled = false
     async function look() {
+      if (typeof document !== 'undefined' && document.hidden) return
       try {
         const file = await api<{ ready: boolean; nextLevel: number | null; reward: number | null }>('/api/reputation')
         if (cancelled || !file.ready || file.nextLevel == null || file.reward == null) return
@@ -26,14 +27,19 @@ export function ReputationAlert() {
         /* the desk will try again */
       }
     }
-    const start = window.setTimeout(() => void look(), 2500)
-    const timer = window.setInterval(() => void look(), 20000)
+    const start = window.setTimeout(() => void look(), 4000)
+    const timer = window.setInterval(() => void look(), 45_000)
+    const onVis = () => {
+      if (!document.hidden) void look()
+    }
+    document.addEventListener('visibilitychange', onVis)
     return () => {
       cancelled = true
       window.clearTimeout(start)
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
     }
-  }, [location.pathname])
+  }, [])
 
   if (!offer) return null
 

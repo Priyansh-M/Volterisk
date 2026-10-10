@@ -10,7 +10,7 @@ import { GameError } from "../game/errors.js";
 import { vaultModSlotsForLevel, weaponModSlotsForLevel } from "../game/rules.js";
 import { CRAFT_RECIPES } from "../game/workshopEconomy.js";
 import { prisma } from "../prisma.js";
-import { chargeSpend } from "./economyService.js";
+import { chargeSpend, type Tx } from "./economyService.js";
 
 const CRAFTABLE_MOD_IDS = new Set(CRAFT_RECIPES.map((r) => r.modId));
 
@@ -309,14 +309,14 @@ export async function vaultModIds(userId: string): Promise<string[]> {
 }
 
 /** Consume one armed lockdown charge after it affected a heist. */
-export async function consumeLockdown(userId: string) {
-  const mod = await prisma.modOwned.findFirst({
+export async function consumeLockdown(client: Tx | typeof prisma, userId: string) {
+  const mod = await client.modOwned.findFirst({
     where: { userId, modId: "emergency-lockdown", status: "installed" },
   });
   if (!mod?.activatedAt || mod.activatedAt.getTime() !== 0) return;
   const def = vaultModById("emergency-lockdown");
   const cd = def?.emergencyLockdown?.cooldownMs ?? 86_400_000;
-  await prisma.modOwned.update({
+  await client.modOwned.update({
     where: { id: mod.id },
     data: { activatedAt: new Date(Date.now() + cd) },
   });

@@ -13,7 +13,7 @@ import { listNotifications, markAllNotificationsRead, markNotificationRead } fro
 import { buyProperty, listProperties, upgradeProperty } from "../services/propertyService.js";
 import { buyShopItem, shopView, upgradeCamera } from "../services/shopService.js";
 import { communityBoard } from "../services/communityService.js";
-import { heatNeedsTouch, heatWarning as readHeatWarning, settleHeatIfDue, settleHeatState } from "../services/heatService.js";
+import { heatNeedsTouch, heatWarning as readHeatWarning, settleHeatIfDue } from "../services/heatService.js";
 import { getLeaderboard } from "../services/userService.js";
 
 export async function leaderboard(req: Request, res: Response): Promise<void> {
@@ -30,9 +30,9 @@ export async function notifications(req: Request, res: Response): Promise<void> 
 
 export async function heatWarning(req: Request, res: Response): Promise<void> {
   const now = Date.now();
-  const userId = currentUserId(req);
-  await settleHeatState(userId);
-  if (heatNeedsTouch(now)) await settleHeatIfDue(userId);
+  // Response is pure clock math. Only hit the DB in the few minutes after a check
+  // so seizures still land while the player is online; idle decay runs on /api/me.
+  if (heatNeedsTouch(now)) await settleHeatIfDue(currentUserId(req));
   res.json(readHeatWarning(now));
 }
 
@@ -57,10 +57,11 @@ export async function achievements(req: Request, res: Response): Promise<void> {
 
 export async function achievementAlerts(req: Request, res: Response): Promise<void> {
   const userId = currentUserId(req);
-  res.json({
-    unlocked: await unannouncedAchievements(userId),
-    unclaimed: await unclaimedCount(userId),
-  });
+  const [unlocked, unclaimed] = await Promise.all([
+    unannouncedAchievements(userId),
+    unclaimedCount(userId),
+  ]);
+  res.json({ unlocked, unclaimed });
 }
 
 export async function ackAchievement(req: Request, res: Response): Promise<void> {

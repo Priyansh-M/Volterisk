@@ -217,7 +217,10 @@ function heistLabel(min: number): string {
   return `Complete ${min} successful heists since this reputation level`;
 }
 
-export async function getReputation(userId: string) {
+const reputationFresh = new Map<string, { at: number; value: Awaited<ReturnType<typeof buildReputation>> }>();
+const REPUTATION_TTL_MS = 20_000;
+
+async function buildReputation(userId: string) {
   const { user, ctx } = await loadProgress(userId);
   const next = RULES.REPUTATION.find((rung) => rung.level === user.reputationLevel + 1) ?? null;
   if (next) await creditLiveConditions(userId, next.conditions, ctx);
@@ -254,8 +257,21 @@ export async function getReputation(userId: string) {
   };
 }
 
+export async function getReputation(userId: string) {
+  const hit = reputationFresh.get(userId);
+  if (hit && Date.now() - hit.at < REPUTATION_TTL_MS) return hit.value;
+  const value = await buildReputation(userId);
+  reputationFresh.set(userId, { at: Date.now(), value });
+  return value;
+}
+
+function bustReputationCache(userId: string) {
+  reputationFresh.delete(userId);
+}
+
 export async function claimReputation(userId: string) {
-  const before = await getReputation(userId);
+  bustReputationCache(userId);
+  const before = await buildReputation(userId);
   if (!before.nextLevel || !before.ready || before.reward == null) {
     throw new GameError(400, "NOT_READY", "The next level is not open yet.");
   }
@@ -368,7 +384,8 @@ export async function claimReputation(userId: string) {
     }
   });
 
-  return getReputation(userId);
+  bustReputationCache(userId);
+  return buildReputation(userId);
 }
 
 function money(n: number) {

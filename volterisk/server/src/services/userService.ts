@@ -185,12 +185,12 @@ async function cooldownEndsAt(userId: string): Promise<string | null> {
 }
 
 export async function getProfile(userId: string) {
+  // Sequential on purpose: Vercel uses connection_limit=1, so parallel $transactions deadlock.
+  // Caches inside each settle make repeat /api/me cheap after the first pass.
   await settleHeatState(userId);
   await settlePassivePay(userId);
-  await Promise.all([
-    settleVaultYield(userId).catch(() => null),
-    settlePropertyMaterialYields(userId).catch(() => null),
-  ]);
+  await settleVaultYield(userId).catch(() => null);
+  await settlePropertyMaterialYields(userId).catch(() => null);
   const [user, won, failed, lost, standing, unclaimed, cooldown] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },

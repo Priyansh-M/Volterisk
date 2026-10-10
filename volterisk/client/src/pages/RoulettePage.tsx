@@ -88,7 +88,7 @@ export function RoulettePage() {
     if (mode !== 'lobby' || !lobby) return
     let pending = false
     const timer = window.setInterval(() => {
-      if (pending) return
+      if (pending || document.hidden) return
       pending = true
       api<Lobby>(`/api/casino/lobby/${lobby.id}`)
         .then((room) => {
@@ -110,7 +110,7 @@ export function RoulettePage() {
         .finally(() => {
           pending = false
         })
-    }, 1000)
+    }, 1500)
     return () => window.clearInterval(timer)
   }, [mode, lobby?.id, seenSpin])
 

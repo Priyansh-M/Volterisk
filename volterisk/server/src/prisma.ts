@@ -21,17 +21,22 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
  * Supabase port 6543 is transaction mode. Prisma interactive transactions, which
  * register and every cash move use, never finish there, so the button spins.
  * The same pooler on port 5432 is session mode and can run those transactions.
+ *
+ * Keep connection_limit=1 per serverless isolate so we do not exhaust Supabase
+ * free-tier slots. Never open nested global-prisma queries inside $transaction.
  */
 function runtimeDatabaseUrl(): string | undefined {
   const raw = process.env.DATABASE_URL;
   if (!process.env.VERCEL || !raw) return undefined;
   try {
     const url = new URL(raw);
-    if (url.port !== "6543") return raw;
-    url.port = "5432";
-    url.searchParams.delete("pgbouncer");
+    if (url.port === "6543") {
+      url.port = "5432";
+      url.searchParams.delete("pgbouncer");
+    }
     if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "1");
-    url.searchParams.set("connect_timeout", "10");
+    if (!url.searchParams.has("connect_timeout")) url.searchParams.set("connect_timeout", "10");
+    if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "20");
     return url.toString();
   } catch {
     return raw;
@@ -41,7 +46,13 @@ function runtimeDatabaseUrl(): string | undefined {
 const databaseUrl = runtimeDatabaseUrl();
 export const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined);
+  new PrismaClient({
+    ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
+    transactionOptions: {
+      maxWait: 10_000,
+      timeout: 15_000,
+    },
+  });
 globalForPrisma.prisma = prisma;
 
 function missingWeaponTable(error: unknown): boolean {
@@ -97,11 +108,20 @@ export async function ensureDatabase(): Promise<void> {
   }
 }
 
+let bountySchemaReady = false;
+let territorySchemaReady = false;
+let careerModsSchemaReady = false;
+
 /** Postgres/Vercel: create Bounty if deploy skipped db push. */
 export async function ensureBountyTable(): Promise<void> {
-  if (await bountyTableExists()) return;
+  if (bountySchemaReady) return;
+  if (await bountyTableExists()) {
+    bountySchemaReady = true;
+    return;
+  }
   if (!usesPostgres()) {
     await ensureDatabase();
+    bountySchemaReady = true;
     return;
   }
   await prisma.$executeRawUnsafe(`
@@ -202,6 +222,7 @@ export async function ensureBountyTable(): Promise<void> {
   if (!(await bountyTableExists())) {
     throw new Error("Bounty table could not be created. Run npm run db:push:supabase from volterisk/server.");
   }
+  bountySchemaReady = true;
 }
 
 export async function configureSqlite(): Promise<void> {
@@ -211,6 +232,7 @@ export async function configureSqlite(): Promise<void> {
 
 /** Add L11 territory columns/tables when db push was skipped (esp. Postgres). */
 export async function ensureTerritorySchema(): Promise<void> {
+  if (territorySchemaReady) return;
   const alters = [
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "policeAttention" INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "policeSettledOn" TEXT`,
@@ -287,10 +309,12 @@ export async function ensureTerritorySchema(): Promise<void> {
   } catch {
     /* present */
   }
+  territorySchemaReady = true;
 }
 
 /** Careers + ModOwned + UserWeapon.listed (safe ADD COLUMN / CREATE TABLE). */
 export async function ensureCareerModsSchema(): Promise<void> {
+  if (careerModsSchemaReady) return;
   const userCols = [
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "primaryCareer" TEXT`,
     `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "secondaryCareer" TEXT`,
@@ -378,4 +402,5 @@ export async function ensureCareerModsSchema(): Promise<void> {
       CONSTRAINT "MarketListing_pkey" PRIMARY KEY ("id")
     )
   `);
+  careerModsSchemaReady = true;
 }
