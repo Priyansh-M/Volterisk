@@ -44,24 +44,35 @@ export async function buyShopItem(userId: string, itemId: string) {
       const paidFrom = await chargeShop(tx, userId, RULES.ESTIMATE_PREDICTOR_COST);
       const existing = await tx.inventoryItem.findUnique({
         where: { userId_itemId: { userId, itemId } },
+        select: { id: true, quantity: true },
       });
       const row = existing
         ? await tx.inventoryItem.update({
             where: { id: existing.id },
             data: { quantity: { increment: 1 } },
+            select: { quantity: true },
           })
-        : await tx.inventoryItem.create({ data: { userId, itemId, quantity: 1 } });
+        : await tx.inventoryItem.create({
+            data: { userId, itemId, quantity: 1 },
+            select: { quantity: true },
+          });
       await tx.transaction.create({
         data: { type: paidFrom === "card" ? "shop_buy_card" : "shop_buy", amount: RULES.ESTIMATE_PREDICTOR_COST, fromUserId: userId },
       });
-      const user = await tx.user.findUnique({ where: { id: userId }, include: { vault: true } });
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { cash: true, vault: { select: { balance: true } } },
+      });
       return { itemId, quantity: row.quantity, cash: user?.cash ?? 0, vault: user?.vault?.balance ?? 0, paidFrom };
     });
   }
 
   if (itemId === RULES.CAMERA_ID) {
     return prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: userId } });
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { cameraLevel: true },
+      });
       if (!user) throw new GameError(404, "NOT_FOUND", "Player not found.");
       if (user.cameraLevel > 0) {
         throw new GameError(400, "ALREADY_OWNED", "The camera is already installed. Upgrade it instead.");
@@ -73,7 +84,10 @@ export async function buyShopItem(userId: string, itemId: string) {
       await tx.transaction.create({
         data: { type: paidFrom === "card" ? "camera_buy_card" : "camera_buy", amount: cost, fromUserId: userId },
       });
-      const fresh = await tx.user.findUnique({ where: { id: userId }, include: { vault: true } });
+      const fresh = await tx.user.findUnique({
+        where: { id: userId },
+        select: { cash: true, vault: { select: { balance: true } } },
+      });
       return { itemId, level: 1, cash: fresh?.cash ?? 0, vault: fresh?.vault?.balance ?? 0, nextCost: cameraUpgradeCost(1), paidFrom };
     });
   }

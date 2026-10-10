@@ -52,7 +52,8 @@ const databaseUrl = runtimeDatabaseUrl();
  */
 export function isDbBusyError(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === "P1001" || error.code === "P2024") return true;
+    // P2028 = interactive transaction timed out / already closed (common on free-tier latency).
+    if (error.code === "P1001" || error.code === "P2024" || error.code === "P2028") return true;
   }
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   if (error instanceof Prisma.PrismaClientUnknownRequestError) {
@@ -95,8 +96,9 @@ export const prisma =
   new PrismaClient({
     ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
     transactionOptions: {
-      maxWait: 5_000,
-      timeout: 12_000,
+      // Supabase free-tier round-trips are slow; 5s timed out weapon buys (P2028).
+      maxWait: 10_000,
+      timeout: 20_000,
     },
   });
 globalForPrisma.prisma = prisma;

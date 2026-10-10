@@ -6,6 +6,11 @@ import { repairCostForWeapon } from "./combatMods.js";
 import { chargeSpend, type Tx } from "./economyService.js";
 import { weaponModIds } from "./modService.js";
 
+/**
+ * Present a weapon for the client. Pass modIds when already known (or [] for a
+ * fresh buy) so we never hold an interactive $transaction open for mod lookups —
+ * that is what caused P2028 timeouts on Vercel/Supabase after the L12+ mods work.
+ */
 async function presentOwned(
   row: {
     id: string;
@@ -18,6 +23,7 @@ async function presentOwned(
     weapon: { name: string; number: number };
   },
   modSlots = 0,
+  knownModIds?: string[],
 ) {
   const catalog = weaponById(row.weaponId);
   const attack = attackPower(row.weapon.number, row.upgradeLevel);
@@ -29,7 +35,7 @@ async function presentOwned(
     row.upgradeLevel >= RULES.WEAPON_MAX_UPGRADE
       ? null
       : (RULES.WEAPON_UPGRADE_COSTS[row.weaponId]?.[row.upgradeLevel] ?? null);
-  const modIds = await weaponModIds(row.id);
+  const modIds = knownModIds ?? (await weaponModIds(row.id));
   const repairCost = repairCostForWeapon(row.weaponId, row.durability, row.maxDurability, modIds);
   const installedMods = modIds.map((id) => {
     const def = weaponModById(id);
@@ -127,12 +133,15 @@ export async function buyWeapon(userId: string, weaponId: string) {
     throw new GameError(400, "NOT_FOR_SALE", "That weapon is not for sale.");
   }
 
-  return prisma.$transaction(async (tx) => {
-    const owned = await tx.userWeapon.findMany({
+  // Keep the interactive tx as small as pre-L12: charge + create only.
+  // presentOwned (mods) runs after commit so Supabase latency cannot P2028 the buy.
+  const created = await prisma.$transaction(async (tx) => {
+    const bestRow = await tx.userWeapon.findFirst({
       where: { userId },
-      include: { weapon: true },
+      orderBy: { weapon: { number: "desc" } },
+      select: { weapon: { select: { number: true } } },
     });
-    const best = owned.reduce((max, row) => Math.max(max, row.weapon.number), 0);
+    const best = bestRow?.weapon.number ?? 0;
     const starter = weaponId === RULES.WEAPONS[0].id;
     if (!starter && weapon.number > best + 1) {
       throw new GameError(400, "NOT_NEXT_WEAPON", "You can only buy the next weapon in the line.");
@@ -140,7 +149,7 @@ export async function buyWeapon(userId: string, weaponId: string) {
 
     await chargeSpend(tx, userId, price);
     const uses = maxDurability(weaponId, RULES.WEAPON_MIN_UPGRADE);
-    const created = await tx.userWeapon.create({
+    const row = await tx.userWeapon.create({
       data: {
         userId,
         weaponId,
@@ -154,12 +163,18 @@ export async function buyWeapon(userId: string, weaponId: string) {
     await tx.transaction.create({
       data: { type: "weapon_buy", amount: price, fromUserId: userId },
     });
-    return await presentOwned(created);
+    return row;
   });
+
+  const level = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { reputationLevel: true },
+  });
+  return presentOwned(created, weaponModSlotsForLevel(level?.reputationLevel ?? 1), []);
 }
 
 export async function upgradeWeapon(userId: string, weaponId?: string, instanceId?: string) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const owned = await findInstance(tx, userId, weaponId, instanceId);
     if (!owned) throw new GameError(400, "WEAPON_NOT_OWNED", "That weapon is not in your arsenal.");
     if (owned.upgradeLevel >= RULES.WEAPON_MAX_UPGRADE) {
@@ -170,7 +185,11 @@ export async function upgradeWeapon(userId: string, weaponId?: string, instanceI
     await chargeSpend(tx, userId, cost);
     if (owned.listed) throw new GameError(400, "WEAPON_LISTED", "Listed weapons cannot be upgraded.");
     const nextLevel = owned.upgradeLevel + 1;
-    const modIds = await weaponModIds(owned.id);
+    const mods = await tx.modOwned.findMany({
+      where: { userWeaponId: owned.id, status: "installed" },
+      select: { modId: true },
+    });
+    const modIds = mods.map((m) => m.modId);
     const cap = maxDurability(owned.weaponId, nextLevel) + weaponMaxDurabilityBonus(modIds);
     const updated = await tx.userWeapon.update({
       where: { id: owned.id },
@@ -185,12 +204,22 @@ export async function upgradeWeapon(userId: string, weaponId?: string, instanceI
     await tx.transaction.create({
       data: { type: "weapon_upgrade", amount: cost, fromUserId: userId },
     });
-    return presentOwned(updated);
+    return { updated, modIds };
   });
+
+  const level = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { reputationLevel: true },
+  });
+  return presentOwned(
+    result.updated,
+    weaponModSlotsForLevel(level?.reputationLevel ?? 1),
+    result.modIds,
+  );
 }
 
 export async function repairWeapon(userId: string, instanceId: string) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const owned = await tx.userWeapon.findFirst({
       where: { id: instanceId, userId },
       include: { weapon: true },
@@ -207,12 +236,8 @@ export async function repairWeapon(userId: string, instanceId: string) {
       where: { userWeaponId: owned.id, status: "installed" },
       select: { modId: true },
     });
-    const cost = repairCostForWeapon(
-      owned.weaponId,
-      owned.durability,
-      owned.maxDurability,
-      mods.map((m) => m.modId),
-    );
+    const modIds = mods.map((m) => m.modId);
+    const cost = repairCostForWeapon(owned.weaponId, owned.durability, owned.maxDurability, modIds);
     if (cost <= 0) throw new GameError(400, "FULL_DURABILITY", "That weapon does not need repair.");
     await chargeSpend(tx, userId, cost);
     const updated = await tx.userWeapon.update({
@@ -223,8 +248,21 @@ export async function repairWeapon(userId: string, instanceId: string) {
     await tx.transaction.create({
       data: { type: "weapon_repair", amount: cost, fromUserId: userId },
     });
-    return { ...(await presentOwned(updated)), spent: cost };
+    return { updated, modIds, cost };
   });
+
+  const level = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { reputationLevel: true },
+  });
+  return {
+    ...(await presentOwned(
+      result.updated,
+      weaponModSlotsForLevel(level?.reputationLevel ?? 1),
+      result.modIds,
+    )),
+    spent: result.cost,
+  };
 }
 
 export async function equipWeapon(userId: string, weaponId?: string, instanceId?: string) {

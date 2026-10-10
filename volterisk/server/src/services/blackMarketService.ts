@@ -156,7 +156,9 @@ export async function createListing(
     throw new GameError(400, "BAD_PRICE", "Price must be at least $1.");
   }
   await expireOpen();
-  return prisma.$transaction(async (tx) => {
+  // Commit first — presentListing may query via the global client; doing that
+  // inside an interactive tx with connection_limit=1 deadlocks → P2028.
+  const row = await prisma.$transaction(async (tx) => {
     const expiresAt = new Date(Date.now() + BLACK_MARKET.LISTING_MS);
     if (input.kind === "material") {
       const itemId = String(input.itemId ?? "");
@@ -164,7 +166,7 @@ export async function createListing(
       if (!materialById(itemId) || qty < 1) throw new GameError(400, "BAD_ITEM", "Invalid material listing.");
       const ok = await debitItem(tx, userId, itemId, qty);
       if (!ok) throw new GameError(400, "MATERIALS", "Not enough of that material.");
-      const row = await tx.marketListing.create({
+      return tx.marketListing.create({
         data: {
           sellerId: userId,
           kind: "material",
@@ -174,7 +176,6 @@ export async function createListing(
           expiresAt,
         },
       });
-      return await presentListing(row);
     }
     if (input.kind === "weapon") {
       const weapon = await tx.userWeapon.findFirst({
@@ -188,7 +189,7 @@ export async function createListing(
         throw new GameError(400, "DURABILITY", "Need at least 20% durability to list.");
       }
       await tx.userWeapon.update({ where: { id: weapon.id }, data: { listed: true, equipped: false } });
-      const row = await tx.marketListing.create({
+      return tx.marketListing.create({
         data: {
           sellerId: userId,
           kind: "weapon",
@@ -199,7 +200,6 @@ export async function createListing(
           expiresAt,
         },
       });
-      return await presentListing({ ...row, seller: undefined });
     }
     if (input.kind === "mod") {
       const mod = await tx.modOwned.findFirst({
@@ -207,7 +207,7 @@ export async function createListing(
       });
       if (!mod) throw new GameError(400, "MOD_UNAVAILABLE", "Modification must be in inventory (not installed).");
       await tx.modOwned.update({ where: { id: mod.id }, data: { status: "listed" } });
-      const row = await tx.marketListing.create({
+      return tx.marketListing.create({
         data: {
           sellerId: userId,
           kind: "mod",
@@ -218,10 +218,10 @@ export async function createListing(
           expiresAt,
         },
       });
-      return await presentListing(row);
     }
     throw new GameError(400, "BAD_KIND", "Unsupported listing kind.");
   });
+  return presentListing(row);
 }
 
 export async function cancelListing(userId: string, listingId: string) {
@@ -245,7 +245,8 @@ export async function cancelListing(userId: string, listingId: string) {
 }
 
 export async function buyListing(userId: string, listingId: string) {
-  await expireOpen();
+  // Expire in the background after a successful path — don't block the buy tx on cleanup.
+  void expireOpen().catch(() => undefined);
   return prisma.$transaction(async (tx) => {
     const row = await tx.marketListing.findFirst({ where: { id: listingId, status: "open" } });
     if (!row) throw new GameError(404, "NOT_FOUND", "Listing not available.");
