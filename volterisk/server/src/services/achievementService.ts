@@ -1,5 +1,6 @@
 import { GameError } from "../game/errors.js";
 import { RULES, achievementById } from "../game/rules.js";
+import { CRAFT_RECIPES } from "../game/workshopEconomy.js";
 import { prisma } from "../prisma.js";
 import { creditEarn } from "./economyService.js";
 
@@ -24,8 +25,37 @@ function present(id: string): UnlockedAchievement {
  * Inserts any achievement the ledger now qualifies for.
  * Clean Hands treats ten collected contracts as the bar: heat is not a separate meter.
  * Redacted unlocks after REDACTED_HEIST_GOAL successful heists. The requirement stays off the client.
+ *
+ * Elite activities (materials guide, excluding daily property yields):
+ * - Work contracts collected at $50,000+ base reward
+ * - Successful heists with take ≥ $30,000
+ * - Territory holdings (L11+ expansion)
+ * - Diamond vault (late-game vault play)
  */
 const EQUIPMENT_SPEND = ["weapon_buy", "weapon_upgrade", "shop_buy", "camera_buy", "camera_upgrade"];
+
+/** Count discrete elite activities for ELITE - I / ELITIST. */
+async function countEliteActivities(userId: string, vaultTier: string | null | undefined): Promise<number> {
+  const [hardJobs, bigHeists, holdings] = await Promise.all([
+    prisma.contractRun.count({
+      where: {
+        userId,
+        collectedAt: { not: null },
+        reward: { gte: RULES.ELITE_WORK_REWARD_MIN },
+      },
+    }),
+    prisma.heist.count({
+      where: {
+        attackerId: userId,
+        success: true,
+        amountStolen: { gte: RULES.ELITE_HEIST_TAKE_MIN },
+      },
+    }),
+    prisma.territoryHolding.count({ where: { userId } }),
+  ]);
+  const diamond = (vaultTier ?? "").toLowerCase() === "diamond" ? 1 : 0;
+  return hardJobs + bigHeists + holdings + diamond;
+}
 
 async function crossedRecently(userId: string): Promise<boolean> {
   const hits = await prisma.heist.findMany({
@@ -91,7 +121,7 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   });
   if (!user || user.isBot) return [];
 
-  const [contracts, heists, weaponRows, spend, ledger, longShot, inside, crafts, installedMods] =
+  const [contracts, heists, weaponRows, spend, ledger, longShot, inside, crafts, installedMods, eliteCount, craftedRecipes] =
     await Promise.all([
       prisma.contractRun.count({ where: { userId, collectedAt: { not: null } } }),
       prisma.heist.count({ where: { attackerId: userId, success: true } }),
@@ -118,9 +148,18 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
       crossedRecently(userId),
       prisma.craftingJob.count({ where: { userId, collectedAt: { not: null } } }),
       prisma.modOwned.count({ where: { userId, status: "installed" } }),
+      countEliteActivities(userId, user.vault?.tier),
+      prisma.craftingJob.findMany({
+        where: { userId, collectedAt: { not: null } },
+        select: { recipeId: true },
+        distinct: ["recipeId"],
+      }),
     ]);
 
   const weaponTypes = weaponRows.length;
+  const recipeIds = new Set(CRAFT_RECIPES.map((r) => r.id));
+  const craftedAll =
+    craftedRecipes.length >= recipeIds.size && craftedRecipes.every((row) => recipeIds.has(row.recipeId));
   const owned = new Set(user.achievements.map((row) => row.achievementId));
   const due: string[] = [];
   if (contracts >= 1 && !owned.has("first-steps")) due.push("first-steps");
@@ -138,6 +177,10 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   if (contracts >= RULES.CLEAN_HANDS_CONTRACTS && !owned.has("clean-hands")) due.push("clean-hands");
   if ((user.vault?.level ?? 0) >= 5 && !owned.has("false-bottom")) due.push("false-bottom");
   if (heists >= RULES.REDACTED_HEIST_GOAL && !owned.has("redacted")) due.push("redacted");
+  if (eliteCount >= 1 && !owned.has("elite-i")) due.push("elite-i");
+  if (eliteCount >= RULES.ELITE_ACTIVITY_GOAL && !owned.has("elitist")) due.push("elitist");
+  if (user.reputationLevel >= RULES.TERRITORY.UNLOCK_LEVEL && !owned.has("next-stage")) due.push("next-stage");
+  if (craftedAll && !owned.has("elite-crafter")) due.push("elite-crafter");
 
   const fresh: UnlockedAchievement[] = [];
   for (const achievementId of due) {

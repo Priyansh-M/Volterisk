@@ -66,7 +66,7 @@ export const MATERIALS = [
     refPrice: 2_500,
     sources: [
       "Work contracts paying $50,000+ → always ×1 on collect",
-      "Successful heists: ~20% for ×1 when take ≥ $120,000",
+      "Successful heists: ~20% for ×1 when take ≥ $30,000",
       "Manufacturing Plant at 12:00 GMT: L4+ ×1 (Required property level of Manufacturing Plant)",
       "Black Market player listings",
     ],
@@ -90,7 +90,7 @@ export const MATERIALS = [
     refPrice: 4_000,
     sources: [
       "Garage daily yield at 12:00 GMT: ×1 at garage L1, +1 per garage level (L2 → ×2, …), auto into Materials",
-      "Successful heists: ~12% for ×1 when take ≥ $250,000",
+      "Successful heists: ~12% for ×1 when take ≥ $45,000",
       "Black Market player listings",
     ],
   },
@@ -125,10 +125,13 @@ export const MATERIALS = [
   },
 ] as const;
 
-/** What “elite activities” means for material sourcing. */
+/**
+ * What “elite activities” means for material sourcing.
+ * Achievements ELITE - I / ELITIST count these except daily property yields.
+ */
 export const ELITE_ACTIVITIES = [
   "Work contracts in the top payout band ($50,000+ collect) and other high-tier jobs on the board",
-  "Successful heists with large takes ($120,000+; $250,000+ for composite weave rolls)",
+  "Successful heists with large takes ($30,000+ conductive filament; $45,000+ composite weave rolls)",
   "Reputation milestones and sealed achievements that credit exotic mats when listed",
   "Daily specialized property yields at 12:00 GMT (chop shop → Exotic Core; garage → Composite Weave; manufacturing plant → parts ladder)",
   "Territory / late-game operations after Reputation level 11 (Diamond vault play, sector holdings)",
@@ -462,8 +465,8 @@ export const HEIST_MATERIAL_DROPS = [
   { minStolen: 8_000, chance: 0.4, id: "mat:basic-fasteners", n: 2 },
   { minStolen: 25_000, chance: 0.35, id: "mat:reinforced-alloy", n: 1 },
   { minStolen: 60_000, chance: 0.28, id: "mat:precision-parts", n: 1 },
-  { minStolen: 120_000, chance: 0.2, id: "mat:conductive-filament", n: 1 },
-  { minStolen: 250_000, chance: 0.12, id: "mat:composite-weave", n: 1 },
+  { minStolen: 30_000, chance: 0.2, id: "mat:conductive-filament", n: 1 },
+  { minStolen: 45_000, chance: 0.12, id: "mat:composite-weave", n: 1 },
 ] as const;
 
 export function rollHeistMaterials(amountStolen: number): { id: string; name: string; quantity: number }[] {

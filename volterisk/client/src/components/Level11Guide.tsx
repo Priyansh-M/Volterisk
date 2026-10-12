@@ -2,16 +2,30 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth.tsx'
 import { load } from '../lib/api.ts'
+import { bumpDesk } from '../lib/deskPoll.ts'
 import { money } from '../lib/format.ts'
 
 const KEY = 'volterisk-l11-guide'
 const DONE_KEY = 'volterisk-l11-guide-done'
+/** When Next stage achievement popup may show (ms since epoch). */
+export const NEXT_STAGE_READY_KEY = 'volterisk-next-stage-at'
 export type L11GuideStep = 'pick' | 'map' | 'entails' | 'done'
+
+function scheduleNextStagePopup() {
+  if (localStorage.getItem(NEXT_STAGE_READY_KEY)) return
+  const at = Date.now() + 5_000
+  localStorage.setItem(NEXT_STAGE_READY_KEY, String(at))
+  window.setTimeout(() => {
+    window.dispatchEvent(new Event('volterisk-next-stage-ready'))
+    bumpDesk()
+  }, 5_000)
+}
 
 export function setL11Guide(step: L11GuideStep) {
   if (step === 'done') {
     localStorage.setItem(DONE_KEY, '1')
     sessionStorage.setItem(KEY, 'done')
+    scheduleNextStagePopup()
   } else {
     if (localStorage.getItem(DONE_KEY) === '1') return
     sessionStorage.setItem(KEY, step)
@@ -53,6 +67,7 @@ export function Level11Guide() {
         if (held) {
           localStorage.setItem(DONE_KEY, '1')
           sessionStorage.setItem(KEY, 'done')
+          scheduleNextStagePopup()
           setStep(null)
         }
       })

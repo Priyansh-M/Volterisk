@@ -18,11 +18,11 @@ export const RULES = {
   /** Flat defense added on every stationed-crew vault. */
   NPC_DEFENSE_FLAT: 6,
   /**
-   * After reputation 10, each NPC gets +10 defense per player level above 10
-   * (L11 → +10, L12 → +20, …) on top of NPC_DEFENSE_FLAT.
+   * After reputation 10, each NPC gets +11 defense per player level above 10
+   * (L11 → +11, L12 → +22, …) on top of NPC_DEFENSE_FLAT.
    */
   NPC_DEFENSE_LEVEL_START: 10,
-  NPC_DEFENSE_PER_LEVEL: 10,
+  NPC_DEFENSE_PER_LEVEL: 11,
   /** Pre–reputation 10: NPC take is this percent band of the purse. */
   NPC_STEAL_PERCENT_MIN: 1,
   NPC_STEAL_PERCENT_MAX: 15,
@@ -31,13 +31,13 @@ export const RULES = {
    * tier 4 sits low. Inclusive [from, to) on attacker reputation except the last band.
    */
   NPC_PAYOUT_BANDS: [
-    { from: 10, to: 15, min: 1_000, max: 26_500 },
-    { from: 15, to: 20, min: 3_000, max: 28_500 },
-    { from: 20, to: 25, min: 5_000, max: 34_500 },
-    { from: 25, to: 30, min: 7_000, max: 36_500 },
-    { from: 30, to: 35, min: 10_000, max: 38_500 },
-    { from: 35, to: 40, min: 10_000, max: 41_500 },
-    { from: 40, to: 51, min: 10_000, max: 43_500 },
+    { from: 10, to: 15, min: 1_000, max: 25_000 },
+    { from: 15, to: 20, min: 3_000, max: 30_250 },
+    { from: 20, to: 25, min: 5_000, max: 33_000 },
+    { from: 25, to: 30, min: 7_000, max: 35_000 },
+    { from: 30, to: 35, min: 10_000, max: 37_000 },
+    { from: 35, to: 40, min: 10_000, max: 40_000 },
+    { from: 40, to: 51, min: 10_000, max: 42_000 },
   ] as { from: number; to: number; min: number; max: number }[],
   /**
    * Max asset level required by reputation rungs ≤ 10. Upgrades past these
@@ -150,10 +150,38 @@ export const RULES = {
     { id: "clean-hands", name: "Clean Hands", description: "Complete 10 contracts without raising heat.", reward: 5_000 },
     { id: "false-bottom", name: "False Bottom", description: "Upgrade your vault to level 5.", reward: 5_000 },
     { id: "redacted", name: "Redacted", description: "Complete 15 successful heists.", reward: 5_000, sealed: true },
+    {
+      id: "elite-i",
+      name: "ELITE - I",
+      description: "Do an Elite activity.",
+      reward: 15_000,
+    },
+    {
+      id: "elitist",
+      name: "ELITIST",
+      description: "Do 10 Elite activities.",
+      reward: 75_000,
+    },
+    {
+      id: "next-stage",
+      name: "Next stage",
+      description: "Reach reputation level 11.",
+      reward: 25_000,
+    },
+    {
+      id: "elite-crafter",
+      name: "ELITE CRAFTER",
+      description: "Craft every workshop recipe.",
+      reward: 100_000,
+    },
   ] as { id: string; name: string; description: string; reward: number; sealed?: boolean }[],
   /** Successful heists required before Redacted unlocks. The client never shows this number. */
   REDACTED_HEIST_GOAL: 15,
   CLEAN_HANDS_CONTRACTS: 10,
+  /** Elite activity thresholds (materials guide, excluding daily property yields). */
+  ELITE_WORK_REWARD_MIN: 50_000,
+  ELITE_HEIST_TAKE_MIN: 30_000,
+  ELITE_ACTIVITY_GOAL: 10,
   /**
    * Cash to raise a weapon FROM this upgrade level to the next.
    * Keys are the current upgrade level (1, 2, or 3). Level 4 is the cap.

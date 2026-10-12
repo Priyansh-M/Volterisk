@@ -125,6 +125,8 @@ type TargetCard = {
   locationName: string | null;
   cadence: "day" | "week" | null;
   locked: boolean;
+  /** NPC purse below heist floor — button should read "Not enough money". */
+  insufficientFunds: boolean;
   cooldownEndsAt: string | null;
 };
 
@@ -205,6 +207,7 @@ async function readTargets(attackerId: string) {
           station && npcHitAt
             ? nowMs < npcHitAt.getTime() + cdMins * 60_000
             : false;
+        const broke = station ? balance < RULES.MIN_VAULT_BALANCE : false;
         return {
           isBot: user.isBot,
           card: {
@@ -219,13 +222,14 @@ async function readTargets(attackerId: string) {
             wealthBucket: wealthBucket(balance),
             estimatedWealth: wealthBandLabel(balance),
             vulnerable: station
-              ? !cooling && !gated && balance >= RULES.MIN_VAULT_BALANCE
+              ? !cooling && !gated && !broke
               : !protectedUntil.has(user.id),
             sectorId: user.base?.sectorId ?? null,
             regionName: user.base?.regionName ?? null,
             locationName: user.base?.name?.trim() || null,
             cadence: station?.cadence ?? null,
             locked: gated,
+            insufficientFunds: Boolean(station && broke && !gated && !cooling),
             cooldownEndsAt: station
               ? cooling && npcHitAt
                 ? minutesFromNow(cdMins, npcHitAt).toISOString()
@@ -467,7 +471,7 @@ export async function attemptHeist(
 
         const purseBalance = facing.balance ?? target.vault.balance;
         if (purseBalance < RULES.MIN_VAULT_BALANCE) {
-          throw new GameError(409, "NOT_VULNERABLE", "That vault is too thin to hit.");
+          throw new GameError(409, "NOT_VULNERABLE", "Not enough money.");
         }
 
         if (kind === "npc") {

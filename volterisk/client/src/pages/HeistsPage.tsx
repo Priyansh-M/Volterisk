@@ -413,8 +413,12 @@ function Dossier({
       </div>
       <p className="mb-5 text-xs leading-5 text-muted-foreground">
         {row.regionName ? `${row.regionName}. ` : ''}
-        {row.cadence ? 'This crew cools off for 2 hours after a hit. ' : ''}
-        {row.vulnerable ? 'No recent successful hit. The vault is open.' : 'A recent hit is still on the door.'}
+        {row.cadence ? 'This crew cools off for 2 hours after a hit. Purse resets every 2 days at 12:00 GMT. ' : ''}
+        {row.insufficientFunds
+          ? 'This purse is too low to hit until the next reset.'
+          : row.vulnerable
+            ? 'No recent successful hit. The vault is open.'
+            : 'A recent hit is still on the door.'}
       </p>
       <div className="flex gap-2">
         <button type="button" className="nav-pill h-9 flex-1 cursor-pointer text-xs" onClick={onInspect}>
@@ -428,11 +432,13 @@ function Dossier({
         >
           {row.locked
             ? 'Level 5'
-            : !row.cadence && !row.vulnerable
-              ? 'Cooldown : Just been robbed'
-              : cooling
-                ? `Cooling ${coolLabel}`
-                : 'Prepare heist'}
+            : row.insufficientFunds
+              ? 'Not enough money'
+              : !row.cadence && !row.vulnerable
+                ? 'Cooldown : Just been robbed'
+                : cooling
+                  ? `Cooling ${coolLabel}`
+                  : 'Prepare heist'}
         </button>
       </div>
       {open ? (

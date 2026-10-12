@@ -65,7 +65,7 @@ const MATERIALS: {
     rarity: 'rare',
     how: [
       'Work → collect a contract that paid $50,000+ → always get ×1',
-      'Heists → succeed with take ≥ $120,000 → ~20% chance of ×1',
+      'Heists → succeed with take ≥ $30,000 → ~20% chance of ×1',
       'Manufacturing Plant at 12:00 GMT → L4+ ×1 (Required property level of Manufacturing Plant)',
       'Black Market → buy a Conductive Filament listing',
     ],
@@ -87,7 +87,7 @@ const MATERIALS: {
     how: [
       'Own a Garage (any level 1+)',
       'Every day at 12:00 GMT → auto-credit ×garage level (L1 = ×1, L2 = ×2, …) into Materials + a notification',
-      'Heists → succeed with take ≥ $250,000 → ~12% chance of ×1',
+      'Heists → succeed with take ≥ $45,000 → ~12% chance of ×1',
       'Black Market → buy a Composite Weave listing',
     ],
   },
@@ -118,7 +118,7 @@ const MATERIALS: {
 
 const ELITE_ACTIVITIES = [
   'Work contracts that pay $50,000+ on collect (top band on the board)',
-  'Successful heists with large takes ($120,000+; $250,000+ for composite weave chance)',
+  'Successful heists with large takes ($30,000+ conductive filament; $45,000+ composite weave chance)',
   'Reputation milestones / sealed achievements when they credit exotic mats',
   'Daily property yields at 12:00 GMT (chop shop → Exotic Core; garage → Composite Weave; manufacturing plant → parts ladder)',
   'Late-game after Reputation level 11 (territory expansion, Diamond vault play)',

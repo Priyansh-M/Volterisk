@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { currentUserId } from "../middleware/auth.js";
+import { syncAchievements } from "../services/achievementService.js";
 import {
   abandonExpansion,
   advanceExpansion,
@@ -25,7 +26,10 @@ export async function scout(req: Request, res: Response): Promise<void> {
 }
 
 export async function advance(req: Request, res: Response): Promise<void> {
-  res.json(await advanceExpansion(currentUserId(req)));
+  const userId = currentUserId(req);
+  const board = await advanceExpansion(userId);
+  const unlocked = await syncAchievements(userId).catch(() => []);
+  res.json({ ...board, unlocked });
 }
 
 export async function abandon(req: Request, res: Response): Promise<void> {

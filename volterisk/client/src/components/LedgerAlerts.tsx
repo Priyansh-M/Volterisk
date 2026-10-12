@@ -4,6 +4,12 @@ import { api } from '../lib/api.ts'
 import { bumpDesk, subscribeDesk } from '../lib/deskPoll.ts'
 import { money } from '../lib/format.ts'
 import type { GameNotice } from '../lib/types.ts'
+import { NEXT_STAGE_READY_KEY } from './Level11Guide.tsx'
+
+function nextStageReady(): boolean {
+  const at = Number(localStorage.getItem(NEXT_STAGE_READY_KEY) ?? 0)
+  return at > 0 && Date.now() >= at
+}
 
 type Unlock = { id: string; name: string; description: string; reward: number }
 type HeistNotice = { id: string; by: string; success: boolean; amountStolen: number | null }
@@ -31,6 +37,15 @@ export function LedgerAlerts({
 
   useEffect(() => {
     if (paused) return
+    function onNextStageReady() {
+      bumpDesk()
+    }
+    window.addEventListener('volterisk-next-stage-ready', onNextStageReady)
+    return () => window.removeEventListener('volterisk-next-stage-ready', onNextStageReady)
+  }, [paused])
+
+  useEffect(() => {
+    if (paused) return
     return subscribeDesk((snap) => {
       onChangeRef.current(snap.notifications.filter((row) => row.read !== true).length)
       if (typeof snap.unclaimed === 'number') onUnclaimedRef.current?.(snap.unclaimed)
@@ -52,7 +67,9 @@ export function LedgerAlerts({
           void api(`/api/notifications/${tableInvite.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
         }
       }
-      const next = snap.unlocked[0]
+      // Next stage waits until territory is set up, then 5s (see Level11Guide).
+      const unlocked = snap.unlocked.filter((row) => row.id !== 'next-stage' || nextStageReady())
+      const next = unlocked[0]
       const report = snap.notifications.find(
         (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
       )

@@ -96,6 +96,8 @@ export type Target = {
   locationName?: string | null
   cadence?: 'day' | 'week' | null
   locked?: boolean
+  /** NPC purse drained — heist button shows "Not enough money". */
+  insufficientFunds?: boolean
   cooldownEndsAt?: string | null
 }
 

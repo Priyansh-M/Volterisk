@@ -70,7 +70,7 @@ export function isStationedNpc(username: string): boolean {
   return stationByName.has(username.trim().toLowerCase());
 }
 
-/** UTC day or ISO week (Monday) start. A successful hit inside this window locks the crew. */
+/** UTC day or ISO week (Monday) start. Kept for station cadence labels / older call sites. */
 export function npcWindowStart(cadence: NpcCadence, now = new Date()): Date {
   if (cadence === "day") {
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -80,6 +80,22 @@ export function npcWindowStart(cadence: NpcCadence, now = new Date()): Date {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   start.setUTCDate(start.getUTCDate() - mondayOffset);
   return start;
+}
+
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+/** Anchor for 2-day purse windows: 2020-01-01 12:00 GMT. */
+const PURSE_WINDOW_ANCHOR_MS = Date.UTC(2020, 0, 1, 12, 0, 0, 0);
+
+/**
+ * NPC purse reset window: every 2 days at 12:00 GMT.
+ * Stored in NpcPurse.weekStart (field name unchanged). A new window → fresh purse balance.
+ */
+export function npcPurseWindowStart(now = new Date()): Date {
+  const nowMs = now.getTime();
+  const todayNoon = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0, 0);
+  const latestNoon = nowMs >= todayNoon ? todayNoon : todayNoon - 24 * 60 * 60 * 1000;
+  const periods = Math.floor((latestNoon - PURSE_WINDOW_ANCHOR_MS) / TWO_DAYS_MS);
+  return new Date(PURSE_WINDOW_ANCHOR_MS + periods * TWO_DAYS_MS);
 }
 
 /** Seed balance, lifted to the heist floor only when the roster itself is too thin. */
@@ -215,7 +231,7 @@ export async function loadNpcPurses(
   npcs: { id: string; username: string }[],
   attackerLevel: number,
 ) {
-  const weekStart = npcWindowStart("week");
+  const weekStart = npcPurseWindowStart();
   const ids = npcs.map((npc) => npc.id);
   const existing = ids.length
     ? await prisma.npcPurse.findMany({ where: { attackerId, weekStart, npcId: { in: ids } } })
@@ -312,7 +328,7 @@ export function npcCooldownMinutes(username: string): number {
 
 /**
  * Extra NPC defense once the attacker is past reputation 10.
- * +10 per player level above 10 (same for every crew). Stacks with NPC_DEFENSE_FLAT.
+ * +11 per player level above 10 (same for every crew). Stacks with NPC_DEFENSE_FLAT.
  */
 export function npcLevelDefenseBonus(attackerLevel: number): number {
   if (attackerLevel <= RULES.NPC_DEFENSE_LEVEL_START) return 0;
@@ -482,7 +498,7 @@ export function npcOffer(attackerLevel: number, npcId: string, weekStart: Date):
 }
 
 export async function openNpcPurse(attackerId: string, npcUserId: string, npcUsername: string, attackerLevel: number) {
-  const weekStart = npcWindowStart("week");
+  const weekStart = npcPurseWindowStart();
   const existing = await prisma.npcPurse.findUnique({
     where: { attackerId_npcId_weekStart: { attackerId, npcId: npcUserId, weekStart } },
   });
