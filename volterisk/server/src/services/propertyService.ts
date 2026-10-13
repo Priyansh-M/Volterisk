@@ -2,6 +2,7 @@ import { GameError } from "../game/errors.js";
 import { RULES } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { chargeSpend, type Tx } from "./economyService.js";
+import { bustReputationCache } from "./reputationService.js";
 
 async function chargeMarket(tx: Tx, userId: string, amount: number): Promise<"cash" | "card"> {
   return chargeSpend(tx, userId, amount);
@@ -172,7 +173,7 @@ export async function buyProperty(userId: string, catalogId: string) {
   if (item.id === "workshop" || item.price <= 0) {
     throw new GameError(400, "NOT_FOR_SALE", "The Workshop is autogranted, not sold.");
   }
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     if (item.minReputation) {
       const user = await tx.user.findUnique({
         where: { id: userId },
@@ -189,7 +190,7 @@ export async function buyProperty(userId: string, catalogId: string) {
     const already = await tx.property.findFirst({ where: { userId, catalogId } });
     if (already) throw new GameError(400, "ALREADY_OWNED", "You already hold that.");
     const paidFrom = await chargeMarket(tx, userId, item.price);
-    const created = await tx.property.create({
+    const row = await tx.property.create({
       data: { userId, catalogId, level: 1 },
     });
     const baseType = item.kind === "vehicle" ? "vehicle_buy" : "property_buy";
@@ -200,12 +201,14 @@ export async function buyProperty(userId: string, catalogId: string) {
         fromUserId: userId,
       },
     });
-    return presentOwned(created);
+    return row;
   });
+  bustReputationCache(userId);
+  return presentOwned(created);
 }
 
 export async function upgradeProperty(userId: string, id: string) {
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.property.findFirst({ where: { id, userId } });
     if (!row) throw new GameError(404, "NOT_OWNED", "That asset is not on your ledger.");
     const item = assetById(row.catalogId);
@@ -220,7 +223,7 @@ export async function upgradeProperty(userId: string, id: string) {
     const cost = assetUpgradeCost(item.price, row.level, row.catalogId);
     if (!cost) throw new GameError(400, "MAX_LEVEL", "No further upgrade is priced.");
     const paidFrom = await chargeMarket(tx, userId, cost);
-    const updated = await tx.property.update({
+    const next = await tx.property.update({
       where: { id: row.id },
       data: { level: { increment: 1 } },
     });
@@ -231,6 +234,8 @@ export async function upgradeProperty(userId: string, id: string) {
         fromUserId: userId,
       },
     });
-    return presentOwned(updated);
+    return next;
   });
+  bustReputationCache(userId);
+  return presentOwned(updated);
 }

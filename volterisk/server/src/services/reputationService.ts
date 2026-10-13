@@ -145,6 +145,21 @@ async function loadCredits(userId: string, client: Tx | typeof prisma = prisma):
   return new Set(rows.map((r) => r.key));
 }
 
+async function writeCredit(
+  userId: string,
+  key: string,
+  ctx: ProgressCtx,
+  client: Tx | typeof prisma,
+) {
+  if (ctx.credits.has(key)) return;
+  try {
+    await client.reputationCredit.create({ data: { userId, key } });
+    ctx.credits.add(key);
+  } catch {
+    ctx.credits.add(key);
+  }
+}
+
 /** Persist any currently live non-heist conditions so they stay ticked forever. */
 async function creditLiveConditions(
   userId: string,
@@ -156,12 +171,30 @@ async function creditLiveConditions(
     if (condition.kind === "heists") continue;
     if (!liveMet(condition, ctx)) continue;
     const key = reputationConditionKey(condition);
-    if (!key || ctx.credits.has(key)) continue;
-    try {
-      await client.reputationCredit.create({ data: { userId, key } });
-      ctx.credits.add(key);
-    } catch {
-      ctx.credits.add(key);
+    if (!key) continue;
+    await writeCredit(userId, key, ctx, client);
+  }
+}
+
+/**
+ * Hangar L5 must tick hangar L3 / L5 / etc. on every rung that asks for it —
+ * not only the current next-level row. Same for all asset (property) conditions.
+ */
+async function creditOwnedAssetLadders(
+  userId: string,
+  ctx: ProgressCtx,
+  client: Tx | typeof prisma = prisma,
+) {
+  for (const row of ctx.owned) {
+    for (const rung of RULES.REPUTATION) {
+      for (const condition of rung.conditions) {
+        if (condition.kind !== "asset") continue;
+        if (condition.id !== row.catalogId) continue;
+        const min = condition.minLevel ?? 1;
+        if (row.level < min) continue;
+        const key = `asset:${condition.id}:${min}`;
+        await writeCredit(userId, key, ctx, client);
+      }
     }
   }
 }
@@ -222,6 +255,7 @@ const REPUTATION_TTL_MS = 45_000;
 
 async function buildReputation(userId: string) {
   const { user, ctx } = await loadProgress(userId);
+  await creditOwnedAssetLadders(userId, ctx);
   const next = RULES.REPUTATION.find((rung) => rung.level === user.reputationLevel + 1) ?? null;
   if (next) await creditLiveConditions(userId, next.conditions, ctx);
 
@@ -265,7 +299,8 @@ export async function getReputation(userId: string) {
   return value;
 }
 
-function bustReputationCache(userId: string) {
+/** Call after property / vault / craft changes so conditions re-evaluate immediately. */
+export function bustReputationCache(userId: string) {
   reputationFresh.delete(userId);
 }
 
@@ -324,6 +359,7 @@ export async function claimReputation(userId: string) {
 
     const rung = RULES.REPUTATION.find((entry) => entry.level === nextLevel);
     if (!rung) throw new GameError(400, "NOT_READY", "The next level is not open yet.");
+    await creditOwnedAssetLadders(userId, ctx, tx);
     await creditLiveConditions(userId, rung.conditions, ctx, tx);
     if (!rung.conditions.every((condition) => conditionMet(condition, ctx))) {
       throw new GameError(400, "NOT_READY", "The next level is not open yet.");

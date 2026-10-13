@@ -55,8 +55,9 @@ export function ReputationPage() {
   const [career, setCareer] = useState<CareerFile | null>(null)
 
   async function reload() {
+    // Fresh reputation (not GET cache) so property upgrades tick conditions immediately.
     const [data, careerData] = await Promise.all([
-      load<Reputation>('/api/reputation'),
+      api<Reputation>('/api/reputation'),
       load<CareerFile>('/api/career'),
     ])
     setFile(data)

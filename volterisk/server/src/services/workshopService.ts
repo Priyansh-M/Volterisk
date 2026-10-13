@@ -12,6 +12,7 @@ import { prisma } from "../prisma.js";
 import { chargeSpend } from "./economyService.js";
 import { creditItem, debitItem, ownedMap } from "./inventoryService.js";
 import { writeNotification } from "./notificationService.js";
+import { bustReputationCache } from "./reputationService.js";
 
 export async function ensureWorkshop(userId: string) {
   const existing = await prisma.property.findFirst({
@@ -159,7 +160,10 @@ export async function upgradeWorkshop(userId: string) {
       data: { type: "workshop_upgrade", amount: cost.cash, fromUserId: userId },
     });
     return { level: updated.level };
-  }).then(() => getWorkshop(userId));
+  }).then(() => {
+    bustReputationCache(userId);
+    return getWorkshop(userId);
+  });
 }
 
 export async function startCraft(userId: string, recipeId: string) {
