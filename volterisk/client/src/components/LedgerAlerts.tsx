@@ -69,22 +69,10 @@ export function LedgerAlerts({
         }
       }
       // Next stage waits until territory is set up, then 5s (see Level11Guide).
-      const noteIds: string[] = []
       const unlocked = snap.unlocked.filter((row) => row.id !== 'next-stage' || nextStageReady())
-      setUnlocks((prev) => {
-        const kept = prev.filter((row) => shown.current.has(`u:${row.id}`))
-        const add = unlocked.filter((row) => !shown.current.has(`u:${row.id}`) && !kept.some((row2) => row2.id === row.id))
-        for (const row of add) {
-          shown.current.add(`u:${row.id}`)
-          void api('/api/achievements/ack', { method: 'POST', body: JSON.stringify({ id: row.id }) }).catch(() => undefined)
-        }
-        return [...kept, ...add]
-      })
-      const heistRows = snap.notifications.filter(
-        (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
-      )
-      setHeists((prev) => {
-        const incoming = heistRows.map((report) => {
+      const heistIncoming = snap.notifications
+        .filter((row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'))
+        .map((report) => {
           let parsed: { by?: string; success?: boolean; amountStolen?: number | null } = {}
           try {
             parsed = JSON.parse(report.body) as typeof parsed
@@ -98,30 +86,38 @@ export function LedgerAlerts({
             amountStolen: parsed.amountStolen ?? null,
           }
         })
-        const kept = prev.filter((row) => shown.current.has(`r:${row.id}`))
-        const add = incoming.filter((row) => !shown.current.has(`r:${row.id}`) && !kept.some((row2) => row2.id === row.id))
-        for (const row of add) {
-          shown.current.add(`r:${row.id}`)
-          noteIds.push(row.id)
-        }
-        return [...kept, ...add]
-      })
-      setHeats((prev) => {
-        const incoming = snap.notifications
-          .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'))
-          .map((row) => ({ id: row.id, title: row.title, body: row.body }))
-        const kept = prev.filter((row) => shown.current.has(`h:${row.id}`))
-        const add = incoming.filter((row) => !shown.current.has(`h:${row.id}`) && !kept.some((row2) => row2.id === row.id))
-        if (add.length > 0) setDeskAt(0)
-        for (const row of add) {
-          shown.current.add(`h:${row.id}`)
-          noteIds.push(row.id)
-        }
-        return [...add, ...kept]
-      })
+      const heatIncoming = snap.notifications
+        .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'))
+        .map((row) => ({ id: row.id, title: row.title, body: row.body }))
+      const addUnlocks = unlocked.filter((row) => !shown.current.has(`u:${row.id}`))
+      const addHeists = heistIncoming.filter((row) => !shown.current.has(`r:${row.id}`))
+      const addHeats = heatIncoming.filter((row) => !shown.current.has(`h:${row.id}`))
+      for (const row of addUnlocks) {
+        shown.current.add(`u:${row.id}`)
+        void api('/api/achievements/ack', { method: 'POST', body: JSON.stringify({ id: row.id }) }).catch(() => undefined)
+      }
+      const noteIds = [...addHeists.map((row) => row.id), ...addHeats.map((row) => row.id)]
+      for (const row of addHeists) shown.current.add(`r:${row.id}`)
+      for (const row of addHeats) shown.current.add(`h:${row.id}`)
+      if (addHeats.length > 0) setDeskAt(0)
       if (noteIds.length > 0) {
         void api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ ids: noteIds }) }).catch(() => undefined)
       }
+      setUnlocks((prev) => {
+        const kept = prev.filter((row) => shown.current.has(`u:${row.id}`))
+        const add = addUnlocks.filter((row) => !kept.some((row2) => row2.id === row.id))
+        return [...kept, ...add]
+      })
+      setHeists((prev) => {
+        const kept = prev.filter((row) => shown.current.has(`r:${row.id}`))
+        const add = addHeists.filter((row) => !kept.some((row2) => row2.id === row.id))
+        return [...kept, ...add]
+      })
+      setHeats((prev) => {
+        const kept = prev.filter((row) => shown.current.has(`h:${row.id}`))
+        const add = addHeats.filter((row) => !kept.some((row2) => row2.id === row.id))
+        return [...add, ...kept]
+      })
     })
   }, [paused])
 

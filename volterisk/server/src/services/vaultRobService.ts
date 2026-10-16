@@ -1,11 +1,14 @@
 import { prisma } from "../prisma.js";
 import { GameError } from "../game/errors.js";
 import { creditCash } from "./economyService.js";
-import hardPaths from "../game/vaultRobPaths.json" with { type: "json" };
-import normalPaths from "../game/vaultRobPathsNormal.json" with { type: "json" };
+import { readFileSync } from "node:fs";
 
-const HARD = hardPaths as number[][][];
-const NORMAL = normalPaths as number[][][];
+const HARD = JSON.parse(
+  readFileSync(new URL("../game/vaultRobPaths.json", import.meta.url), "utf8"),
+) as number[][][];
+const NORMAL = JSON.parse(
+  readFileSync(new URL("../game/vaultRobPathsNormal.json", import.meta.url), "utf8"),
+) as number[][][];
 const CHANCES = 4;
 const PRIZE = 2_500;
 
