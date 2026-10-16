@@ -37,6 +37,13 @@ model User {
   primaryCareer    String?
   secondaryCareer  String?
   careerChangedAt  DateTime?
+  /** Daily Rob the Vault window key (resets 12:00 GMT) and chances used. */
+  vaultRobDay      String?
+  vaultRobUsed     Int       @default(0)
+  /** Active route index. Null means no run in progress. */
+  vaultRobPath     Int?
+  /** Unix seconds when the active run started. */
+  vaultRobStep     Int       @default(0)
   createdAt        DateTime  @default(now())
 
   vault             Vault?

@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.ts'
 import { bumpDesk, subscribeDesk } from '../lib/deskPoll.ts'
 import { money } from '../lib/format.ts'
-import type { GameNotice } from '../lib/types.ts'
 import { NEXT_STAGE_READY_KEY } from './Level11Guide.tsx'
 
 function nextStageReady(): boolean {
@@ -28,9 +27,10 @@ export function LedgerAlerts({
   onChangeRef.current = onChange
   const onUnclaimedRef = useRef(onUnclaimed)
   onUnclaimedRef.current = onUnclaimed
-  const [unlock, setUnlock] = useState<Unlock | null>(null)
-  const [heist, setHeist] = useState<HeistNotice | null>(null)
-  const [heatNote, setHeatNote] = useState<HeatNotice | null>(null)
+  const [unlocks, setUnlocks] = useState<Unlock[]>([])
+  const [heists, setHeists] = useState<HeistNotice[]>([])
+  const [heats, setHeats] = useState<HeatNotice[]>([])
+  const [deskAt, setDeskAt] = useState(0)
   const [invite, setInvite] = useState<{ id: string; by: string; lobbyId: string } | null>(null)
   const [tableEnded, setTableEnded] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -69,69 +69,108 @@ export function LedgerAlerts({
       }
       // Next stage waits until territory is set up, then 5s (see Level11Guide).
       const unlocked = snap.unlocked.filter((row) => row.id !== 'next-stage' || nextStageReady())
-      const next = unlocked[0]
-      const report = snap.notifications.find(
+      setUnlocks(unlocked)
+      const heistRows = snap.notifications.filter(
         (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
       )
-      const heatReport = snap.notifications.find(
-        (row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'),
+      setHeists(
+        heistRows.map((report) => {
+          let parsed: { by?: string; success?: boolean; amountStolen?: number | null } = {}
+          try {
+            parsed = JSON.parse(report.body) as typeof parsed
+          } catch {
+            parsed = { by: report.body, success: false, amountStolen: null }
+          }
+          return {
+            id: report.id,
+            by: parsed.by ?? 'Unknown',
+            success: Boolean(parsed.success),
+            amountStolen: parsed.amountStolen ?? null,
+          }
+        }),
       )
-      const robbed = report?.title === 'You were robbed'
-      if (next && !robbed) setUnlock(next)
-      if (report && (!next || robbed)) {
-        let parsed: { by?: string; success?: boolean; amountStolen?: number | null } = {}
-        try {
-          parsed = JSON.parse(report.body) as typeof parsed
-        } catch {
-          parsed = { by: report.body, success: false, amountStolen: null }
-        }
-        setHeist({
-          id: report.id,
-          by: parsed.by ?? 'Unknown',
-          success: Boolean(parsed.success),
-          amountStolen: parsed.amountStolen ?? null,
-        })
-      } else if (heatReport && !next) {
-        setHeatNote({ id: heatReport.id, title: heatReport.title, body: heatReport.body })
-      }
+      setHeats(
+        snap.notifications
+          .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'))
+          .map((row) => ({ id: row.id, title: row.title, body: row.body })),
+      )
     })
   }, [paused])
 
-  function ackUnlock(id: string) {
-    void api('/api/achievements/ack', { method: 'POST', body: JSON.stringify({ id }) }).catch(() => undefined)
-  }
-
-  async function dismissHeist() {
-    if (!heist) return
-    const id = heist.id
-    setHeist(null)
-    await api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+  async function dismissDesk() {
+    const noteIds = [...heists.map((row) => row.id), ...heats.map((row) => row.id)]
+    const achievementIds = unlocks.map((row) => row.id)
+    setHeists([])
+    setHeats([])
+    setUnlocks([])
+    setDeskAt(0)
+    await Promise.all([
+      ...noteIds.map((id) => api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)),
+      ...achievementIds.map((id) => api('/api/achievements/ack', { method: 'POST', body: JSON.stringify({ id }) }).catch(() => undefined)),
+    ])
     bumpDesk()
-    onChange()
   }
 
-  async function dismissHeat() {
-    if (!heatNote) return
-    const current = heatNote
-    setHeatNote(null)
-    try {
-      const notes = await api<{ notifications: GameNotice[] }>('/api/notifications')
-      const heatIds = notes.notifications
-        .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'))
-        .map((row) => row.id)
-      await Promise.all(
-        heatIds.map((id) => api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)),
-      )
-    } catch {
-      await api(`/api/notifications/${current.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
-    }
-    bumpDesk()
-    onChange()
-  }
+  const deskSlides: Array<{ key: string; node: ReactNode }> = [
+    ...unlocks.map((unlock) => ({
+      key: `u:${unlock.id}`,
+      node: (
+        <>
+          <p className="font-mono text-[10px] uppercase text-primary">Record unsealed</p>
+          <h2 className="mt-3 font-display text-4xl font-semibold uppercase">Congrats on {unlock.name}</h2>
+          <p className="mt-3 text-sm text-muted-foreground">{unlock.description}</p>
+          <p className="mt-4 font-mono text-xs text-primary">Claim {money(unlock.reward)} on the record</p>
+          <Link
+            to="/achievements"
+            className="nav-pill mt-6 block w-full cursor-pointer px-4 py-2 text-center text-[11px] font-semibold tracking-[0.16em] uppercase no-underline"
+            onClick={() => void dismissDesk()}
+          >
+            Open achievements
+          </Link>
+        </>
+      ),
+    })),
+    ...heats.map((heatNote) => ({
+      key: `h:${heatNote.id}`,
+      node: (
+        <>
+          <p className="font-mono text-[10px] tracking-[0.2em] text-destructive uppercase">Heat check</p>
+          <h2 className="mt-3 font-display text-3xl font-semibold uppercase">{heatNote.title}</h2>
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">{heatNote.body}</p>
+        </>
+      ),
+    })),
+    ...heists.map((heist) => ({
+      key: `r:${heist.id}`,
+      node: (
+        <>
+          <p className="font-mono text-[10px] uppercase text-destructive">Incoming report</p>
+          <h2 className="mt-2 font-display text-4xl font-semibold uppercase">{heist.success ? 'You were robbed' : 'Heist Attempted'}</h2>
+          <p className="mt-4 text-sm text-muted-foreground">By</p>
+          <p className="font-display text-2xl font-semibold uppercase">{heist.by}</p>
+          {heist.success ? (
+            <dl className="mt-5 space-y-2 border-t border-border pt-4 text-sm">
+              <div className="flex justify-between">
+                <dt className="font-mono text-[10px] uppercase text-muted-foreground">Money Stolen</dt>
+                <dd className="font-mono">{money(heist.amountStolen ?? 0)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="font-mono text-[10px] uppercase text-muted-foreground">Attacker</dt>
+                <dd>{heist.by}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">The door held. Nothing left the vault.</p>
+          )}
+        </>
+      ),
+    })),
+  ]
+  const deskIndex = Math.min(deskAt, Math.max(0, deskSlides.length - 1))
 
-  if (!unlock && !heist && !heatNote && !invite && !tableEnded) return null
+  if (deskSlides.length === 0 && !invite && !tableEnded) return null
 
-  const revealHeist = Boolean(heist) && !tableEnded && !invite && !unlock && !heatNote
+  const revealHeist = deskSlides[deskIndex]?.key.startsWith('r:') && !tableEnded && !invite
 
   return (
     <div className={`${revealHeist ? 'heist-reveal' : 'fixed inset-0'} z-[80] flex items-center justify-center bg-background/75 p-4`}>
@@ -183,77 +222,42 @@ export function LedgerAlerts({
             Not now
           </button>
         </section>
-      ) : unlock ? (
-        <section className="animate-dossier relative w-full max-w-md border border-primary bg-card p-8 text-center shadow-2xl">
-          <button
-            type="button"
-            aria-label="Close"
-            className="absolute top-3 right-3 cursor-pointer px-1 font-mono text-sm text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              ackUnlock(unlock.id)
-              setUnlock(null)
-            }}
-          >
-            ×
-          </button>
-          <p className="font-mono text-[10px] uppercase text-primary">Record unsealed</p>
-          <h2 className="mt-3 font-display text-4xl font-semibold uppercase">Congrats on {unlock.name}</h2>
-          <p className="mt-3 text-sm text-muted-foreground">{unlock.description}</p>
-          <p className="mt-4 font-mono text-xs text-primary">Claim {money(unlock.reward)} on the record</p>
-          <Link
-            to="/achievements"
-            className="gloss-gold mt-6 block w-full cursor-pointer px-4 py-2 text-center text-[11px] font-semibold tracking-[0.16em] uppercase no-underline"
-            onClick={() => {
-              ackUnlock(unlock.id)
-              setUnlock(null)
-            }}
-          >
-            Open achievements
-          </Link>
-        </section>
-      ) : heatNote ? (
-        <section className="animate-dossier relative w-full max-w-md border border-destructive bg-card p-8 shadow-2xl">
-          <button
-            type="button"
-            aria-label="Close"
-            className="absolute top-3 right-3 cursor-pointer px-1 font-mono text-sm text-muted-foreground hover:text-foreground"
-            onClick={() => void dismissHeat()}
-          >
-            ×
-          </button>
-          <p className="font-mono text-[10px] tracking-[0.2em] text-destructive uppercase">Heat check</p>
-          <h2 className="mt-3 font-display text-3xl font-semibold uppercase">{heatNote.title}</h2>
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">{heatNote.body}</p>
+      ) : deskSlides[deskIndex] ? (
+        <section className={`${revealHeist ? 'heist-reveal-card relative z-[1]' : 'animate-dossier'} relative w-full max-w-md border border-border bg-card px-12 py-8 text-center shadow-2xl`}>
+          {deskSlides.length > 1 ? (
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              {deskIndex + 1} of {deskSlides.length}
+            </p>
+          ) : null}
+          {deskSlides[deskIndex].node}
+          {deskSlides.length > 1 ? (
+            <>
+              <button
+                type="button"
+                aria-label="Previous report"
+                className="absolute top-1/2 left-2 flex h-[26px] w-[26px] -translate-y-1/2 cursor-pointer items-center justify-center bg-primary font-mono text-base leading-none text-black disabled:opacity-30"
+                disabled={deskIndex === 0}
+                onClick={() => setDeskAt((i) => Math.max(0, i - 1))}
+              >
+                {'<'}
+              </button>
+              <button
+                type="button"
+                aria-label="Next report"
+                className="absolute top-1/2 right-2 flex h-[26px] w-[26px] -translate-y-1/2 cursor-pointer items-center justify-center bg-primary font-mono text-base leading-none text-black disabled:opacity-30"
+                disabled={deskIndex >= deskSlides.length - 1}
+                onClick={() => setDeskAt((i) => Math.min(deskSlides.length - 1, i + 1))}
+              >
+                {'>'}
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
-            onClick={() => void dismissHeat()}
+            onClick={() => void dismissDesk()}
           >
-            Continue
-          </button>
-        </section>
-      ) : heist ? (
-        <section className="heist-reveal-card relative z-[1] w-full max-w-md border border-border bg-card p-8 shadow-2xl">
-          <p className="font-mono text-[10px] uppercase text-destructive">Incoming report</p>
-          <h2 className="mt-2 font-display text-4xl font-semibold uppercase">{heist.success ? 'You were robbed' : 'Heist Attempted'}</h2>
-          <p className="mt-4 text-sm text-muted-foreground">By</p>
-          <p className="font-display text-2xl font-semibold uppercase">{heist.by}</p>
-          {heist.success ? (
-            <dl className="mt-5 space-y-2 border-t border-border pt-4 text-sm">
-              <div className="flex justify-between">
-                <dt className="font-mono text-[10px] uppercase text-muted-foreground">Money Stolen</dt>
-                <dd className="font-mono">{money(heist.amountStolen ?? 0)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="font-mono text-[10px] uppercase text-muted-foreground">Attacker</dt>
-                <dd>{heist.by}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">The door held. Nothing left the vault.</p>
-          )}
-          <button type="button" className="nav-pill mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={() => void dismissHeist()}>
-            Continue
+            Dismiss
           </button>
         </section>
       ) : null}

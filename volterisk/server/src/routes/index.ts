@@ -5,6 +5,7 @@ import { createHeist, estimate, history, quote, targets } from "../controllers/h
 import { bases, claim as claimBase, rename as renameBase } from "../controllers/mapController.js";
 import { me, myVault, myWeapons, removeAccount, updateAvatar, updateName } from "../controllers/meController.js";
 import { bets, exitLobby, invite, join, lobby, openLobby, players, spin, table, tableSpin } from "../controllers/casinoController.js";
+import { robFinish, robForfeit, robStart, robStatus } from "../controllers/vaultRobController.js";
 import {
   achievementAlerts,
   achievements,
@@ -78,6 +79,10 @@ api.get("/heat/warning", requireAuth, asyncHandler(heatWarning));
 api.post("/me/avatar", requireAuth, asyncHandler(updateAvatar));
 api.post("/me/name", requireAuth, asyncHandler(updateName));
 api.delete("/me", requireAuth, asyncHandler(removeAccount));
+api.get("/minigames/vault-rob", requireAuth, asyncHandler(robStatus));
+api.post("/minigames/vault-rob/start", requireAuth, asyncHandler(robStart));
+api.post("/minigames/vault-rob/forfeit", requireAuth, asyncHandler(robForfeit));
+api.post("/minigames/vault-rob/finish", requireAuth, asyncHandler(robFinish));
 api.get("/casino/roulette", requireAuth, asyncHandler(table));
 api.post("/casino/roulette", requireAuth, asyncHandler(spin));
 api.get("/bounties", requireAuth, asyncHandler(bountyBoard));

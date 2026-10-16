@@ -180,6 +180,10 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   if (eliteCount >= 1 && !owned.has("elite-i")) due.push("elite-i");
   if (eliteCount >= RULES.ELITE_ACTIVITY_GOAL && !owned.has("elitist")) due.push("elitist");
   if (user.reputationLevel >= RULES.TERRITORY.UNLOCK_LEVEL && !owned.has("next-stage")) due.push("next-stage");
+  if (user.reputationLevel >= 20 && !owned.has("standing-20")) due.push("standing-20");
+  if (user.reputationLevel >= 30 && !owned.has("standing-30")) due.push("standing-30");
+  if (user.reputationLevel >= 40 && !owned.has("standing-40")) due.push("standing-40");
+  if (user.reputationLevel >= 50 && !owned.has("standing-50")) due.push("standing-50");
   if (craftedAll && !owned.has("elite-crafter")) due.push("elite-crafter");
 
   const fresh: UnlockedAchievement[] = [];

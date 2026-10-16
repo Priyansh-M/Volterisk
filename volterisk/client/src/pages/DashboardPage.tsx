@@ -51,7 +51,7 @@ export function DashboardPage() {
         <Stat label="Available cash" value={money(me.cash)} gold />
         <Stat label="Vault balance" value={money(me.vault.balance)} gold />
         <Stat label="Equipped weapon" value={me.equippedWeapon?.name ?? '—'} />
-        <Stat label="Square" value={me.base ? squareNumber(me.base.sectorId) : '—'} />
+        <Stat label="Square number" value={squareLabel(me.squares ?? (me.base ? [me.base.sectorId] : []))} />
         <Stat label="Heist targets" value={targets === null ? '—' : String(targets)} />
         <Stat label="Open contracts" value={openContracts === null ? '—' : String(openContracts)} />
       </div>
@@ -155,10 +155,14 @@ function MoneyPlot({ series }: { series: { at: string; totalMoney: number }[] })
   )
 }
 
-function squareNumber(sectorId: string) {
-  const match = sectorId.match(/(\d+)\s*$/)
-  if (!match) return sectorId
-  return String(Number(match[1]))
+function squareLabel(sectorIds: string[]) {
+  if (sectorIds.length === 0) return '—'
+  return sectorIds
+    .map((sectorId) => {
+      const match = sectorId.match(/(\d+)\s*$/)
+      return match ? String(Number(match[1])) : sectorId
+    })
+    .join(', ')
 }
 
 function Stat({ label, value, gold }: { label: string; value: string; gold?: boolean }) {

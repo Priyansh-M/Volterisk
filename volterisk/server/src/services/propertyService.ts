@@ -109,12 +109,17 @@ export function postL10UpgradeSurcharge(catalogId: string | undefined, currentLe
 export function assetUpgradeCost(price: number, currentLevel: number, catalogId?: string): number | null {
   if (catalogId === "manufacturing-plant") {
     if (currentLevel < 1 || currentLevel >= MANUFACTURING_PLANT_MAX_LEVEL) return null;
-    return 900_000;
+    return Math.round(900_000 * 0.75);
   }
   const cap = catalogId ? assetCap(catalogId, assetById(catalogId)) : ASSET_MAX_LEVEL;
   const base = baseAssetUpgradeCost(price, currentLevel, cap);
   if (base == null) return null;
-  return base + postL10UpgradeSurcharge(catalogId, currentLevel);
+  let cost = base + postL10UpgradeSurcharge(catalogId, currentLevel);
+  // Estate + yacht upgrades through the L18 required at reputation 20 sum to ~$1.5B.
+  if (catalogId === "estate" || catalogId === "yacht") cost = Math.round(cost * 0.5);
+  // Reputation climbs from level 12 are paid on the level 11+ curve. Cut that spend 25%.
+  if (currentLevel >= 10) cost = Math.round(cost * 0.75);
+  return cost;
 }
 
 /** Purchase price plus every upgrade already paid to reach this level. */

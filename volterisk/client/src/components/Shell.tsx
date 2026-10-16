@@ -8,16 +8,18 @@ import { SoftToast } from './SoftToast.tsx'
 import { api } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
-import type { GameNotice } from '../lib/types.ts'
 import {
   IconArsenal,
   IconBoard,
+  IconPad,
+  IconPodium,
   IconChevronDown,
   IconCoins,
   IconContract,
   IconCrosshair,
   IconEye,
   IconGlobe,
+  IconGrid,
   IconHeist,
   IconHome,
   IconLayers,
@@ -66,7 +68,15 @@ const navGroups: NavGroup[] = [
       { to: '/black-market', label: 'Black Market', Icon: IconEye },
       { to: '/assets', label: 'Assets', Icon: IconProperty },
       { to: '/workshop', label: 'Workshop', Icon: IconTool },
+    ],
+  },
+  {
+    id: 'minigames',
+    label: 'Minigames',
+    Icon: IconPad,
+    items: [
       { to: '/casino/roulette', label: 'Casino', Icon: IconBoard, casino: true },
+      { to: '/minigames/rob-the-vault', label: 'Rob the Vault', Icon: IconGrid },
     ],
   },
   {
@@ -87,7 +97,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/map', label: 'Map', Icon: IconMap },
       { to: '/profile', label: 'Profile', Icon: IconProfile },
-      { to: '/leaderboard', label: 'Leaderboard', Icon: IconBoard },
+      { to: '/leaderboard', label: 'Leaderboard', Icon: IconPodium },
     ],
   },
 ]
@@ -114,6 +124,7 @@ const pageMeta: Record<string, [string, string]> = {
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
   '/leaderboard': ['Intelligence Ranking', 'Current standing across the criminal network.'],
   '/casino/roulette': ['Roulette', 'European wheel. Cash only. Five percent of the total.'],
+  '/minigames/rob-the-vault': ['Rob the Vault', 'Walk the leaked route. Three chances a day.'],
   '/bounties': ['Bounty Board', 'Post cash contracts. Start a hunt, heist the mark, claim the purse.'],
   '/notifications': ['Incoming Reports', 'Security alerts and operational updates.'],
 }
@@ -138,6 +149,7 @@ export function Shell() {
   const [welcome, setWelcome] = useState(false)
   const [brief, setBrief] = useState(false)
   const [discordInvite, setDiscordInvite] = useState(false)
+  const [introAt, setIntroAt] = useState(0)
   const [workshopGate, setWorkshopGate] = useState(false)
   const [heatWarn, setHeatWarn] = useState<string | null>(null)
   const [heatWarnClosed, setHeatWarnClosed] = useState<string | null>(null)
@@ -235,47 +247,23 @@ export function Shell() {
 
   useEffect(() => {
     if (location.pathname !== '/') return
-    if (sessionStorage.getItem('volterisk-welcome') === '1') {
-      setWelcome(true)
-      return
+    const showWelcome = sessionStorage.getItem('volterisk-welcome') === '1'
+    const showBrief = sessionStorage.getItem('volterisk-brief') === '1'
+    if (showWelcome) setWelcome(true)
+    if (showBrief) setBrief(true)
+    if ((showWelcome || showBrief) && me?.id && localStorage.getItem(`volterisk-discord:${me.id}`) !== '1') {
+      setDiscordInvite(true)
     }
-    if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
-  }, [location.pathname])
-
-  /** First-account intro: 5s between welcome → brief → discord (Continue still works). */
-  useEffect(() => {
-    if (!welcome || location.pathname !== '/') return
-    const t = window.setTimeout(() => {
-      sessionStorage.removeItem('volterisk-welcome')
-      setWelcome(false)
-      if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
-    }, 5_000)
-    return () => window.clearTimeout(t)
-  }, [welcome, location.pathname])
-
-  useEffect(() => {
-    if (!brief || welcome || location.pathname !== '/') return
-    const t = window.setTimeout(() => {
-      sessionStorage.removeItem('volterisk-brief')
-      setBrief(false)
-    }, 5_000)
-    return () => window.clearTimeout(t)
-  }, [brief, welcome, location.pathname])
+  }, [location.pathname, me?.id])
 
   useEffect(() => {
     if (!me?.id) return
-    const seen = localStorage.getItem(`volterisk-discord:${me.id}`) === '1'
-    const introOpen =
-      welcome ||
-      brief ||
-      sessionStorage.getItem('volterisk-welcome') === '1' ||
-      sessionStorage.getItem('volterisk-brief') === '1'
-    if (seen || introOpen) {
+    if (welcome || brief) return
+    if (localStorage.getItem(`volterisk-discord:${me.id}`) === '1') {
       setDiscordInvite(false)
       return
     }
-    const t = window.setTimeout(() => setDiscordInvite(true), 5_000)
-    return () => window.clearTimeout(t)
+    setDiscordInvite(true)
   }, [me?.id, welcome, brief])
 
   useEffect(() => {
@@ -303,25 +291,30 @@ export function Shell() {
     }
   }, [me?.id])
 
-  function dismissDiscord() {
+  function dismissIntro() {
+    sessionStorage.removeItem('volterisk-welcome')
+    sessionStorage.removeItem('volterisk-brief')
     if (me?.id) localStorage.setItem(`volterisk-discord:${me.id}`, '1')
+    setWelcome(false)
+    setBrief(false)
     setDiscordInvite(false)
+    setIntroAt(0)
   }
 
   function recount(count?: number) {
-    if (typeof count === 'number') {
-      setNotices(count)
-      return
-    }
-    api<{ notifications: GameNotice[] }>('/api/notifications')
-      .then((data) => setNotices(data.notifications.filter((row) => row.read !== true).length))
-      .catch(() => setNotices(0))
+    if (typeof count === 'number') setNotices(count)
   }
 
   if (!me) return null
   const heat = me.heat ?? 0
   const heatLabel = heat > 50 ? 'High' : heat > 20 ? 'Medium' : 'Low'
   const meta = pageMeta[location.pathname] ?? ['Volterisk', 'Private network.']
+  const introSlides: Array<'welcome' | 'brief' | 'discord'> = []
+  if (welcome && location.pathname === '/') introSlides.push('welcome')
+  if (brief && location.pathname === '/') introSlides.push('brief')
+  if (discordInvite) introSlides.push('discord')
+  const introIndex = Math.min(introAt, Math.max(0, introSlides.length - 1))
+
   const stamp = new Date().toLocaleString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -333,63 +326,94 @@ export function Shell() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <LedgerAlerts paused={welcome || brief || discordInvite} onChange={recount} onUnclaimed={setUnclaimed} />
-      {welcome && location.pathname === '/' ? (
+      {introSlides.length > 0 ? (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-background/80 p-4">
-          <section className="animate-dossier w-full max-w-lg border border-line bg-ink/90 p-8 shadow-2xl">
-            <p className="text-[10px] tracking-[0.28em] text-primary uppercase">Private network</p>
-            <h2 className="mt-3 font-display text-3xl font-semibold uppercase">Welcome to Volterisk</h2>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">Dominate the leaderboard with three options.</p>
-            <dl className="mt-6 space-y-4 text-sm">
-              <div className="border-b border-border pb-3">
-                <dt className="font-mono text-[10px] tracking-[0.16em] text-primary uppercase">Heist</dt>
-                <dd className="mt-1 leading-6">Pick a stationed crew or another player. Your weapon faces their vault. The chance is decided on the server, then the take, the heat, and a worn-down weapon are written down.</dd>
-              </div>
-              <div className="border-b border-border pb-3">
-                <dt className="font-mono text-[10px] tracking-[0.16em] text-primary uppercase">Work</dt>
-                <dd className="mt-1 leading-6">Contracts on the board pay cash and cool heat. A passive job, once you qualify, pays at noon GMT.</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-[10px] tracking-[0.16em] text-primary uppercase">Casino</dt>
-                <dd className="mt-1 leading-6">Try your luck at the casino, use your cash for the chance to win big sums against the house.</dd>
-              </div>
-            </dl>
+          <section className="animate-dossier relative w-full max-w-lg border border-line bg-ink/90 px-12 py-8 shadow-2xl">
+            {introSlides.length > 1 ? (
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                {introIndex + 1} of {introSlides.length}
+              </p>
+            ) : null}
+            {introSlides[introIndex] === 'welcome' ? (
+              <>
+                <p className="text-[12px] tracking-[0.28em] text-primary uppercase">Private network</p>
+                <h2 className="mt-3 font-display text-3xl font-semibold uppercase">Welcome to Volterisk</h2>
+                <p className="mt-4 text-sm leading-6 text-muted-foreground">Dominate the leaderboard with three options.</p>
+                <dl className="mt-6 space-y-4 text-sm">
+                  <div className="border-b border-border pb-3">
+                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Heist</dt>
+                    <dd className="mt-1 leading-6">Pick a stationed crew or another player. Your weapon faces their vault. The chance is decided on the server, then the take, the heat, and a worn-down weapon are written down.</dd>
+                  </div>
+                  <div className="border-b border-border pb-3">
+                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Work</dt>
+                    <dd className="mt-1 leading-6">Contracts on the board pay cash and cool heat. A passive job, once you qualify, pays at noon GMT.</dd>
+                  </div>
+                  <div>
+                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Casino</dt>
+                    <dd className="mt-1 leading-6">Try your luck at the casino, use your cash for the chance to win big sums against the house.</dd>
+                  </div>
+                </dl>
+              </>
+            ) : null}
+            {introSlides[introIndex] === 'brief' ? (
+              <>
+                <p className="font-mono text-[12px] tracking-[0.2em] text-primary uppercase">Before you step onto the chart</p>
+                <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Keep the cash in the vault</h2>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  $25,000 is already in your vault. Heat is the number at the top left of the bar. Heists push it up. Work and time bring it down.
+                </p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  Three times a day, a heat check can reach the cash in your pocket. Above 50 it takes half. Above 100 it takes all of it. Money sitting in the vault is not part of that. A warning opens one minute before each check.
+                </p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  The vault can still be robbed, but it has a door, a capacity, and insurance. Loose cash has none of those. Deposit before you go looking for trouble. Buys, bets, and fees come out of pocket cash only.
+                </p>
+              </>
+            ) : null}
+            {introSlides[introIndex] === 'discord' ? (
+              <>
+                <p className="text-[12px] tracking-[0.28em] text-primary uppercase">Private network</p>
+                <h2 className="mt-3 font-display text-3xl font-semibold uppercase">Join the discord</h2>
+                <p className="mt-4 text-sm leading-6 text-muted-foreground">Meet your fellow operators.</p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">You can always join later from the small Discord icon above Log out.</p>
+                <a
+                  href="https://discord.gg/9H4FtfmBA"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="nav-pill mt-6 block w-full cursor-pointer px-4 py-2 text-center text-[11px] font-semibold tracking-[0.16em] uppercase no-underline"
+                >
+                  Join
+                </a>
+              </>
+            ) : null}
+            {introSlides.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="Previous"
+                  className="absolute top-1/2 left-2 flex h-[26px] w-[26px] -translate-y-1/2 cursor-pointer items-center justify-center bg-primary font-mono text-base leading-none text-black disabled:opacity-30"
+                  disabled={introIndex === 0}
+                  onClick={() => setIntroAt((i) => Math.max(0, i - 1))}
+                >
+                  {'<'}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next"
+                  className="absolute top-1/2 right-2 flex h-[26px] w-[26px] -translate-y-1/2 cursor-pointer items-center justify-center bg-primary font-mono text-base leading-none text-black disabled:opacity-30"
+                  disabled={introIndex >= introSlides.length - 1}
+                  onClick={() => setIntroAt((i) => Math.min(introSlides.length - 1, i + 1))}
+                >
+                  {'>'}
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
-              className="gloss-gold mt-8 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
-              onClick={() => {
-                sessionStorage.removeItem('volterisk-welcome')
-                setWelcome(false)
-                if (sessionStorage.getItem('volterisk-brief') === '1') setBrief(true)
-              }}
+              className="gloss-gold mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+              onClick={dismissIntro}
             >
-              Continue
-            </button>
-          </section>
-        </div>
-      ) : null}
-      {brief && !welcome && location.pathname === '/' ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/80 p-4">
-          <section className="animate-dossier w-full max-w-lg border border-primary bg-card p-6 shadow-2xl">
-            <p className="font-mono text-[10px] tracking-[0.2em] text-primary uppercase">Before you step onto the chart</p>
-            <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Keep the cash in the vault</h2>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              $25,000 is already in your vault. Heat is the number at the top left of the bar. Heists push it up. Work and time bring it down.
-            </p>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Three times a day, a heat check can reach the cash in your pocket. Above 50 it takes half. Above 100 it takes all of it. Money sitting in the vault is not part of that. A warning opens one minute before each check.
-            </p>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The vault can still be robbed, but it has a door, a capacity, and insurance. Loose cash has none of those. Deposit before you go looking for trouble. Buys, bets, and fees come out of pocket cash only.
-            </p>
-            <button
-              type="button"
-              className="gloss-gold mt-5 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
-              onClick={() => {
-                sessionStorage.removeItem('volterisk-brief')
-                setBrief(false)
-              }}
-            >
-              I understand
+              Dismiss
             </button>
           </section>
         </div>
@@ -433,33 +457,6 @@ export function Shell() {
             >
               Continue
             </button>
-          </section>
-        </div>
-      ) : null}
-      {discordInvite ? (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-background/80 p-4">
-          <section className="animate-dossier relative w-full max-w-lg border border-line bg-ink/90 p-8 shadow-2xl">
-            <button
-              type="button"
-              className="absolute top-4 right-4 cursor-pointer font-mono text-sm text-muted-foreground hover:text-foreground"
-              aria-label="Close"
-              onClick={dismissDiscord}
-            >
-              ×
-            </button>
-            <p className="text-[10px] tracking-[0.28em] text-primary uppercase">Private network</p>
-            <h2 className="mt-3 font-display text-3xl font-semibold uppercase">Join the discord</h2>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">Meet your fellow operators.</p>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">You can always join later from the small Discord icon above Log out.</p>
-            <a
-              href="https://discord.gg/9H4FtfmBA"
-              target="_blank"
-              rel="noreferrer"
-              className="gloss-gold mt-8 block w-full cursor-pointer px-4 py-2 text-center text-[11px] font-semibold tracking-[0.16em] uppercase no-underline"
-              onClick={dismissDiscord}
-            >
-              Join
-            </a>
           </section>
         </div>
       ) : null}

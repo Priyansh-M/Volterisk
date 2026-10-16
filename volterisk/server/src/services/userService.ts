@@ -211,6 +211,7 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
     include: {
       vault: true,
       base: true,
+      territoryHoldings: { select: { sectorId: true } },
       weapons: { where: { equipped: true }, include: { weapon: true } },
     },
   });
@@ -301,6 +302,10 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
           name: user.base.name,
         }
       : null,
+    squares: [
+      ...(user.base ? [user.base.sectorId] : []),
+      ...user.territoryHoldings.map((row) => row.sectorId).filter((id) => id !== user.base?.sectorId),
+    ],
     stats: {
       successfulHeists,
       failedHeists: failed,

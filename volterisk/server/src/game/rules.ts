@@ -16,7 +16,7 @@ export const RULES = {
   /** Per crew. A player can hit a different crew while this one is cooling. No vault penalty. */
   NPC_COOLDOWN_MINUTES: 120,
   /** Flat defense added on every stationed-crew vault. */
-  NPC_DEFENSE_FLAT: 6,
+  NPC_DEFENSE_FLAT: 7,
   /**
    * After reputation 10, each NPC gets +11 defense per player level above 10
    * (L11 → +11, L12 → +22, …) on top of NPC_DEFENSE_FLAT.
@@ -31,13 +31,13 @@ export const RULES = {
    * tier 4 sits low. Inclusive [from, to) on attacker reputation except the last band.
    */
   NPC_PAYOUT_BANDS: [
-    { from: 10, to: 15, min: 1_000, max: 25_000 },
-    { from: 15, to: 20, min: 3_000, max: 30_250 },
-    { from: 20, to: 25, min: 5_000, max: 33_000 },
-    { from: 25, to: 30, min: 7_000, max: 35_000 },
-    { from: 30, to: 35, min: 10_000, max: 37_000 },
-    { from: 35, to: 40, min: 10_000, max: 40_000 },
-    { from: 40, to: 51, min: 10_000, max: 42_000 },
+    { from: 10, to: 15, min: 5_000, max: 45_000 },
+    { from: 15, to: 20, min: 7_000, max: 59_250 },
+    { from: 20, to: 25, min: 9_000, max: 65_000 },
+    { from: 25, to: 30, min: 11_000, max: 67_000 },
+    { from: 30, to: 35, min: 14_000, max: 69_000 },
+    { from: 35, to: 40, min: 14_000, max: 72_000 },
+    { from: 40, to: 51, min: 14_000, max: 74_000 },
   ] as { from: number; to: number; min: number; max: number }[],
   /**
    * Max asset level required by reputation rungs ≤ 10. Upgrades past these
@@ -169,6 +169,30 @@ export const RULES = {
       reward: 25_000,
     },
     {
+      id: "standing-20",
+      name: "Standing 20",
+      description: "Reach reputation level 20.",
+      reward: 50_000,
+    },
+    {
+      id: "standing-30",
+      name: "Standing 30",
+      description: "Reach reputation level 30.",
+      reward: 75_000,
+    },
+    {
+      id: "standing-40",
+      name: "Standing 40",
+      description: "Reach reputation level 40.",
+      reward: 100_000,
+    },
+    {
+      id: "standing-50",
+      name: "Standing 50",
+      description: "Reach reputation level 50.",
+      reward: 150_000,
+    },
+    {
       id: "elite-crafter",
       name: "ELITE CRAFTER",
       description: "Craft every workshop recipe.",
@@ -257,17 +281,17 @@ export const RULES = {
     gold: [72, 76, 80, 84, 88],
     diamond: [90, 92, 94, 96, 98],
   } as Record<string, number[]>,
-  /** Cash to raise a vault one level inside the current tier. Diamond L1→L5 steps are flat $100k. */
+  /** Cash to raise a vault one level inside the current tier. Diamond L1→L5 steps are flat $300k. */
   VAULT_LEVEL_COSTS: {
     standard: { 1: 8_000, 2: 36_000, 3: 80_000, 4: 180_000 },
     silver: { 1: 120_000, 2: 400_000, 3: 640_000, 4: 960_000 },
     gold: { 1: 700_000, 2: 2_200_000, 3: 1_000_000, 4: 1_000_000 },
-    diamond: { 1: 100_000, 2: 100_000, 3: 100_000, 4: 100_000 },
+    diamond: { 1: 300_000, 2: 300_000, 3: 300_000, 4: 300_000 },
   } as Record<string, Record<number, number>>,
   VAULT_CONVERSION_COSTS: {
     standard: 500_000,
     silver: 3_000_000,
-    gold: 7_000_000,
+    gold: 5_000_000,
   } as Record<string, number>,
   /**
    * Modification slot unlocks by player level (independent of vault tier).
@@ -833,7 +857,7 @@ export const RULES = {
       id: "vault-survey",
       name: "Vault Survey",
       minLevel: 5,
-      durationMinutes: 150,
+      durationMinutes: 200,
       reward: 165_000,
       risk: "HIGH",
       locationLabel: "Iron Hour Depository",

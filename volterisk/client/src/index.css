@@ -209,3 +209,15 @@ select {
 .rep-shift .rep-label {
   animation: dossier-enter 700ms ease;
 }
+
+@media (max-width: 640px) {
+  .text-\[9px\] {
+    font-size: 11px;
+  }
+  .text-\[10px\] {
+    font-size: 12px;
+  }
+  .text-\[11px\] {
+    font-size: 13px;
+  }
+}

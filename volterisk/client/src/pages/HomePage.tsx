@@ -1,18 +1,31 @@
 import { useNavigate } from 'react-router-dom'
-import { LANDMASSES, SECTORS, WORLD } from '../lib/world.ts'
+import { LANDMASSES, SECTORS } from '../lib/world.ts'
 
-const island = LANDMASSES[0]
+const original = LANDMASSES[0]
+const second = LANDMASSES[1]
 
 export function HomePage() {
   const navigate = useNavigate()
-  const points = island.polygon.map(([x, y]) => `${x},${y}`).join(' ')
+  const gap = 180
+  const shiftX = Math.min(...second.polygon.map(([x]) => x)) - gap - Math.max(...original.polygon.map(([x]) => x))
+  const islands = [
+    { land: original, dx: shiftX },
+    { land: second, dx: 0 },
+  ]
+  const placed = islands.flatMap(({ land, dx }) => land.polygon.map(([x, y]) => [x + dx, y] as const))
+  const xs = placed.map(([x]) => x)
+  const ys = placed.map(([, y]) => y)
+  const pad = 28
+  const minX = Math.min(...xs) - pad
+  const minY = Math.min(...ys) - pad
+  const view = `${minX} ${minY} ${Math.max(...xs) - Math.min(...xs) + pad * 2} ${Math.max(...ys) - Math.min(...ys) + pad * 2}`
   return (
     <div className="classified-grid min-h-screen text-foreground">
       <header className="flex items-center justify-between border-b border-border px-5 py-4 md:px-8">
         <p className="font-display text-xl font-semibold tracking-[0.18em]">VOLTERISK</p>
         <p className="hidden font-mono text-[10px] tracking-[0.2em] text-muted uppercase sm:block">Classified · Operation file 001</p>
       </header>
-      <main className="mx-auto grid max-w-6xl gap-10 px-5 py-10 md:px-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:py-16">
+      <main className="mx-auto grid max-w-7xl gap-8 px-5 py-8 md:px-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.25fr)] lg:py-10">
         <section>
           <p className="font-mono text-[11px] tracking-[0.22em] text-primary uppercase">A vault, a crew, and a chart</p>
           <h1 className="mt-4 font-display text-5xl leading-[0.9] font-semibold uppercase md:text-7xl">
@@ -25,7 +38,7 @@ export function HomePage() {
             <Brief kicker="Territory" body="Claim one square on the Volterisk chart. That square is your block." />
             <Brief kicker="Heists" body="Hit stationed crews and other players. The server rolls the chance. You do not." />
             <Brief kicker="Vault" body="Cash in your pocket can be seized. Cash in the vault has a door, a cap, and insurance." />
-            <Brief kicker="Reputation" body="Levels 1 to 11. Work, titles, and territory expansion at the top of the ladder." />
+            <Brief kicker="Reputation" body="Levels 1 to 50. Work, titles, and territory expansion at the top of the ladder." />
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <button
@@ -43,18 +56,27 @@ export function HomePage() {
             <p className="font-mono text-[10px] tracking-[0.18em] uppercase">Volterisk sector survey</p>
             <p className="font-mono text-[10px] text-primary">Live</p>
           </div>
-          <svg viewBox={`0 0 ${WORLD.width} ${WORLD.height}`} className="h-[420px] w-full bg-background" role="img" aria-label="Volterisk island">
-            <polygon points={points} fill="oklch(0.2 0.02 75)" stroke="oklch(0.69 0.105 82)" strokeWidth="2" />
-            {island.regions.map((region) => (
-              <text key={region.name} x={region.x} y={region.y} textAnchor="middle" className="fill-muted" fontSize="14">
-                {region.name.toUpperCase()}
-              </text>
+          <svg viewBox={view} className="block h-auto w-full bg-background" role="img" aria-label="Volterisk and Skarn">
+            {islands.map(({ land, dx }) => (
+              <g key={land.id}>
+                <polygon
+                  points={land.polygon.map(([x, y]) => `${x + dx},${y}`).join(' ')}
+                  fill="oklch(0.2 0.02 75)"
+                  stroke="oklch(0.69 0.105 82)"
+                  strokeWidth="2"
+                />
+                {land.regions.map((region) => (
+                  <text key={region.name} x={region.x + dx} y={region.y} textAnchor="middle" className="fill-muted" fontSize="14">
+                    {region.name.toUpperCase()}
+                  </text>
+                ))}
+              </g>
             ))}
           </svg>
           <div className="grid grid-cols-3 border-t border-border text-center">
-            <Stat label="Landmass" value="01" />
+            <Stat label="Landmass" value="02" />
             <Stat label="Tracked sectors" value={String(SECTORS.length)} />
-            <Stat label="Regions" value="05" />
+            <Stat label="Regions" value="09" />
           </div>
         </aside>
       </main>

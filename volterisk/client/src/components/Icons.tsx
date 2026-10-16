@@ -63,10 +63,18 @@ export function IconVault(props: IconProps) {
 export function IconTool(props: IconProps) {
   return (
     <Glyph {...props}>
-      <path d="M4 19.5 13.5 10" />
-      <path d="M12 8.5 15.5 5a3.6 3.6 0 0 1 5 5l-3.5 3.5" />
-      <path d="M3.4 18.2a2 2 0 0 0 2.4 2.4" />
-      <path d="M15.2 13.4 19.8 18a1.8 1.8 0 0 1-2.6 2.6l-4.6-4.6" />
+      <path d="M14.6 5.2a2.8 2.8 0 0 1 3.8 3.6l-1 .9" />
+      <path d="M16.4 7.4 6.6 17.2a2 2 0 0 0 2.8 2.8l9.8-9.8" />
+      <path d="M13.2 6.2 17.8 10.8" />
+    </Glyph>
+  )
+}
+
+export function IconGrid(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="1.2" />
+      <path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16" />
     </Glyph>
   )
 }
@@ -436,6 +444,28 @@ export function IconBoard(props: IconProps) {
     <svg {...shellGlyph(props)}>
       <path d="M5 19V9l4-3 3 4 3-5 4 4v10" />
       <path d="M4 19h16" />
+    </svg>
+  )
+}
+
+export function IconPodium(props: IconProps) {
+  return (
+    <svg {...shellGlyph(props)}>
+      <path d="M9 19V10h6v9" />
+      <path d="M3 19V14h6v5" />
+      <path d="M15 19v-7h6v7" />
+      <path d="M3 19h18" />
+    </svg>
+  )
+}
+
+export function IconPad(props: IconProps) {
+  return (
+    <svg {...shellGlyph(props)}>
+      <rect x="3" y="8" width="18" height="9" rx="4.5" />
+      <path d="M7.5 12.5v3M6 14h3" />
+      <circle cx="15.5" cy="12.2" r="0.7" fill="currentColor" stroke="none" />
+      <circle cx="17.6" cy="14.2" r="0.7" fill="currentColor" stroke="none" />
     </svg>
   )
 }

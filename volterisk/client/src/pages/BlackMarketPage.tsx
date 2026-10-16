@@ -88,7 +88,7 @@ export function BlackMarketPage() {
       <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
         Player listings for materials, modifications, and weapons. Buyer pays the ask. Seller keeps{' '}
         {black ? (100 - black.feeRate * 100).toFixed(0) : '95'}% (5% fee). Listings expire in 7 days. Weapons need at least 20%
-        durability to list.
+        durability to list. Your listing options are at the bottom.
       </p>
       <div className="mb-4 max-w-md">
         <Typeahead

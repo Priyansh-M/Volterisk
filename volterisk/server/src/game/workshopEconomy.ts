@@ -235,11 +235,11 @@ export const WORKSHOP = {
     2: { cash: 1_200_000, common: 75, uncommon: 10, rare: 0, exotic: 0 },
     3: { cash: 2_100_000, common: 100, uncommon: 20, rare: 0, exotic: 0 },
     4: { cash: 3_300_000, common: 125, uncommon: 35, rare: 5, exotic: 0 },
-    5: { cash: 2_000_000, common: 150, uncommon: 50, rare: 10, exotic: 0 },
-    6: { cash: 3_000_000, common: 175, uncommon: 65, rare: 15, exotic: 0 },
-    7: { cash: 6_630_000, common: 200, uncommon: 80, rare: 25, exotic: 2 },
-    8: { cash: 4_680_000, common: 250, uncommon: 100, rare: 35, exotic: 5 },
-    9: { cash: 6_825_000, common: 300, uncommon: 125, rare: 50, exotic: 10 },
+    5: { cash: 1_000_000, common: 150, uncommon: 50, rare: 10, exotic: 0 },
+    6: { cash: 1_100_000, common: 175, uncommon: 65, rare: 15, exotic: 0 },
+    7: { cash: 1_200_000, common: 200, uncommon: 80, rare: 25, exotic: 2 },
+    8: { cash: 1_300_000, common: 250, uncommon: 100, rare: 35, exotic: 5 },
+    9: { cash: 1_400_000, common: 300, uncommon: 125, rare: 50, exotic: 10 },
   } as Record<number, { cash: number; common: number; uncommon: number; rare: number; exotic: number }>,
 };
 
@@ -323,6 +323,10 @@ function halfMats(input: Record<string, number>): Record<string, number> {
   );
 }
 
+function twice(input: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(input).map(([id, n]) => [id, n * 2]));
+}
+
 const H = 3_600_000;
 const M20 = 20 * 60_000;
 
@@ -364,7 +368,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     tier: "basic",
     workshopLevel: 2,
     cash: 3_000,
-    baseMs: M20,
+    baseMs: 45 * 60_000,
     materials: { ...BASIC_L1_MATS },
   },
   {
@@ -375,25 +379,25 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     tier: "basic",
     workshopLevel: 2,
     cash: 3_000,
-    baseMs: M20,
+    baseMs: 45 * 60_000,
     materials: { ...BASIC_L1_MATS },
   },
-  { id: "craft:kinetic-amplifier", modId: "kinetic-amplifier", name: "Kinetic Amplifier", kind: "weapon", tier: "intermediate", workshopLevel: 3, cash: 20_000, baseMs: 2 * H, materials: halfMats(mats(30, 10, 3, 0)) },
-  { id: "craft:adaptive-lock-interface", modId: "adaptive-lock-interface", name: "Adaptive Lock Interface", kind: "weapon", tier: "intermediate", workshopLevel: 3, cash: 22_000, baseMs: 2 * H, materials: halfMats(mats(25, 15, 3, 0)) },
-  { id: "craft:composite-reinforcement", modId: "composite-reinforcement", name: "Composite Reinforcement", kind: "weapon", tier: "intermediate", workshopLevel: 4, cash: 25_000, baseMs: 3 * H, materials: halfMats(mats(40, 15, 5, 0)), requiresProperties: ["garage"] },
-  { id: "craft:thermal-regulator", modId: "thermal-regulator", name: "Thermal Regulator", kind: "weapon", tier: "intermediate", workshopLevel: 4, cash: 28_000, baseMs: 3 * H, materials: halfMats(mats(30, 20, 5, 0)) },
-  { id: "craft:layered-barrier-system", modId: "layered-barrier-system", name: "Layered Barrier System", kind: "vault", tier: "intermediate", workshopLevel: 4, cash: 30_000, baseMs: 3 * H, materials: halfMats(mats(40, 20, 8, 0)), requiresProperties: ["warehouse"] },
-  { id: "craft:adaptive-security-network", modId: "adaptive-security-network", name: "Adaptive Security Network", kind: "vault", tier: "intermediate", workshopLevel: 5, cash: 35_000, baseMs: 4 * H, materials: halfMats(mats(40, 25, 10, 0)) },
-  { id: "craft:thermal-signature-masking", modId: "thermal-signature-masking", name: "Thermal Signature Masking", kind: "vault", tier: "intermediate", workshopLevel: 5, cash: 32_000, baseMs: 4 * H, materials: halfMats(mats(30, 20, 10, 0)) },
-  { id: "craft:automated-countermeasures", modId: "automated-countermeasures", name: "Automated Countermeasures", kind: "vault", tier: "intermediate", workshopLevel: 5, cash: 40_000, baseMs: 5 * H, materials: halfMats(mats(35, 25, 12, 0)), requiresProperties: ["front"] },
-  { id: "craft:phase-alignment-core", modId: "phase-alignment-core", name: "Phase Alignment Core", kind: "weapon", tier: "advanced", workshopLevel: 7, cash: 75_000, baseMs: 8 * H, blueprint: true, materials: mats(50, 25, 15, 2) },
-  { id: "craft:predictive-breach-module", modId: "predictive-breach-module", name: "Predictive Breach Module", kind: "weapon", tier: "advanced", workshopLevel: 7, cash: 85_000, baseMs: 10 * H, blueprint: true, materials: mats(40, 30, 15, 3), requiresProperties: ["front"] },
-  { id: "craft:self-calibrating-assembly", modId: "self-calibrating-assembly", name: "Self-Calibrating Assembly", kind: "weapon", tier: "advanced", workshopLevel: 8, cash: 90_000, baseMs: 10 * H, blueprint: true, materials: mats(50, 30, 20, 3), requiresProperties: ["garage"] },
-  { id: "craft:overdrive-mechanism", modId: "overdrive-mechanism", name: "Overdrive Mechanism", kind: "weapon", tier: "advanced", workshopLevel: 8, cash: 100_000, baseMs: 12 * H, blueprint: true, materials: mats(50, 30, 20, 4) },
-  { id: "craft:aegis-defence-core", modId: "aegis-defence-core", name: "Aegis Defence Core", kind: "vault", tier: "advanced", workshopLevel: 7, cash: 90_000, baseMs: 10 * H, blueprint: true, materials: mats(50, 30, 20, 3) },
-  { id: "craft:predictive-security-matrix", modId: "predictive-security-matrix", name: "Predictive Security Matrix", kind: "vault", tier: "advanced", workshopLevel: 8, cash: 110_000, baseMs: 12 * H, blueprint: true, materials: mats(50, 35, 20, 4), requiresProperties: ["front"] },
-  { id: "craft:distributed-barrier-network", modId: "distributed-barrier-network", name: "Distributed Barrier Network", kind: "vault", tier: "advanced", workshopLevel: 9, cash: 125_000, baseMs: 14 * H, blueprint: true, materials: mats(60, 40, 25, 5), requiresProperties: ["warehouse"] },
-  { id: "craft:blacksite-containment-system", modId: "blacksite-containment-system", name: "Blacksite Containment System", kind: "vault", tier: "advanced", workshopLevel: 9, cash: 140_000, baseMs: 16 * H, blueprint: true, materials: mats(60, 40, 25, 6) },
+  { id: "craft:kinetic-amplifier", modId: "kinetic-amplifier", name: "Kinetic Amplifier", kind: "weapon", tier: "intermediate", workshopLevel: 3, cash: 20_000, baseMs: 3 * H, materials: twice(halfMats(mats(30, 10, 3, 0))) },
+  { id: "craft:adaptive-lock-interface", modId: "adaptive-lock-interface", name: "Adaptive Lock Interface", kind: "weapon", tier: "intermediate", workshopLevel: 3, cash: 22_000, baseMs: 3 * H, materials: twice(halfMats(mats(25, 15, 3, 0))) },
+  { id: "craft:composite-reinforcement", modId: "composite-reinforcement", name: "Composite Reinforcement", kind: "weapon", tier: "intermediate", workshopLevel: 4, cash: 25_000, baseMs: 3 * H, materials: twice(halfMats(mats(40, 15, 5, 0))), requiresProperties: ["garage"] },
+  { id: "craft:thermal-regulator", modId: "thermal-regulator", name: "Thermal Regulator", kind: "weapon", tier: "intermediate", workshopLevel: 4, cash: 28_000, baseMs: 3 * H, materials: twice(halfMats(mats(30, 20, 5, 0))) },
+  { id: "craft:layered-barrier-system", modId: "layered-barrier-system", name: "Layered Barrier System", kind: "vault", tier: "intermediate", workshopLevel: 4, cash: 30_000, baseMs: 3 * H, materials: twice(halfMats(mats(40, 20, 8, 0))), requiresProperties: ["warehouse"] },
+  { id: "craft:adaptive-security-network", modId: "adaptive-security-network", name: "Adaptive Security Network", kind: "vault", tier: "intermediate", workshopLevel: 5, cash: 35_000, baseMs: 4 * H, materials: twice(halfMats(mats(40, 25, 10, 0))) },
+  { id: "craft:thermal-signature-masking", modId: "thermal-signature-masking", name: "Thermal Signature Masking", kind: "vault", tier: "intermediate", workshopLevel: 5, cash: 32_000, baseMs: 4 * H, materials: twice(halfMats(mats(30, 20, 10, 0))) },
+  { id: "craft:automated-countermeasures", modId: "automated-countermeasures", name: "Automated Countermeasures", kind: "vault", tier: "intermediate", workshopLevel: 5, cash: 40_000, baseMs: 5 * H, materials: twice(halfMats(mats(35, 25, 12, 0))), requiresProperties: ["front"] },
+  { id: "craft:phase-alignment-core", modId: "phase-alignment-core", name: "Phase Alignment Core", kind: "weapon", tier: "advanced", workshopLevel: 7, cash: 75_000, baseMs: 8 * H, blueprint: true, materials: twice(mats(50, 25, 15, 2)) },
+  { id: "craft:predictive-breach-module", modId: "predictive-breach-module", name: "Predictive Breach Module", kind: "weapon", tier: "advanced", workshopLevel: 7, cash: 85_000, baseMs: 10 * H, blueprint: true, materials: twice(mats(40, 30, 15, 3)), requiresProperties: ["front"] },
+  { id: "craft:self-calibrating-assembly", modId: "self-calibrating-assembly", name: "Self-Calibrating Assembly", kind: "weapon", tier: "advanced", workshopLevel: 8, cash: 90_000, baseMs: 10 * H, blueprint: true, materials: twice(mats(50, 30, 20, 3)), requiresProperties: ["garage"] },
+  { id: "craft:overdrive-mechanism", modId: "overdrive-mechanism", name: "Overdrive Mechanism", kind: "weapon", tier: "advanced", workshopLevel: 8, cash: 100_000, baseMs: 12 * H, blueprint: true, materials: twice(mats(50, 30, 20, 4)) },
+  { id: "craft:aegis-defence-core", modId: "aegis-defence-core", name: "Aegis Defence Core", kind: "vault", tier: "advanced", workshopLevel: 7, cash: 90_000, baseMs: 10 * H, blueprint: true, materials: twice(mats(50, 30, 20, 3)) },
+  { id: "craft:predictive-security-matrix", modId: "predictive-security-matrix", name: "Predictive Security Matrix", kind: "vault", tier: "advanced", workshopLevel: 8, cash: 110_000, baseMs: 12 * H, blueprint: true, materials: twice(mats(50, 35, 20, 4)), requiresProperties: ["front"] },
+  { id: "craft:distributed-barrier-network", modId: "distributed-barrier-network", name: "Distributed Barrier Network", kind: "vault", tier: "advanced", workshopLevel: 9, cash: 125_000, baseMs: 14 * H, blueprint: true, materials: twice(mats(60, 40, 25, 5)), requiresProperties: ["warehouse"] },
+  { id: "craft:blacksite-containment-system", modId: "blacksite-containment-system", name: "Blacksite Containment System", kind: "vault", tier: "advanced", workshopLevel: 9, cash: 140_000, baseMs: 24 * H, blueprint: true, materials: twice(mats(60, 40, 25, 6)) },
   {
     id: "craft:sector-pigment-kit",
     modId: "sector-pigment-kit",
@@ -402,10 +406,10 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     tier: "advanced",
     workshopLevel: 10,
     cash: 165_000,
-    baseMs: 18 * H,
+    baseMs: 27 * H,
     blueprint: true,
     requiresProperties: ["estate"],
-    materials: mats(70, 48, 32, 8),
+    materials: twice(mats(70, 48, 32, 8)),
   },
   {
     id: "craft:overbuilt-frame",
@@ -415,10 +419,10 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     tier: "advanced",
     workshopLevel: 10,
     cash: 180_000,
-    baseMs: 20 * H,
+    baseMs: 30 * H,
     blueprint: true,
     requiresProperties: ["garage", "chop-shop"],
-    materials: mats(75, 50, 35, 9),
+    materials: twice(mats(75, 50, 35, 9)),
   },
 ];
 

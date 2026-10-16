@@ -22,6 +22,7 @@ export type Profile = {
   vaultCreditCard?: boolean
   onboarding: Onboarding
   base: PlayerBase | null
+  squares?: string[]
   vault: { balance: number; level: number; tier?: string }
   equippedWeapon: {
     id: string

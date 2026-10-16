@@ -24,6 +24,7 @@ import { TerritoryPage } from './pages/TerritoryPage.tsx'
 import { PropertiesPage } from './pages/PropertiesPage.tsx'
 import { RegisterPage } from './pages/RegisterPage.tsx'
 import { VaultPage } from './pages/VaultPage.tsx'
+import { RobVaultPage } from './pages/RobVaultPage.tsx'
 import { WorkPage } from './pages/WorkPage.tsx'
 import { WorkshopPage } from './pages/WorkshopPage.tsx'
 
@@ -94,6 +95,7 @@ export default function App() {
             }
           />
 
+          <Route path="/minigames/rob-the-vault" element={<RobVaultPage />} />
           <Route path="/bounties" element={<BountyPage />} />
         </Route>
 
