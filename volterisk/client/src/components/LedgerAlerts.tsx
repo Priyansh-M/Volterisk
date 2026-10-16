@@ -69,6 +69,7 @@ export function LedgerAlerts({
         }
       }
       // Next stage waits until territory is set up, then 5s (see Level11Guide).
+      const noteIds: string[] = []
       const unlocked = snap.unlocked.filter((row) => row.id !== 'next-stage' || nextStageReady())
       setUnlocks((prev) => {
         const kept = prev.filter((row) => shown.current.has(`u:${row.id}`))
@@ -101,7 +102,7 @@ export function LedgerAlerts({
         const add = incoming.filter((row) => !shown.current.has(`r:${row.id}`) && !kept.some((row2) => row2.id === row.id))
         for (const row of add) {
           shown.current.add(`r:${row.id}`)
-          void api(`/api/notifications/${row.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+          noteIds.push(row.id)
         }
         return [...kept, ...add]
       })
@@ -114,10 +115,13 @@ export function LedgerAlerts({
         if (add.length > 0) setDeskAt(0)
         for (const row of add) {
           shown.current.add(`h:${row.id}`)
-          void api(`/api/notifications/${row.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+          noteIds.push(row.id)
         }
         return [...add, ...kept]
       })
+      if (noteIds.length > 0) {
+        void api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ ids: noteIds }) }).catch(() => undefined)
+      }
     })
   }, [paused])
 
@@ -129,7 +133,9 @@ export function LedgerAlerts({
     setUnlocks([])
     setDeskAt(0)
     await Promise.all([
-      ...noteIds.map((id) => api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)),
+      noteIds.length > 0
+        ? api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ ids: noteIds }) }).catch(() => undefined)
+        : Promise.resolve(),
       ...achievementIds.map((id) => api('/api/achievements/ack', { method: 'POST', body: JSON.stringify({ id }) }).catch(() => undefined)),
     ])
     bumpDesk()

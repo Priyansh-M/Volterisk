@@ -112,6 +112,21 @@ export async function ensurePrismaConnected(): Promise<void> {
   await prisma.$connect();
 }
 
+let inflight = 0;
+
+/** Count an in-flight API request so the session slot stays only while work is running. */
+export function holdPrisma(): void {
+  inflight += 1;
+}
+
+/** On Vercel, drop the Supabase session when nothing is in flight. Session mode allows 15. */
+export function releasePrisma(): void {
+  inflight = Math.max(0, inflight - 1);
+  if (inflight === 0 && process.env.VERCEL) {
+    void prisma.$disconnect().catch(() => undefined);
+  }
+}
+
 /** @deprecated No-op — kept for call-site compatibility. */
 export async function releasePrismaConnection(_opts?: { immediate?: boolean }): Promise<void> {
   /* intentionally empty */

@@ -9,6 +9,7 @@ import {
   ensurePrismaConnected,
   ensureTerritorySchema,
   ensureVaultRobColumns,
+  prisma,
   usesPostgres,
 } from "./prisma.js";
 import { setReady } from "./runtime.js";
@@ -46,6 +47,7 @@ async function boot(): Promise<void> {
   await ensureTerritorySchema();
   await ensureCareerModsSchema();
   await ensureNightCrew();
+  if (process.env.VERCEL) await prisma.$disconnect().catch(() => undefined);
   if (!process.env.VERCEL) {
     const tick = () => {
       void settleVaultYieldNoonGmt().catch(() => null);

@@ -9,7 +9,7 @@ import {
   unannouncedAchievements,
   unclaimedCount,
 } from "../services/achievementService.js";
-import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../services/notificationService.js";
+import { listNotifications, markAllNotificationsRead, markNotificationRead, markNotificationsRead } from "../services/notificationService.js";
 import { buyProperty, listProperties, upgradeProperty } from "../services/propertyService.js";
 import { buyShopItem, shopView, upgradeCamera } from "../services/shopService.js";
 import { communityBoard } from "../services/communityService.js";
@@ -39,8 +39,16 @@ export async function heatWarning(req: Request, res: Response): Promise<void> {
 const idSchema = z.object({ id: z.string().min(1).max(80) }).strict();
 const shopSchema = z.object({ itemId: z.string().min(1).max(64) }).strict();
 
+const idsSchema = z.object({ ids: z.array(z.string().min(1).max(80)).max(40) }).strict();
+
 export async function readNotifications(req: Request, res: Response): Promise<void> {
-  await markAllNotificationsRead(currentUserId(req));
+  const body = req.body ?? {};
+  if (body && typeof body === "object" && "ids" in body) {
+    const { ids } = idsSchema.parse(body);
+    await markNotificationsRead(currentUserId(req), ids);
+  } else {
+    await markAllNotificationsRead(currentUserId(req));
+  }
   res.json({ ok: true });
 }
 

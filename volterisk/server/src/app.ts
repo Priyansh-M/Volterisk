@@ -2,7 +2,7 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ZodError } from "zod";
 import { GameError } from "./game/errors.js";
-import { ensurePrismaConnected, isDbBusyError } from "./prisma.js";
+import { ensurePrismaConnected, holdPrisma, isDbBusyError, releasePrisma } from "./prisma.js";
 import { api } from "./routes/index.js";
 import { bootError, ready } from "./runtime.js";
 
@@ -23,6 +23,17 @@ export function createApp() {
         }
         try {
           await ensurePrismaConnected();
+          if (process.env.VERCEL) {
+            holdPrisma();
+            let released = false;
+            const release = () => {
+              if (released) return;
+              released = true;
+              releasePrisma();
+            };
+            res.on("finish", release);
+            res.on("close", release);
+          }
           next();
         } catch (error) {
           if (isDbBusyError(error)) {

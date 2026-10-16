@@ -42,6 +42,14 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
   await prisma.notification.updateMany({ where: { userId, read: false }, data: { read: true } });
 }
 
+export async function markNotificationsRead(userId: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await prisma.notification.updateMany({
+    where: { userId, id: { in: ids }, read: false },
+    data: { read: true },
+  });
+}
+
 export async function markNotificationRead(userId: string, notificationId: string) {
   const row = await prisma.notification.findFirst({ where: { id: notificationId, userId } });
   if (!row) return null;

@@ -27,10 +27,9 @@ export function SoftToast() {
         .filter((n: GameNotice) => n.read !== true && !SKIP_TITLES.has(n.title) && !seen.current.has(n.id))
         .reverse()
       if (fresh.length === 0) return
-      for (const n of fresh) {
-        seen.current.add(n.id)
-        void api(`/api/notifications/${n.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
-      }
+      const ids = fresh.map((n) => n.id)
+      for (const id of ids) seen.current.add(id)
+      void api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ ids }) }).catch(() => undefined)
       setQueue((q) => {
         const next = [...q]
         for (const n of fresh) {
@@ -46,7 +45,7 @@ export function SoftToast() {
     setQueue([])
     setIndex(0)
     sessionStorage.removeItem('volterisk-first-toasts')
-    await Promise.all(ids.map((id) => api(`/api/notifications/${id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)))
+    await api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ ids }) }).catch(() => undefined)
   }
 
   if (queue.length === 0) return null
