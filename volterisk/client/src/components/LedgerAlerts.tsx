@@ -34,6 +34,7 @@ export function LedgerAlerts({
   const [invite, setInvite] = useState<{ id: string; by: string; lobbyId: string } | null>(null)
   const [tableEnded, setTableEnded] = useState<string | null>(null)
   const navigate = useNavigate()
+  const shown = useRef(new Set<string>())
 
   useEffect(() => {
     if (paused) return
@@ -69,12 +70,20 @@ export function LedgerAlerts({
       }
       // Next stage waits until territory is set up, then 5s (see Level11Guide).
       const unlocked = snap.unlocked.filter((row) => row.id !== 'next-stage' || nextStageReady())
-      setUnlocks(unlocked)
+      setUnlocks((prev) => {
+        const kept = prev.filter((row) => shown.current.has(`u:${row.id}`))
+        const add = unlocked.filter((row) => !shown.current.has(`u:${row.id}`) && !kept.some((row2) => row2.id === row.id))
+        for (const row of add) {
+          shown.current.add(`u:${row.id}`)
+          void api('/api/achievements/ack', { method: 'POST', body: JSON.stringify({ id: row.id }) }).catch(() => undefined)
+        }
+        return [...kept, ...add]
+      })
       const heistRows = snap.notifications.filter(
         (row) => row.read !== true && (row.title === 'Heist Attempted' || row.title === 'You were robbed'),
       )
-      setHeists(
-        heistRows.map((report) => {
+      setHeists((prev) => {
+        const incoming = heistRows.map((report) => {
           let parsed: { by?: string; success?: boolean; amountStolen?: number | null } = {}
           try {
             parsed = JSON.parse(report.body) as typeof parsed
@@ -87,13 +96,28 @@ export function LedgerAlerts({
             success: Boolean(parsed.success),
             amountStolen: parsed.amountStolen ?? null,
           }
-        }),
-      )
-      setHeats(
-        snap.notifications
+        })
+        const kept = prev.filter((row) => shown.current.has(`r:${row.id}`))
+        const add = incoming.filter((row) => !shown.current.has(`r:${row.id}`) && !kept.some((row2) => row2.id === row.id))
+        for (const row of add) {
+          shown.current.add(`r:${row.id}`)
+          void api(`/api/notifications/${row.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+        }
+        return [...kept, ...add]
+      })
+      setHeats((prev) => {
+        const incoming = snap.notifications
           .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'))
-          .map((row) => ({ id: row.id, title: row.title, body: row.body })),
-      )
+          .map((row) => ({ id: row.id, title: row.title, body: row.body }))
+        const kept = prev.filter((row) => shown.current.has(`h:${row.id}`))
+        const add = incoming.filter((row) => !shown.current.has(`h:${row.id}`) && !kept.some((row2) => row2.id === row.id))
+        if (add.length > 0) setDeskAt(0)
+        for (const row of add) {
+          shown.current.add(`h:${row.id}`)
+          void api(`/api/notifications/${row.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+        }
+        return [...add, ...kept]
+      })
     })
   }, [paused])
 
@@ -112,24 +136,6 @@ export function LedgerAlerts({
   }
 
   const deskSlides: Array<{ key: string; node: ReactNode }> = [
-    ...unlocks.map((unlock) => ({
-      key: `u:${unlock.id}`,
-      node: (
-        <>
-          <p className="font-mono text-[10px] uppercase text-primary">Record unsealed</p>
-          <h2 className="mt-3 font-display text-4xl font-semibold uppercase">Congrats on {unlock.name}</h2>
-          <p className="mt-3 text-sm text-muted-foreground">{unlock.description}</p>
-          <p className="mt-4 font-mono text-xs text-primary">Claim {money(unlock.reward)} on the record</p>
-          <Link
-            to="/achievements"
-            className="nav-pill mt-6 block w-full cursor-pointer px-4 py-2 text-center text-[11px] font-semibold tracking-[0.16em] uppercase no-underline"
-            onClick={() => void dismissDesk()}
-          >
-            Open achievements
-          </Link>
-        </>
-      ),
-    })),
     ...heats.map((heatNote) => ({
       key: `h:${heatNote.id}`,
       node: (
@@ -162,6 +168,24 @@ export function LedgerAlerts({
           ) : (
             <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">The door held. Nothing left the vault.</p>
           )}
+        </>
+      ),
+    })),
+    ...unlocks.map((unlock) => ({
+      key: `u:${unlock.id}`,
+      node: (
+        <>
+          <p className="font-mono text-[10px] uppercase text-primary">Record unsealed</p>
+          <h2 className="mt-3 font-display text-4xl font-semibold uppercase">Congrats on {unlock.name}</h2>
+          <p className="mt-3 text-sm text-muted-foreground">{unlock.description}</p>
+          <p className="mt-4 font-mono text-xs text-primary">Claim {money(unlock.reward)} on the record</p>
+          <Link
+            to="/achievements"
+            className="nav-pill mt-6 block w-full cursor-pointer px-4 py-2 text-center text-[11px] font-semibold tracking-[0.16em] uppercase no-underline"
+            onClick={() => void dismissDesk()}
+          >
+            Open achievements
+          </Link>
         </>
       ),
     })),

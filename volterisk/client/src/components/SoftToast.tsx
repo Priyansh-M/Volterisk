@@ -27,7 +27,10 @@ export function SoftToast() {
         .filter((n: GameNotice) => n.read !== true && !SKIP_TITLES.has(n.title) && !seen.current.has(n.id))
         .reverse()
       if (fresh.length === 0) return
-      for (const n of fresh) seen.current.add(n.id)
+      for (const n of fresh) {
+        seen.current.add(n.id)
+        void api(`/api/notifications/${n.id}/read`, { method: 'POST', body: '{}' }).catch(() => undefined)
+      }
       setQueue((q) => {
         const next = [...q]
         for (const n of fresh) {
