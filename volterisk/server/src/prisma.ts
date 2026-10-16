@@ -181,6 +181,22 @@ let bountySchemaReady = false;
 let territorySchemaReady = false;
 let careerModsSchemaReady = false;
 
+/** Rob the Vault columns on User. Missing columns make every player read fail. */
+export async function ensureVaultRobColumns(): Promise<void> {
+  for (const sql of [
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "vaultRobDay" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "vaultRobUsed" INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "vaultRobPath" INTEGER`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "vaultRobStep" INTEGER NOT NULL DEFAULT 0`,
+  ]) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch {
+      /* already present */
+    }
+  }
+}
+
 export async function ensureBountyTable(): Promise<void> {
   if (bountySchemaReady) return;
   if (await bountyTableExists()) {

@@ -8,6 +8,7 @@ import {
   ensureDatabase,
   ensurePrismaConnected,
   ensureTerritorySchema,
+  ensureVaultRobColumns,
   usesPostgres,
 } from "./prisma.js";
 import { setReady } from "./runtime.js";
@@ -40,6 +41,7 @@ async function boot(): Promise<void> {
     await configureSqlite();
   } else {
     await ensureBountyTable();
+    await ensureVaultRobColumns();
   }
   await ensureTerritorySchema();
   await ensureCareerModsSchema();
