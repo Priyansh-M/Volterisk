@@ -351,13 +351,13 @@ export const RULES = {
    * Reputation is the player level. Claiming a rung pays the reward and
    * raises the level that work and the dossier use. Everyone starts at 1.
    * Level 5 finishes every holding that the earlier rungs left short of level 5.
-   * Levels 12–50 each pay exactly $100,000 once (see lateReputation).
+   * Levels 12–50 each pay exactly $1,000,000 once (see lateReputation).
    * Existing Level 11+ accounts are grandfathered past the new Diamond L5 gate
    * (that gate only applies when advancing into Level 11).
    */
   REPUTATION_MAX_LEVEL: 50,
   LEVEL_UP_REWARD_FROM: 12,
-  LEVEL_UP_REWARD_CASH: 100_000,
+  LEVEL_UP_REWARD_CASH: 1_000_000,
   /**
    * Post-10 territory org. Config only — do not hardcode limits in services.
    * maxSectorsByLevel: total holdings including original base.
@@ -1228,6 +1228,20 @@ export function progressionPhase(level: number): string {
   if (level >= 12) return "Established Criminal";
   if (level >= 11) return "Territory Baron";
   return "Street ladder";
+}
+
+/** Pre-L11: cash + vault. L11+ card: vault is the whole net worth. */
+export function playerNetWorth(user: {
+  cash: number;
+  vaultCreditCard?: boolean;
+  reputationLevel?: number;
+  vault?: { balance: number } | null;
+}): number {
+  const vault = user.vault?.balance ?? 0;
+  if (user.vaultCreditCard || (user.reputationLevel ?? 0) >= RULES.TERRITORY.UNLOCK_LEVEL) {
+    return vault;
+  }
+  return user.cash + vault;
 }
 
 /** Coarse public band for a net worth. Exact figures never leave the server. */

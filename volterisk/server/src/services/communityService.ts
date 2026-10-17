@@ -1,3 +1,4 @@
+import { playerNetWorth } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 
 const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
@@ -16,13 +17,18 @@ async function readCommunityBoard() {
   const [players, heisted, snaps] = await Promise.all([
     prisma.user.findMany({
       where: { isBot: false },
-      select: { cash: true, vault: { select: { balance: true } } },
+      select: {
+        cash: true,
+        vaultCreditCard: true,
+        reputationLevel: true,
+        vault: { select: { balance: true } },
+      },
     }),
     prisma.heist.aggregate({ where: { success: true }, _sum: { amountStolen: true } }),
     prisma.economySnapshot.findMany({ orderBy: { takenAt: "asc" } }),
   ]);
   const registeredPlayers = players.length;
-  const totalMoney = players.reduce((sum, user) => sum + user.cash + (user.vault?.balance ?? 0), 0);
+  const totalMoney = players.reduce((sum, user) => sum + playerNetWorth(user), 0);
   const totalHeisted = heisted._sum.amountStolen ?? 0;
   const now = new Date();
   const latest = snaps[snaps.length - 1];

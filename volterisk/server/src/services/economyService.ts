@@ -63,6 +63,36 @@ export async function chargeSpend(tx: Tx, userId: string, amount: number): Promi
 }
 
 /**
+ * L11+ credit card: leftover pocket cash is invisible in the UI. Move it onto the vault.
+ * Safe to call more than once — no-ops when cash is already 0.
+ */
+export async function sweepPocketCashToCard(tx: Tx, userId: string, cash?: number): Promise<number> {
+  let amount = cash;
+  if (amount == null) {
+    const row = await tx.user.findUnique({
+      where: { id: userId },
+      select: { cash: true, vaultCreditCard: true },
+    });
+    if (!row?.vaultCreditCard || row.cash <= 0) return 0;
+    amount = row.cash;
+  }
+  if (!Number.isInteger(amount) || amount <= 0) return 0;
+  const updated = await tx.user.updateMany({
+    where: { id: userId, cash: { gte: amount } },
+    data: { cash: { decrement: amount } },
+  });
+  if (updated.count !== 1) return 0;
+  await tx.vault.update({
+    where: { userId },
+    data: { balance: { increment: amount } },
+  });
+  await tx.transaction.create({
+    data: { type: "vault_deposit", amount, fromUserId: userId, toUserId: userId },
+  });
+  return amount;
+}
+
+/**
  * L11+ credit card: earnings credit vault. Pre-L11 unchanged (pocket cash).
  */
 export async function creditEarn(tx: Tx, userId: string, amount: number): Promise<"cash" | "card"> {

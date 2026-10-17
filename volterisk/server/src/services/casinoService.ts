@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import { GameError } from "../game/errors.js";
+import { playerNetWorth } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { chargeSpend, creditEarn } from "./economyService.js";
 import { writeNotification } from "./notificationService.js";
@@ -42,8 +43,13 @@ function utcDay(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
-function liveCap(cash: number, vault: number) {
-  return Math.floor((cash + vault) * 0.05);
+function liveCap(user: {
+  cash: number;
+  vaultCreditCard: boolean;
+  reputationLevel: number;
+  vault: { balance: number } | null;
+}) {
+  return Math.floor(playerNetWorth(user) * 0.05);
 }
 
 export async function rouletteStatus(userId: string) {
@@ -51,7 +57,7 @@ export async function rouletteStatus(userId: string) {
   if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
   const day = utcDay();
   const fresh = user.rouletteDay !== day;
-  const cap = fresh ? liveCap(user.cash, user.vault.balance) : user.rouletteCap;
+  const cap = fresh ? liveCap(user) : user.rouletteCap;
   const staked = fresh ? 0 : user.rouletteStaked;
   return { cap, staked, locked: cap > 0 && staked >= cap, day };
 }
@@ -76,7 +82,7 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
     if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
     const day = utcDay();
     const fresh = user.rouletteDay !== day;
-    const cap = fresh ? liveCap(user.cash, user.vault.balance) : user.rouletteCap;
+    const cap = fresh ? liveCap(user) : user.rouletteCap;
     const already = fresh ? 0 : user.rouletteStaked;
     if (cap <= 0 || already >= cap) {
       throw new GameError(409, "TABLE_CLOSED", "The day's allowance is spent. Come back tomorrow.");
@@ -84,8 +90,13 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
     if (already + stake > cap) {
       throw new GameError(400, "OVER_CAP", `That spin passes today's cap of ${cap}. ${cap - already} is left.`);
     }
-    if (stake > user.cash) {
-      throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough cash. Check your vault.");
+    const spendable = user.vaultCreditCard ? user.vault.balance : user.cash;
+    if (stake > spendable) {
+      throw new GameError(
+        400,
+        "INSUFFICIENT_FUNDS",
+        user.vaultCreditCard ? "Not enough card balance in the vault." : "Not enough cash. Check your vault.",
+      );
     }
     await chargeSpend(tx, userId, stake);
     await tx.user.update({

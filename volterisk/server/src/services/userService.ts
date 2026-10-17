@@ -8,6 +8,7 @@ import {
   maxDurability,
   minutesAgo,
   minutesFromNow,
+  playerNetWorth,
   titleForLevel,
   weaponById,
 } from "../game/rules.js";
@@ -17,6 +18,7 @@ import { unclaimedCount } from "./achievementService.js";
 import { settleHeatState } from "./heatService.js";
 import { settlePassivePay } from "./workService.js";
 import { CAREERS, isCareerId } from "../game/careersAndMods.js";
+import { sweepPocketCashToCard } from "./economyService.js";
 import { assetById, assetMoneySpent } from "./propertyService.js";
 import { settlePropertyMaterialYields } from "./propertyMaterialYieldService.js";
 import { settleVaultYield } from "./vaultYieldService.js";
@@ -218,6 +220,15 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
   if (!user || !user.vault) {
     throw new GameError(404, "NOT_FOUND", "Player not found.");
   }
+  if (user.vaultCreditCard && user.cash > 0) {
+    const moved = await prisma
+      .$transaction((tx) => sweepPocketCashToCard(tx, user.id, user.cash))
+      .catch(() => 0);
+    if (moved > 0) {
+      user.cash -= moved;
+      user.vault.balance += moved;
+    }
+  }
   // Login uses light=true: one user read only. Full /api/me loads heist stats.
   // Same profile shape either way — features unchanged, login just arrives sooner.
   let successfulHeists = 0;
@@ -396,7 +407,7 @@ async function computeLeaderboard() {
       return {
         id: user.id,
         username: user.username,
-        netWorth: user.cash + (user.vault?.balance ?? 0),
+        netWorth: playerNetWorth(user),
         level: user.reputationLevel,
         successfulHeists: wins.get(user.id) ?? 0,
         base: user.base?.regionName ?? null,

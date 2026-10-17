@@ -1,4 +1,4 @@
-import { titleForLevel, wealthBandLabel } from "../game/rules.js";
+import { playerNetWorth, titleForLevel, wealthBandLabel } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 
 /**
@@ -38,6 +38,7 @@ async function computePublicProfiles(): Promise<Map<string, PublicProfile>> {
         username: true,
         cash: true,
         reputationLevel: true,
+        vaultCreditCard: true,
         isBot: true,
         vault: { select: { balance: true } },
       },
@@ -60,7 +61,7 @@ async function computePublicProfiles(): Promise<Map<string, PublicProfile>> {
     .filter((user) => !user.isBot)
     .map((user) => ({
       user,
-      netWorth: user.cash + (user.vault?.balance ?? 0),
+      netWorth: playerNetWorth(user),
     }))
     .sort((a, b) => b.netWorth - a.netWorth || a.user.username.localeCompare(b.user.username));
 

@@ -2,7 +2,7 @@ import { GameError } from "../game/errors.js";
 import { RULES, progressionPhase, titleForLevel, vaultModSlotsForLevel, weaponModSlotsForLevel } from "../game/rules.js";
 import { CRAFT_RECIPES } from "../game/workshopEconomy.js";
 import { prisma } from "../prisma.js";
-import { chargeSpend, creditEarn, type Tx } from "./economyService.js";
+import { chargeSpend, creditEarn, sweepPocketCashToCard, type Tx } from "./economyService.js";
 import { writeNotification } from "./notificationService.js";
 
 type Owned = { catalogId: string; level: number };
@@ -375,16 +375,22 @@ export async function claimReputation(userId: string) {
     }
 
     const claimedAt = new Date();
+    const cardUnlocks = nextLevel >= RULES.TERRITORY.UNLOCK_LEVEL;
     const raised = await tx.user.updateMany({
       where: { id: userId, reputationLevel: before.level },
       data: {
         reputationLevel: nextLevel,
         reputationClaimedAt: claimedAt,
-        ...(nextLevel >= RULES.TERRITORY.UNLOCK_LEVEL ? { vaultCreditCard: true } : {}),
+        ...(cardUnlocks ? { vaultCreditCard: true } : {}),
       },
     });
     if (raised.count !== 1) {
       throw new GameError(409, "ALREADY_CLAIMED", "That level is already on your file.");
+    }
+
+    let swept = 0;
+    if (cardUnlocks) {
+      swept = await sweepPocketCashToCard(tx, userId);
     }
 
     if (reward > 0) {
@@ -396,11 +402,14 @@ export async function claimReputation(userId: string) {
 
     const title = titleForLevel(nextLevel);
     const unlockLine = unlocks.length ? ` Unlocks: ${unlocks.join("; ")}.` : "";
+    const payWhere = cardUnlocks ? "card" : "cash";
     if (nextLevel === RULES.TERRITORY.UNLOCK_LEVEL) {
+      const sweepLine =
+        swept > 0 ? ` Pocket cash ${money(swept)} moved onto the card.` : " Pocket cash now spends from the vault.";
       await writeNotification(tx, {
         userId,
         title: "Territory expansion unlocked",
-        body: `Level ${nextLevel} (${title}) is on your file. Open the Map and scout any empty sector to expand. Hold at least $${RULES.TERRITORY.VAULT_CAPITAL_REQUIRED.toLocaleString("en-US")} in the vault. Credit card shop from vault is live.${unlockLine}`,
+        body: `Level ${nextLevel} (${title}) is on your file. Open the Map and scout any empty sector to expand. Hold at least $${RULES.TERRITORY.VAULT_CAPITAL_REQUIRED.toLocaleString("en-US")} in the vault. Credit card shop from vault is live.${sweepLine}${unlockLine}`,
         severity: "INFO",
       });
       await writeNotification(tx, {
@@ -414,7 +423,7 @@ export async function claimReputation(userId: string) {
         userId,
         title: `Level ${nextLevel} · ${title}`,
         body:
-          (reward > 0 ? `Level-up reward ${money(reward)} credited to cash.` : "Standing raised.") + unlockLine,
+          (reward > 0 ? `Level-up reward ${money(reward)} credited to ${payWhere}.` : "Standing raised.") + unlockLine,
         severity: "INFO",
       });
     }

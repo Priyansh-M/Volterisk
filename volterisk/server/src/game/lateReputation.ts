@@ -20,7 +20,7 @@ export type ReputationRung = {
   conditions: RepCondition[];
 };
 
-const LEVEL_UP_REWARD = 100_000;
+const LEVEL_UP_REWARD = 1_000_000;
 const MILESTONES = new Set([15, 20, 25, 30, 35, 40, 45, 50]);
 
 const UNLOCKS: Record<number, string[]> = {
