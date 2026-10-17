@@ -3,7 +3,7 @@ import { api } from '../lib/api.ts'
 import { subscribeDesk } from '../lib/deskPoll.ts'
 import type { GameNotice } from '../lib/types.ts'
 
-/** These already have their own desk cards (invite, heist, heat). */
+/** These already have their own desk cards (invite, heist, heat, police). */
 const SKIP_TITLES = new Set([
   'Game ended',
   'Roulette invite',
@@ -11,6 +11,8 @@ const SKIP_TITLES = new Set([
   'You were robbed',
   'Cash seized',
   'Heat check',
+  'Police bounty',
+  'Police confiscation',
 ])
 
 type Card = { id: string; title: string; body: string }

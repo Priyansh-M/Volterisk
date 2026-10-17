@@ -566,7 +566,10 @@ export async function attemptHeist(
             });
           }
           await gainHeat(tx, attackerId, heistHeatGain(false, 0));
-          const police = await addPoliceAttention(tx, attackerId, RULES.TERRITORY.POLICE_PER_FAILED_HEIST);
+          const police =
+            attacker.reputationLevel >= RULES.TERRITORY.UNLOCK_LEVEL
+              ? await addPoliceAttention(tx, attackerId, RULES.TERRITORY.POLICE_PER_FAILED_HEIST)
+              : { before: 0, after: 0 };
           return {
             policeHigh: police.before < 50 && police.after >= 50,
             policeAfter: police.after,
@@ -607,7 +610,10 @@ export async function attemptHeist(
           throw new GameError(409, "VAULT_CHANGED", "The vault shifted before the take landed.");
         }
         await gainHeat(tx, attackerId, heistHeatGain(true, amount));
-        const police = await addPoliceAttention(tx, attackerId, RULES.TERRITORY.POLICE_PER_HEIST);
+        const police =
+          attacker.reputationLevel >= RULES.TERRITORY.UNLOCK_LEVEL
+            ? await addPoliceAttention(tx, attackerId, RULES.TERRITORY.POLICE_PER_HEIST)
+            : { before: 0, after: 0 };
         await creditEarn(tx, attackerId, amount);
         const materialsGained = rollHeistMaterials(amount);
         for (const drop of materialsGained) {

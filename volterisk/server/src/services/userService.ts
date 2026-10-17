@@ -208,7 +208,6 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
     await settleHeatState(userId).catch(() => null);
     await settlePassivePay(userId).catch(() => null);
     await settleVaultYield(userId).catch(() => null);
-    await settlePolice(userId).catch(() => null);
     await settlePropertyMaterialYields(userId).catch(() => null);
   }
   const user = await prisma.user.findUnique({
@@ -222,6 +221,15 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
   });
   if (!user || !user.vault) {
     throw new GameError(404, "NOT_FOUND", "Player not found.");
+  }
+  // Police only exists at level 11+. Settle inline with the loaded user — no extra read below 11.
+  let policeDisplay = policePoints(user.policeAttention, user.policeSettledOn);
+  if (!light && user.reputationLevel >= RULES.TERRITORY.UNLOCK_LEVEL) {
+    policeDisplay = await settlePolice(userId, {
+      policeAttention: user.policeAttention,
+      policeSettledOn: user.policeSettledOn,
+      reputationLevel: user.reputationLevel,
+    }).catch(() => policeDisplay);
   }
   if ((user.vaultCreditCard || user.reputationLevel >= 11) && user.cash > 0) {
     const moved = await prisma
@@ -294,7 +302,7 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
         }
       : null,
     heat: user.heat,
-    policeAttention: policePoints(user.policeAttention, user.policeSettledOn),
+    policeAttention: policeDisplay,
     penalty:
       user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()
         ? { active: true, endsAt: user.vaultExposedUntil.toISOString() }

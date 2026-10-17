@@ -89,7 +89,7 @@ async function confiscateIfCritical(tx: {
 export async function addPoliceAttention(
   tx: {
     user: {
-      findUnique: (args: unknown) => Promise<{ policeAttention: number; policeSettledOn: string | null } | null>;
+      findUnique: (args: unknown) => Promise<{ policeAttention: number; policeSettledOn: string | null; reputationLevel: number } | null>;
       update: (args: unknown) => Promise<unknown>;
     };
     vault: { findUnique: (args: unknown) => Promise<{ balance: number } | null> };
@@ -100,9 +100,11 @@ export async function addPoliceAttention(
 ): Promise<{ before: number; after: number }> {
   const user = await tx.user.findUnique({
     where: { id: userId },
-    select: { policeAttention: true, policeSettledOn: true },
+    select: { policeAttention: true, policeSettledOn: true, reputationLevel: true },
   });
   if (!user) return { before: 0, after: 0 };
+  // Police attention is a level 11+ system. Below that it never moves.
+  if (user.reputationLevel < RULES.TERRITORY.UNLOCK_LEVEL) return { before: 0, after: 0 };
   const packed = unpackPolice(user.policeSettledOn);
   const before = policePoints(user.policeAttention, user.policeSettledOn);
   const clock = policeClock(before, packed.tickMs ? new Date(packed.tickMs) : null);
@@ -119,12 +121,22 @@ export async function addPoliceAttention(
   return { before: clock.attention, after };
 }
 
-export async function settlePolice(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { policeAttention: true, policeSettledOn: true },
-  });
-  if (!user) return;
+/**
+ * Decays police attention and runs the daily bounty tick. Level 11+ only.
+ * Pass an already-loaded user to skip the read on hot paths. Returns display points.
+ */
+export async function settlePolice(
+  userId: string,
+  preloaded?: { policeAttention: number; policeSettledOn: string | null; reputationLevel: number },
+): Promise<number> {
+  const user =
+    preloaded ??
+    (await prisma.user.findUnique({
+      where: { id: userId },
+      select: { policeAttention: true, policeSettledOn: true, reputationLevel: true },
+    }));
+  if (!user) return 0;
+  if (user.reputationLevel < RULES.TERRITORY.UNLOCK_LEVEL) return 0;
   const packed = unpackPolice(user.policeSettledOn);
   const points = policePoints(user.policeAttention, user.policeSettledOn);
   const clock = policeClock(points, packed.tickMs ? new Date(packed.tickMs) : null);
@@ -142,6 +154,7 @@ export async function settlePolice(userId: string) {
     });
   }
   if (daily) await syncPoliceBounty(userId, clock.attention, packed.day != null).catch(() => null);
+  return clock.attention;
 }
 
 async function assertUnlocked(userId: string) {
@@ -205,7 +218,6 @@ function specCatalog() {
 }
 
 export async function getTerritoryBoard(userId: string) {
-  await settlePolice(userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { vault: true, base: true },
@@ -213,6 +225,14 @@ export async function getTerritoryBoard(userId: string) {
   if (!user) throw new GameError(404, "NOT_FOUND", "Player not found.");
 
   const unlocked = user.reputationLevel >= RULES.TERRITORY.UNLOCK_LEVEL;
+  // Settle from the loaded user — no second read. Below 11 police never moves.
+  const policeNow = unlocked
+    ? await settlePolice(userId, {
+        policeAttention: user.policeAttention,
+        policeSettledOn: user.policeSettledOn,
+        reputationLevel: user.reputationLevel,
+      })
+    : 0;
   const holdings = await prisma.territoryHolding.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },
@@ -236,14 +256,11 @@ export async function getTerritoryBoard(userId: string) {
     capitalOk,
     vaultBalance: vaultBal,
     vaultCreditCard: user.vaultCreditCard,
-    policeAttention: policePoints(user.policeAttention, user.policeSettledOn),
-    policeBand: policeBand(policePoints(user.policeAttention, user.policeSettledOn)),
+    policeAttention: policeNow,
+    policeBand: policeBand(policeNow),
     vaultYieldPerDay:
       user.vault?.tier === RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER && unlocked
-        ? Math.round(
-            (Math.pow(1 + vaultYieldPctPerHour(policePoints(user.policeAttention, user.policeSettledOn)) / 100, 24) - 1) *
-              1000,
-          ) / 10
+        ? Math.round((Math.pow(1 + vaultYieldPctPerHour(policeNow) / 100, 24) - 1) * 1000) / 10
         : 0,
     maxSectors: cap,
     usedSectors: used,
@@ -257,7 +274,7 @@ export async function getTerritoryBoard(userId: string) {
       used < cap &&
       !active &&
       !needsSpecialization &&
-      policePoints(user.policeAttention, user.policeSettledOn) < RULES.TERRITORY.CRITICAL_BLOCKS_EXPAND,
+      policeNow < RULES.TERRITORY.CRITICAL_BLOCKS_EXPAND,
     stages: [...STAGES],
     base: user.base
       ? {
