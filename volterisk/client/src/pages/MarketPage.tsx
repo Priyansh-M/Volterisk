@@ -7,6 +7,7 @@ import { ApiError, api, load, peek } from '../lib/api.ts'
 import { WEAPON_CATALOG } from '../lib/catalog.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
+import { spendable } from '../lib/wallet.ts'
 import type { OwnedWeapon, ShopWeapon } from '../lib/types.ts'
 
 type Arsenal = { owned: OwnedWeapon[]; shop: ShopWeapon | null; unlockedThrough?: number }
@@ -30,7 +31,8 @@ const emptyCounter: Counter = {
 }
 
 export function MarketPage() {
-  const { me, refresh, applyCash } = useAuth()
+  const { me, refresh, applySpend } = useAuth()
+  const wallet = spendable(me)
   const [arsenal, setArsenal] = useState<Arsenal | null>(() => peek<Arsenal>('/api/me/weapons'))
   const [counter, setCounter] = useState<Counter | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -67,14 +69,14 @@ export function MarketPage() {
       if (itemId.startsWith('weapon:')) {
         const item = WEAPON_CATALOG.find((row) => row.id === itemId)
         await api('/api/weapons/buy', { method: 'POST', body: JSON.stringify({ weaponId: itemId }) })
-        if (me && item) applyCash(me.cash - item.price)
+        if (item) applySpend(item.price)
         setArsenal(await load<Arsenal>('/api/me/weapons'))
       } else if (itemId === 'estimate-predictor' || itemId === 'security-camera') {
         const paid = await api<{ cash: number; quantity?: number; level?: number; nextCost?: number | null }>('/api/shop/buy', {
           method: 'POST',
           body: JSON.stringify({ itemId }),
         })
-        applyCash(paid.cash)
+        applySpend(itemId === 'estimate-predictor' ? board.predictor.price : (board.camera.nextCost ?? 0))
         setCounter((current) => {
           const base = current ?? emptyCounter
           if (itemId === 'estimate-predictor') {
@@ -88,7 +90,7 @@ export function MarketPage() {
       } else {
         const lot = [...(lots ?? []), ...(motors ?? [])].find((row) => row.id === itemId)
         await api('/api/properties/buy', { method: 'POST', body: JSON.stringify({ catalogId: itemId }) })
-        if (me && lot) applyCash(me.cash - lot.price)
+        if (lot) applySpend(lot.price)
         const mark = (rows: SaleLot[] | null) => rows?.map((row) => (row.id === itemId ? { ...row, owned: true } : row)) ?? rows
         setLots(mark)
         setMotors(mark)
@@ -108,7 +110,7 @@ export function MarketPage() {
         method: 'POST',
         body: '{}',
       })
-      applyCash(paid.cash)
+      if (board.camera.nextCost) applySpend(board.camera.nextCost)
       setCounter((current) =>
         current ? { ...current, camera: { ...current.camera, installed: true, level: paid.level, nextCost: paid.nextCost } } : current,
       )
@@ -182,7 +184,8 @@ export function MarketPage() {
           <LotGrid
             lots={lots.filter((l) => filterMatch(l.id))}
             busy={busy}
-            cash={me?.cash ?? 0}
+            cash={wallet}
+            card={Boolean(me?.vaultCreditCard) || (me?.level ?? 0) >= 11}
             reputation={me?.level ?? 0}
             onBuy={(id) => void buy(id)}
           />
@@ -195,7 +198,8 @@ export function MarketPage() {
           <LotGrid
             lots={motors.filter((l) => filterMatch(l.id))}
             busy={busy}
-            cash={me?.cash ?? 0}
+            cash={wallet}
+            card={Boolean(me?.vaultCreditCard) || (me?.level ?? 0) >= 11}
             reputation={me?.level ?? 0}
             onBuy={(id) => void buy(id)}
           />
@@ -204,8 +208,8 @@ export function MarketPage() {
       {stall === 'tools' ? (
         <>
           <p className="mb-4 max-w-2xl text-sm text-muted">
-            Cash only. The stall sells the next tool in the line, and another copy of a tool you already own. Each copy keeps its own
-            level and durability. Player trade lives under Black Market.
+            Pays from cash, or from the vault card after level 11. The stall sells the next tool in the line, and another copy of a
+            tool you already own. Each copy keeps its own level and durability. Player trade lives under Black Market.
           </p>
           <div className="mb-6 grid gap-4 md:grid-cols-2">
             {(filterMatch(board.predictor.id) || !searchId) && (
@@ -225,7 +229,7 @@ export function MarketPage() {
                   <Btn
                     className="mt-4"
                     variant="gold"
-                    disabled={busy !== null || (me !== null && me.cash < board.predictor.price)}
+                    disabled={busy !== null || (me !== null && wallet < board.predictor.price)}
                     onClick={() => void buy(board.predictor.id)}
                   >
                     {busy === board.predictor.id ? 'Buying…' : 'Buy'}
@@ -255,7 +259,7 @@ export function MarketPage() {
                       disabled={
                         busy !== null ||
                         board.camera.nextCost == null ||
-                        (me !== null && board.camera.nextCost != null && me.cash < board.camera.nextCost)
+                        (me !== null && board.camera.nextCost != null && wallet < board.camera.nextCost)
                       }
                       onClick={() => void upgradeCamera()}
                     >
@@ -265,7 +269,7 @@ export function MarketPage() {
                     <Btn
                       className="mt-4"
                       variant="gold"
-                      disabled={busy !== null || (me !== null && board.camera.nextCost != null && me.cash < board.camera.nextCost)}
+                      disabled={busy !== null || (me !== null && board.camera.nextCost != null && wallet < board.camera.nextCost)}
                       onClick={() => void buy(board.camera.id)}
                     >
                       {busy === board.camera.id ? 'Buying…' : 'Buy level 1'}
@@ -330,7 +334,7 @@ export function MarketPage() {
                       {owned && item.price > 0 ? (
                         <Btn
                           variant="gold"
-                          disabled={busy !== null || (me !== null && me.cash < item.price)}
+                          disabled={busy !== null || (me !== null && wallet < item.price)}
                           onClick={() => void buy(item.id)}
                         >
                           {busy === item.id ? 'Buying…' : `Another ${money(item.price)}`}
@@ -339,7 +343,7 @@ export function MarketPage() {
                       {!owned && canBuy ? (
                         <Btn
                           variant="gold"
-                          disabled={busy !== null || (me !== null && me.cash < item.price)}
+                          disabled={busy !== null || (me !== null && wallet < item.price)}
                           onClick={() => void buy(item.id)}
                         >
                           {busy === item.id ? 'Buying…' : `Buy ${money(item.price)}`}
@@ -363,12 +367,14 @@ function LotGrid({
   lots,
   busy,
   cash,
+  card,
   reputation,
   onBuy,
 }: {
   lots: SaleLot[]
   busy: string | null
   cash: number
+  card: boolean
   reputation: number
   onBuy: (id: string) => void
 }) {
@@ -396,7 +402,11 @@ function LotGrid({
                   <Btn className="mt-4" variant="gold" disabled={busy !== null || cash < lot.price} onClick={() => onBuy(lot.id)}>
                     {busy === lot.id ? 'Buying…' : `Buy ${money(lot.price)}`}
                   </Btn>
-                  {cash < lot.price ? <p className="mt-2 text-xs text-destructive">Not enough cash. Check your vault.</p> : null}
+                  {cash < lot.price ? (
+                    <p className="mt-2 text-xs text-destructive">
+                      {card ? 'Not enough card balance in the vault.' : 'Not enough cash. Check your vault.'}
+                    </p>
+                  ) : null}
                 </>
               )}
             </div>

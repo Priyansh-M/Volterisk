@@ -90,12 +90,13 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
     if (already + stake > cap) {
       throw new GameError(400, "OVER_CAP", `That spin passes today's cap of ${cap}. ${cap - already} is left.`);
     }
-    const spendable = user.vaultCreditCard ? user.vault.balance : user.cash;
+    const card = Boolean(user.vaultCreditCard) || user.reputationLevel >= 11;
+    const spendable = card ? user.vault.balance : user.cash;
     if (stake > spendable) {
       throw new GameError(
         400,
         "INSUFFICIENT_FUNDS",
-        user.vaultCreditCard ? "Not enough card balance in the vault." : "Not enough cash. Check your vault.",
+        card ? "Not enough card balance in the vault." : "Not enough cash. Check your vault.",
       );
     }
     await chargeSpend(tx, userId, stake);

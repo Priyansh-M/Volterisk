@@ -109,7 +109,7 @@ function vaultFrom20(level: number): number {
 
 type Row = {
   props: [string, number][];
-  plant: number;
+  plant?: number;
   plantNote?: string;
   craft?: [string, string];
   heists?: number;
@@ -126,8 +126,6 @@ const TABLE: Record<number, Row> = {
       ["garage", 12],
       ["front", 12],
     ],
-    plant: 1,
-    plantNote: "Own Manufacturing Plant level 1",
     heists: 28,
     vault: 1_000_000,
   },
@@ -138,6 +136,7 @@ const TABLE: Record<number, Row> = {
       ["warehouse", 10],
     ],
     plant: 1,
+    plantNote: "Own Manufacturing Plant level 1",
     heists: 28,
     vault: 1_300_000,
   },
@@ -566,7 +565,7 @@ function conditionsFor(level: number): RepCondition[] {
     });
   }
   for (const [id, minLevel] of row.props) out.push(asset(id, minLevel));
-  out.push(plant(row.plant, row.plantNote));
+  if (row.plant != null && row.plant > 0) out.push(plant(row.plant, row.plantNote));
   if (row.craft) out.push(craft(row.craft[0], row.craft[1]));
   if (row.heists != null) out.push(heists(row.heists));
   out.push(vault(row.vault));

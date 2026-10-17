@@ -44,7 +44,7 @@ type ModsFile = {
 }
 
 export function BlackMarketPage() {
-  const { me, applyCash } = useAuth()
+  const { me, applySpend } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [searchId, setSearchId] = useState('')
@@ -234,11 +234,11 @@ export function BlackMarketPage() {
                       setError(null)
                       void (async () => {
                         try {
-                          const paid = await api<{ cash: number }>('/api/black-market/buy', {
+                          await api('/api/black-market/buy', {
                             method: 'POST',
                             body: JSON.stringify({ listingId: row.id }),
                           })
-                          applyCash(paid.cash)
+                          applySpend(row.price)
                           await reload()
                         } catch (err: unknown) {
                           setError(err instanceof ApiError ? err.message : 'Buy failed.')

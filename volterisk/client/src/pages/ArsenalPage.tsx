@@ -30,7 +30,7 @@ type ModsFile = {
 }
 
 export function ArsenalPage() {
-  const { applyCash, me, refresh } = useAuth()
+  const { applySpend, me, refresh } = useAuth()
   const [arsenal, setArsenal] = useState<Arsenal | null>(() => peek<Arsenal>('/api/me/weapons'))
   const [predictors, setPredictors] = useState(
     () => peek<{ predictor: { quantity: number } }>('/api/shop')?.predictor.quantity ?? 0,
@@ -75,7 +75,7 @@ export function ArsenalPage() {
         method: 'POST',
         body: '{}',
       })
-      applyCash(paid.cash)
+      applySpend(camera?.nextCost ?? 0)
       setCamera({ level: paid.level, nextCost: paid.nextCost, installed: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The camera did not take the upgrade.')
@@ -90,7 +90,7 @@ export function ArsenalPage() {
     try {
       const updated = await api<OwnedWeapon>(path, { method: 'POST', body: JSON.stringify({ weaponId, instanceId }) })
       const cost = arsenal?.owned.find((row) => row.instanceId === instanceId || row.id === weaponId)?.nextUpgradeCost
-      if (me && path.includes('upgrade') && cost) applyCash(me.cash - cost)
+      if (path.includes('upgrade') && cost) applySpend(cost)
       setArsenal((current) => {
         if (!current) return current
         if (path.includes('equip')) {
@@ -139,7 +139,7 @@ export function ArsenalPage() {
     try {
       await api('/api/mods/buy', { method: 'POST', body: JSON.stringify({ modId }) })
       await reload()
-      if (me && price != null) applyCash(me.cash - price)
+      if (price != null) applySpend(price)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Buy failed.')
     } finally {
@@ -418,7 +418,7 @@ export function ArsenalPage() {
                               method: 'POST',
                               body: JSON.stringify({ instanceId: owned.instanceId }),
                             })
-                            if (me && paid.spent) applyCash(me.cash - paid.spent)
+                            if (paid.spent) applySpend(paid.spent)
                             await reload()
                           } catch (err) {
                             setError(err instanceof ApiError ? err.message : 'Repair failed.')

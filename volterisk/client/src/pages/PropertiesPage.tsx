@@ -35,7 +35,7 @@ type MaterialRow = {
 }
 
 export function PropertiesPage() {
-  const { applyCash, me } = useAuth()
+  const { applySpend } = useAuth()
   const [ledger, setLedger] = useState<Ledger | null>(() => peek<Ledger>('/api/properties'))
   const [tab, setTab] = useState<'properties' | 'vehicles' | 'materials'>('properties')
   const [materials, setMaterials] = useState<MaterialRow[] | null>(null)
@@ -64,7 +64,7 @@ export function PropertiesPage() {
     try {
       const updated = await api<OwnedAsset>('/api/properties/upgrade', { method: 'POST', body: JSON.stringify({ id }) })
       const cost = [...(ledger?.properties ?? []), ...(ledger?.vehicles ?? [])].find((row) => row.id === id)?.nextUpgradeCost
-      if (me && cost) applyCash(me.cash - cost)
+      if (cost) applySpend(cost)
       setLedger((current) =>
         current
           ? {

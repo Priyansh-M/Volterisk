@@ -61,9 +61,6 @@ export async function setPrimaryCareer(userId: string, careerId: string) {
       if (Date.now() < ends) {
         throw new GameError(400, "CAREER_COOLDOWN", "Primary career is still on cooldown.");
       }
-      if (user.cash < CAREERS.SWITCH_PRIMARY_FEE) {
-        throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough cash to switch primary career.");
-      }
       await chargeSpend(tx, userId, CAREERS.SWITCH_PRIMARY_FEE);
       await tx.transaction.create({
         data: { type: "career_switch_primary", amount: CAREERS.SWITCH_PRIMARY_FEE, fromUserId: userId },
@@ -102,9 +99,6 @@ export async function setSecondaryCareer(userId: string, careerId: string | null
     }
     const had = Boolean(user.secondaryCareer);
     if (careerId && (had || user.secondaryCareer !== careerId)) {
-      if (user.cash < CAREERS.SWITCH_SECONDARY_FEE) {
-        throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough cash to set secondary specialisation.");
-      }
       await chargeSpend(tx, userId, CAREERS.SWITCH_SECONDARY_FEE);
       await tx.transaction.create({
         data: { type: "career_switch_secondary", amount: CAREERS.SWITCH_SECONDARY_FEE, fromUserId: userId },

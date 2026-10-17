@@ -5,6 +5,7 @@ import { Btn, Notice, inputClass } from '../components/ui.tsx'
 import { ApiError, api, load } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
+import { spendable } from '../lib/wallet.ts'
 
 type BountyCard = {
   id: string
@@ -52,7 +53,8 @@ function endsLabel(expiresAt: string | null): string | null {
 type Hit = { id: string; username: string; avatarUrl: string | null; vaultBalance: number }
 
 export function BountyPage() {
-  const { me, applyCash } = useAuth()
+  const { me, applySpend, refresh } = useAuth()
+  const wallet = spendable(me)
   const navigate = useNavigate()
   const [board, setBoard] = useState<Board | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -102,11 +104,11 @@ export function BountyPage() {
     setBusy('post')
     setError(null)
     try {
-      const paid = await api<{ cash: number }>('/api/bounties', {
+      await api('/api/bounties', {
         method: 'POST',
         body: JSON.stringify({ targetUserId: picked.id, amount: Number(amount), durationHours }),
       })
-      applyCash(paid.cash)
+      applySpend(Number(amount))
       setAdding(false)
       setPicked(null)
       setQuery('')
@@ -141,11 +143,11 @@ export function BountyPage() {
     setBusy(id)
     setError(null)
     try {
-      const paid = await api<{ cash: number }>(`/api/bounties/${id}/fund`, {
+      await api(`/api/bounties/${id}/fund`, {
         method: 'POST',
         body: JSON.stringify({ amount: Number(fundAmount) }),
       })
-      applyCash(paid.cash)
+      applySpend(Number(fundAmount))
       setFundingId(null)
       setFundAmount('5000')
       await reload()
@@ -160,8 +162,8 @@ export function BountyPage() {
     setBusy(id)
     setError(null)
     try {
-      const paid = await api<{ cash: number }>(`/api/bounties/${id}/cancel`, { method: 'POST', body: '{}' })
-      applyCash(paid.cash)
+      await api<{ cash: number }>(`/api/bounties/${id}/cancel`, { method: 'POST', body: '{}' })
+      await refresh()
       await reload()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not cancel that contract.')
@@ -205,7 +207,7 @@ export function BountyPage() {
             funding={fundingId === row.id}
             fundAmount={fundAmount}
             min={min}
-            cash={me?.cash ?? 0}
+            cash={wallet}
             onFundAmount={setFundAmount}
             onStart={() => void start(row.id)}
             onHeist={() => navigate(row.heistPath)}
@@ -287,7 +289,7 @@ export function BountyPage() {
               </select>
             </label>
             <p className="mt-2 text-xs text-muted-foreground">
-              Minimum {money(min)}. Taken from your cash ({money(me?.cash ?? 0)}).
+              Minimum {money(min)}. Taken from {me?.vaultCreditCard || (me?.level ?? 0) >= 11 ? 'your card' : 'your cash'} ({money(wallet)}).
             </p>
             {preview >= min ? (
               <p className="mt-2 border border-border bg-ink/40 px-3 py-2 text-xs text-foreground">
@@ -300,7 +302,7 @@ export function BountyPage() {
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <Btn
                 variant="gold"
-                disabled={busy !== null || !picked || Number(amount) < min || (me !== null && me.cash < Number(amount))}
+                disabled={busy !== null || !picked || Number(amount) < min || (me !== null && wallet < Number(amount))}
                 onClick={() => void postBounty()}
               >
                 {busy === 'post' ? 'Posting…' : 'Post bounty'}
@@ -315,8 +317,10 @@ export function BountyPage() {
               >
                 Cancel
               </Btn>
-              {me !== null && Number(amount) > 0 && me.cash < Number(amount) ? (
-                <span className="text-xs text-destructive">Not enough cash</span>
+              {me !== null && Number(amount) > 0 && wallet < Number(amount) ? (
+                <span className="text-xs text-destructive">
+                  {me.vaultCreditCard || me.level >= 11 ? 'Not enough card balance' : 'Not enough cash'}
+                </span>
               ) : null}
             </div>
           </section>
@@ -429,7 +433,7 @@ function Poster({
               <Btn disabled={busy !== null} onClick={onFundClose}>
                 Back
               </Btn>
-              {cash < Number(fundAmount) ? <span className="text-xs text-destructive">Not enough cash</span> : null}
+              {cash < Number(fundAmount) ? <span className="text-xs text-destructive">Not enough funds</span> : null}
             </div>
           </div>
         ) : (

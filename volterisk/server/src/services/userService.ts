@@ -220,7 +220,7 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
   if (!user || !user.vault) {
     throw new GameError(404, "NOT_FOUND", "Player not found.");
   }
-  if (user.vaultCreditCard && user.cash > 0) {
+  if ((user.vaultCreditCard || user.reputationLevel >= 11) && user.cash > 0) {
     const moved = await prisma
       .$transaction((tx) => sweepPocketCashToCard(tx, user.id, user.cash))
       .catch(() => 0);

@@ -6,6 +6,7 @@ import { ApiError, api, load } from '../lib/api.ts'
 import { inputClass } from '../components/ui.tsx'
 import { useAuth } from '../lib/auth.tsx'
 import { money } from '../lib/format.ts'
+import { spendable } from '../lib/wallet.ts'
 import './roulette-skin.css'
 
 const chips = {
@@ -32,7 +33,7 @@ type Lobby = {
 }
 
 export function RoulettePage() {
-  const { me, applyCash } = useAuth()
+  const { me, applyCash, applySpend, patchMe } = useAuth()
   const [params] = useSearchParams()
   const joined = params.get('lobby')
   const [mode, setMode] = useState<'ask' | 'solo' | 'lobby'>(joined ? 'lobby' : 'ask')
@@ -50,7 +51,7 @@ export function RoulettePage() {
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [ended, setEnded] = useState(false)
   const confirmed = useRef(false)
-  const cash = me?.cash ?? 0
+  const cash = spendable(me)
   const cap = table?.cap ?? 0
   const staked = table?.staked ?? 0
   const locked = table?.locked ?? false
@@ -136,7 +137,7 @@ export function RoulettePage() {
       return
     }
     if (next > cash) {
-      setError('Not enough cash. Check your vault.')
+      setError(me?.vaultCreditCard || (me?.level ?? 0) >= 11 ? 'Not enough card balance in the vault.' : 'Not enough cash. Check your vault.')
       return
     }
     setError(null)
@@ -196,7 +197,17 @@ export function RoulettePage() {
         method: 'POST',
         body: JSON.stringify({ bets: placed }),
       })
-      applyCash(result.cash)
+      if (me?.vaultCreditCard || (me?.level ?? 0) >= 11) {
+        applySpend(result.stake)
+        if (result.returned > 0) {
+          patchMe((current) => ({
+            ...current,
+            vault: { ...current.vault, balance: current.vault.balance + result.returned },
+          }))
+        }
+      } else {
+        applyCash(result.cash)
+      }
       setTable({ cap: result.cap, staked: result.staked, locked: result.locked })
       setVerdict({ number: result.number, returned: result.returned, stake: result.stake })
       setWinner(result.number as AvailableNumbers)
@@ -406,7 +417,7 @@ function Rules({ onClose }: { onClose: () => void }) {
           <p>The wheel has a single 0 and the numbers 1 through 36. Eighteen of those are red and eighteen are black. 0 is green and belongs to the house.</p>
           <p>Put chips on the felt, then press Spin. The number is chosen before the wheel moves. The spin is the ball catching up to that number.</p>
           <p>A chip on one number pays 35 to 1, and you get the chip back, so $1 returns $36. Red, black, even, odd, 1–18, and 19–36 pay 1 to 1. A dozen or a column pays 2 to 1. If the ball lands on 0, those outside bets lose.</p>
-          <p>Only pocket cash is staked. Each day you may put down up to 5% of cash plus vault. That cap is fixed at the first spin of the day. When the bar is full, the table closes until tomorrow.</p>
+          <p>Before level 11, chips come from pocket cash. After level 11 they come from the vault card. Each day you may put down up to 5% of net worth. That cap is fixed at the first spin of the day. When the bar is full, the table closes until tomorrow.</p>
         </div>
         <button type="button" className="gloss-gold mt-5 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase" onClick={onClose}>
           I understand

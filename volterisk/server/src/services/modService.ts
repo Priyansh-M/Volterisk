@@ -145,9 +145,6 @@ export async function installWeaponMod(userId: string, instanceId: string, userW
     }
 
     const fee = WEAPON_MOD_INSTALL_FEE[def.tier];
-    if (user.cash < fee) {
-      throw new GameError(400, "INSUFFICIENT_FUNDS", `Need ${fee.toLocaleString("en-US")} cash to install.`);
-    }
     await chargeSpend(tx, userId, fee);
     await tx.transaction.create({
       data: { type: "mod_install_weapon", amount: fee, fromUserId: userId },

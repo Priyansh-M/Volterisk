@@ -195,8 +195,6 @@ export async function startCraft(userId: string, recipeId: string) {
       if (!prop) throw new GameError(400, "PROPERTY_REQUIRED", `Requires ${propId}.`);
     }
 
-    const user = await tx.user.findUnique({ where: { id: userId }, select: { cash: true } });
-    if (!user || user.cash < recipe.cash) throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough cash.");
     await chargeSpend(tx, userId, recipe.cash);
     for (const [itemId, n] of Object.entries(recipe.materials)) {
       const ok = await debitItem(tx, userId, itemId, n);

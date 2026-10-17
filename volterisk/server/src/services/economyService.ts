@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { GameError } from "../game/errors.js";
+import { RULES } from "../game/rules.js";
 
 export type Tx = Prisma.TransactionClient;
 
@@ -42,6 +43,11 @@ export async function debitVault(tx: Tx, userId: string, amount: number): Promis
   return updated.count === 1;
 }
 
+function usesCard(user: { vaultCreditCard?: boolean; reputationLevel?: number } | null): boolean {
+  if (!user) return false;
+  return Boolean(user.vaultCreditCard) || (user.reputationLevel ?? 0) >= RULES.TERRITORY.UNLOCK_LEVEL;
+}
+
 /**
  * L11+ credit card: spends debit vault as "card". Pre-L11 unchanged (pocket cash).
  */
@@ -49,9 +55,12 @@ export async function chargeSpend(tx: Tx, userId: string, amount: number): Promi
   assertPositiveInteger(amount, "Spend amount");
   const user = await tx.user.findUnique({
     where: { id: userId },
-    select: { vaultCreditCard: true },
+    select: { vaultCreditCard: true, reputationLevel: true },
   });
-  if (user?.vaultCreditCard) {
+  if (usesCard(user)) {
+    if (!user?.vaultCreditCard) {
+      await tx.user.update({ where: { id: userId }, data: { vaultCreditCard: true } });
+    }
     const ok = await debitVault(tx, userId, amount);
     if (!ok) {
       throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough card balance in the vault.");
@@ -71,9 +80,9 @@ export async function sweepPocketCashToCard(tx: Tx, userId: string, cash?: numbe
   if (amount == null) {
     const row = await tx.user.findUnique({
       where: { id: userId },
-      select: { cash: true, vaultCreditCard: true },
+      select: { cash: true, vaultCreditCard: true, reputationLevel: true },
     });
-    if (!row?.vaultCreditCard || row.cash <= 0) return 0;
+    if (!usesCard(row) || row.cash <= 0) return 0;
     amount = row.cash;
   }
   if (!Number.isInteger(amount) || amount <= 0) return 0;
@@ -99,9 +108,12 @@ export async function creditEarn(tx: Tx, userId: string, amount: number): Promis
   assertPositiveInteger(amount, "Earn amount");
   const user = await tx.user.findUnique({
     where: { id: userId },
-    select: { vaultCreditCard: true },
+    select: { vaultCreditCard: true, reputationLevel: true },
   });
-  if (user?.vaultCreditCard) {
+  if (usesCard(user)) {
+    if (!user?.vaultCreditCard) {
+      await tx.user.update({ where: { id: userId }, data: { vaultCreditCard: true } });
+    }
     await tx.vault.update({
       where: { userId },
       data: { balance: { increment: amount } },

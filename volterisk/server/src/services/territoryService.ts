@@ -302,9 +302,6 @@ async function finalizeClaim(userId: string, opId: string) {
     const nextSlot = ownedCount + 1;
     const claimFee = territoryClaimFee(nextSlot, user.reputationLevel);
     if (claimFee > 0) {
-      if (user.cash < claimFee) {
-        throw new GameError(400, "INSUFFICIENT_FUNDS", `Claim fee for sector ${nextSlot} is $${claimFee.toLocaleString("en-US")}.`);
-      }
       await chargeSpend(tx, userId, claimFee);
       await tx.transaction.create({
         data: { type: "territory_claim_fee", amount: claimFee, fromUserId: userId },

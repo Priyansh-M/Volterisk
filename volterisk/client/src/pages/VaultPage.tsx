@@ -49,7 +49,7 @@ export function VaultPage() {
     try {
       await api('/api/mods/buy', { method: 'POST', body: JSON.stringify({ modId }) })
       await reload()
-      if (me && price != null) applyCash(me.cash - price)
+      if (price != null) applySpend(price)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Purchase failed.')
     } finally {
