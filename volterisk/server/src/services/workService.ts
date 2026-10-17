@@ -11,6 +11,7 @@ import {
 import { prisma } from "../prisma.js";
 import { creditEarn } from "./economyService.js";
 import { coolHeat } from "./heatService.js";
+import { addPoliceAttention } from "./territoryService.js";
 import { ASSETS, assetById } from "./propertyService.js";
 import { writeNotification } from "./notificationService.js";
 import { uniqueConflictText, withSqliteRetry } from "./sqlite.js";
@@ -300,6 +301,7 @@ export async function collectContract(userId: string) {
       const payout = active.reward + bonus;
       await creditEarn(tx, userId, payout);
       await coolHeat(tx, userId, RULES.HEAT_ACTIVE_WORK);
+      await addPoliceAttention(tx, userId, -RULES.TERRITORY.POLICE_PER_ACTIVE_WORK);
       await tx.transaction.create({
         data: {
           type: PAYOUT_TYPE,

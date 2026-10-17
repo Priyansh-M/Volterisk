@@ -31,6 +31,7 @@ model User {
   rouletteStaked   Int       @default(0)
   rouletteCap      Int       @default(0)
   policeAttention  Int       @default(0)
+  /** `day|tickMs|finedWindow` — day for the bounty top-up, tick for hourly decay. */
   policeSettledOn  String?
   vaultCreditCard  Boolean   @default(false)
   lastVaultYieldAt DateTime?

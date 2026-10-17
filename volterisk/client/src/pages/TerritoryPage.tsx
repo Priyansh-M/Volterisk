@@ -25,6 +25,7 @@ type Board = {
   vaultCreditCard: boolean
   policeAttention: number
   policeBand: string
+  vaultYieldPerDay?: number
   maxSectors: number
   usedSectors: number
   needsSpecialization: boolean
@@ -84,6 +85,7 @@ export function TerritoryPage() {
   const [busy, setBusy] = useState(false)
   const [paintHoldingId, setPaintHoldingId] = useState<string | null>(null)
   const [paintColorId, setPaintColorId] = useState('')
+  const [policeHelp, setPoliceHelp] = useState(false)
 
   async function reload() {
     const [data, careerData] = await Promise.all([load<Board>('/api/territory'), load<CareerFile>('/api/career')])
@@ -183,20 +185,88 @@ export function TerritoryPage() {
       ) : (
         <>
           <section className="border border-primary/40 bg-card px-4 py-3">
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Stat label="Sectors" value={`${board.usedSectors} / ${board.maxSectors}`} />
               <Stat
                 label="Vault hold"
                 value={money(board.vaultBalance)}
                 sub={board.capitalOk ? 'Compliant' : `Need ${money(board.capitalRequired)}`}
               />
-              <Stat label="Police" value={board.policeBand} sub={`${board.policeAttention}`} />
+              <Stat
+                label="Police"
+                value={board.policeBand}
+                sub={Number.isInteger(board.policeAttention) ? String(board.policeAttention) : board.policeAttention.toFixed(1)}
+                onHelp={() => setPoliceHelp((open) => !open)}
+              />
               <Stat
                 label="Card"
                 value={board.vaultCreditCard ? 'On' : 'Off'}
                 sub={board.vaultCreditCard ? 'Spend from vault' : 'Unlocks at L11'}
               />
+              <Stat
+                label="Vault yield"
+                value={`${board.vaultYieldPerDay ?? 0}%`}
+                sub="Per day · diamond · moves with police"
+              />
             </div>
+            {policeHelp ? (
+              <div className="mt-3 space-y-4 border border-border bg-background px-4 py-4 text-sm text-muted-foreground">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Police attention</p>
+                  <p className="mt-1 text-muted-foreground">
+                    A single number. The higher it climbs, the less your diamond vault earns and the more the law comes
+                    after you.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-foreground">Bands &amp; yield</p>
+                  <dl className="mt-2 divide-y divide-border/60 border border-border/60">
+                    {[
+                      ['0 – 19', 'Low', '0.25%/hr'],
+                      ['20 – 49', 'Elevated', '0.20%/hr'],
+                      ['50 – 79', 'High', '0.15%/hr'],
+                      ['80 +', 'Critical', 'No yield'],
+                    ].map(([range, band, yieldText]) => (
+                      <div key={band} className="grid grid-cols-3 gap-2 px-3 py-1.5">
+                        <dt className="font-mono text-xs text-muted-foreground">{range}</dt>
+                        <dd className="font-semibold uppercase text-foreground">{band}</dd>
+                        <dd className="text-right font-mono text-xs">{yieldText}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-foreground">What moves it</p>
+                  <ul className="mt-2 space-y-1">
+                    <li className="flex justify-between gap-3"><span>Successful heist</span><span className="font-mono text-destructive">+3.5</span></li>
+                    <li className="flex justify-between gap-3"><span>Failed heist</span><span className="font-mono text-destructive">+5</span></li>
+                    <li className="flex justify-between gap-3"><span>Claim a sector</span><span className="font-mono text-destructive">+15</span></li>
+                    <li className="flex justify-between gap-3"><span>Finish active work</span><span className="font-mono text-success">−2</span></li>
+                    <li className="flex justify-between gap-3"><span>Every hour</span><span className="font-mono text-success">−2</span></li>
+                  </ul>
+                  <p className="mt-2 text-xs">Fully clears to 0 at 12:00 GMT, then again every 48 hours.</p>
+                </div>
+
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-foreground">Consequences</p>
+                  <ul className="mt-2 space-y-1.5">
+                    <li>
+                      <span className="font-semibold uppercase text-foreground">High (50+)</span> — Police put a{' '}
+                      <span className="text-foreground">$25,000</span> bounty on you for 7 days. Every UTC day you stay at
+                      High adds <span className="text-foreground">$5,000</span> to it, but the expiry never moves. Hunters
+                      collect it like any other bounty.
+                    </li>
+                    <li>
+                      <span className="font-semibold uppercase text-foreground">Critical (80+)</span> — Police seize{' '}
+                      <span className="text-foreground">$50,000</span> straight from your vault, once. It can only hit
+                      again after the next 48-hour reset.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           {career ? (
@@ -481,10 +551,22 @@ export function TerritoryPage() {
   )
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Stat({ label, value, sub, onHelp }: { label: string; value: string; sub?: string; onHelp?: () => void }) {
   return (
     <div>
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+        {onHelp ? (
+          <button
+            type="button"
+            className="inline-flex h-3.5 w-3.5 items-center justify-center border border-border text-[9px] leading-none text-foreground"
+            onClick={onHelp}
+            aria-label={`${label} details`}
+          >
+            ?
+          </button>
+        ) : null}
+      </p>
       <p className="font-display text-lg font-semibold uppercase">{value}</p>
       {sub ? <p className="text-xs text-muted-foreground">{sub}</p> : null}
     </div>

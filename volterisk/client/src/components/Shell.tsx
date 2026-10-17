@@ -268,6 +268,7 @@ export function Shell() {
 
   useEffect(() => {
     if (!me?.id) return
+    if ((me.level ?? 0) >= 11 || me.vaultCreditCard) return
     let cancelled = false
     async function look() {
       if (document.hidden) return
@@ -289,7 +290,7 @@ export function Shell() {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [me?.id])
+  }, [me?.id, me?.level, me?.vaultCreditCard])
 
   function dismissIntro() {
     sessionStorage.removeItem('volterisk-welcome')
@@ -306,8 +307,11 @@ export function Shell() {
   }
 
   if (!me) return null
+  const late = (me.level ?? 0) >= 11 || Boolean(me.vaultCreditCard)
   const heat = me.heat ?? 0
   const heatLabel = heat > 50 ? 'High' : heat > 20 ? 'Medium' : 'Low'
+  const police = me.policeAttention ?? 0
+  const policeLabel = police >= 80 ? 'Critical' : police >= 50 ? 'High' : police >= 20 ? 'Elevated' : 'Low'
   const meta = pageMeta[location.pathname] ?? ['Volterisk', 'Private network.']
   const introSlides: Array<'welcome' | 'brief' | 'discord'> = []
   if (welcome && location.pathname === '/') introSlides.push('welcome')
@@ -659,11 +663,19 @@ export function Shell() {
             <button type="button" className="border border-border px-2 py-1 font-mono text-[10px] uppercase lg:hidden" onClick={() => setMobileOpen(true)}>
               Menu
             </button>
-            <NavLink id="heat-readout" to="/heat" className="flex items-center gap-2 text-xs text-foreground no-underline">
-              <span className="text-muted-foreground">Heat</span>
-              <b>{me.heat ?? 0}</b>
-              <span className={heatLabel === 'High' ? 'text-destructive' : 'text-muted-foreground'}>{heatLabel}</span>
-            </NavLink>
+            {late ? (
+              <NavLink id="heat-readout" to="/territory" className="flex items-center gap-2 text-xs text-foreground no-underline">
+                <span className="text-muted-foreground">Police</span>
+                <b>{police}</b>
+                <span className={police >= 50 ? 'text-destructive' : 'text-muted-foreground'}>{policeLabel}</span>
+              </NavLink>
+            ) : (
+              <NavLink id="heat-readout" to="/heat" className="flex items-center gap-2 text-xs text-foreground no-underline">
+                <span className="text-muted-foreground">Heat</span>
+                <b>{heat}</b>
+                <span className={heatLabel === 'High' ? 'text-destructive' : 'text-muted-foreground'}>{heatLabel}</span>
+              </NavLink>
+            )}
             <div className="hidden items-center gap-2 text-xs text-success sm:flex">
               <span className="h-1.5 w-1.5 bg-success" /> Network online
             </div>

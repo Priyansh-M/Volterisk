@@ -8,8 +8,11 @@ import {
   territoryMapColorById,
 } from "../game/workshopEconomy.js";
 import { prisma } from "../prisma.js";
-import { chargeSpend } from "./economyService.js";
+import { chargeSpend, debitVault } from "./economyService.js";
+import { packPolice, policePoints, unpackPolice } from "../game/policeMath.js";
 import { writeNotification } from "./notificationService.js";
+import { syncPoliceBounty } from "./bountyService.js";
+import { vaultYieldPctPerHour } from "./vaultYieldService.js";
 import { territoryPassives } from "./territoryPassives.js";
 
 const STAGES = RULES.TERRITORY.STAGES;
@@ -33,24 +36,112 @@ function maxSectors(repLevel: number): number {
   return cap;
 }
 
-async function settlePolice(userId: string) {
+export const POLICE_EPOCH = Date.UTC(2026, 0, 1, 12, 0, 0, 0);
+const POLICE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+function roundPolice(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** Hourly −2, and a full clear at 12:00 GMT every 48 hours. Values are display points. */
+export function policeClock(attention: number, lastTick: Date | null, now = new Date()) {
+  const windowStart = POLICE_EPOCH + Math.floor((now.getTime() - POLICE_EPOCH) / POLICE_WINDOW_MS) * POLICE_WINDOW_MS;
+  let value = attention;
+  let tick = lastTick ?? now;
+  let reset = false;
+  if (lastTick && lastTick.getTime() < windowStart && now.getTime() >= windowStart) {
+    value = 0;
+    tick = new Date(windowStart);
+    reset = true;
+  }
+  const hours = Math.max(0, Math.floor((now.getTime() - tick.getTime()) / 3_600_000));
+  if (hours > 0) {
+    value = Math.max(0, value - hours * RULES.TERRITORY.POLICE_PER_HOUR);
+    tick = new Date(tick.getTime() + hours * 3_600_000);
+  }
+  return { attention: roundPolice(value), tick, windowStart, reset };
+}
+
+const FINE = 50_000;
+
+async function confiscateIfCritical(tx: {
+  vault: { findUnique: (args: unknown) => Promise<{ balance: number } | null> };
+  transaction: { create: (args: unknown) => Promise<unknown> };
+}, userId: string, before: number, after: number, alreadyFinedWindow: number, windowStart: number): Promise<number> {
+  if (!(before < 80 && after >= 80)) return alreadyFinedWindow;
+  if (alreadyFinedWindow === windowStart) return alreadyFinedWindow;
+  const vault = await tx.vault.findUnique({ where: { userId }, select: { balance: true } });
+  const take = Math.min(FINE, vault?.balance ?? 0);
+  if (take > 0 && (await debitVault(tx as never, userId, take))) {
+    await tx.transaction.create({
+      data: { type: "police_confiscate", amount: take, fromUserId: userId },
+    });
+    await writeNotification(tx as never, {
+      userId,
+      title: "Police confiscation",
+      body: `THE POLICE HAVE CONFISCATED ${take.toLocaleString("en-US")} FROM YOUR VAULT`,
+      severity: "CRITICAL",
+    });
+  }
+  return windowStart;
+}
+
+export async function addPoliceAttention(
+  tx: {
+    user: {
+      findUnique: (args: unknown) => Promise<{ policeAttention: number; policeSettledOn: string | null } | null>;
+      update: (args: unknown) => Promise<unknown>;
+    };
+    vault: { findUnique: (args: unknown) => Promise<{ balance: number } | null> };
+    transaction: { create: (args: unknown) => Promise<unknown> };
+  },
+  userId: string,
+  delta: number,
+): Promise<{ before: number; after: number }> {
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { policeAttention: true, policeSettledOn: true },
+  });
+  if (!user) return { before: 0, after: 0 };
+  const packed = unpackPolice(user.policeSettledOn);
+  const before = policePoints(user.policeAttention, user.policeSettledOn);
+  const clock = policeClock(before, packed.tickMs ? new Date(packed.tickMs) : null);
+  const after = roundPolice(Math.max(0, clock.attention + delta));
+  const fined = clock.reset ? 0 : packed.finedWindow;
+  const finedWindow = await confiscateIfCritical(tx, userId, clock.attention, after, fined, clock.windowStart);
+  await tx.user.update({
+    where: { id: userId },
+    data: {
+      policeAttention: Math.round(after * 10),
+      policeSettledOn: packPolice(packed.day ?? utcDayKey(), clock.tick.getTime(), finedWindow),
+    },
+  });
+  return { before: clock.attention, after };
+}
+
+export async function settlePolice(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { policeAttention: true, policeSettledOn: true },
   });
   if (!user) return;
+  const packed = unpackPolice(user.policeSettledOn);
+  const points = policePoints(user.policeAttention, user.policeSettledOn);
+  const clock = policeClock(points, packed.tickMs ? new Date(packed.tickMs) : null);
   const today = utcDayKey();
-  if (user.policeSettledOn === today) return;
-  const last = user.policeSettledOn ? new Date(`${user.policeSettledOn}T00:00:00.000Z`) : null;
-  const days = last ? Math.max(0, Math.floor((Date.now() - last.getTime()) / 86_400_000)) : 0;
-  const drop = days * RULES.TERRITORY.POLICE_DECAY_PER_UTC_DAY;
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      policeAttention: Math.max(0, user.policeAttention - drop),
-      policeSettledOn: today,
-    },
-  });
+  const daily = packed.day !== today;
+  const tenths = Math.round(clock.attention * 10);
+  const finedWindow = clock.reset ? 0 : packed.finedWindow;
+  if (tenths !== user.policeAttention || daily || !packed.versioned || finedWindow !== packed.finedWindow) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        policeAttention: tenths,
+        policeSettledOn: packPolice(today, clock.tick.getTime(), finedWindow),
+      },
+    });
+  }
+  if (daily) await syncPoliceBounty(userId, clock.attention, packed.day != null).catch(() => null);
 }
 
 async function assertUnlocked(userId: string) {
@@ -145,8 +236,15 @@ export async function getTerritoryBoard(userId: string) {
     capitalOk,
     vaultBalance: vaultBal,
     vaultCreditCard: user.vaultCreditCard,
-    policeAttention: user.policeAttention,
-    policeBand: policeBand(user.policeAttention),
+    policeAttention: policePoints(user.policeAttention, user.policeSettledOn),
+    policeBand: policeBand(policePoints(user.policeAttention, user.policeSettledOn)),
+    vaultYieldPerDay:
+      user.vault?.tier === RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER && unlocked
+        ? Math.round(
+            (Math.pow(1 + vaultYieldPctPerHour(policePoints(user.policeAttention, user.policeSettledOn)) / 100, 24) - 1) *
+              1000,
+          ) / 10
+        : 0,
     maxSectors: cap,
     usedSectors: used,
     nextClaimFee: used < cap ? territoryClaimFee(used + 1, user.reputationLevel) : null,
@@ -159,7 +257,7 @@ export async function getTerritoryBoard(userId: string) {
       used < cap &&
       !active &&
       !needsSpecialization &&
-      user.policeAttention < RULES.TERRITORY.CRITICAL_BLOCKS_EXPAND,
+      policePoints(user.policeAttention, user.policeSettledOn) < RULES.TERRITORY.CRITICAL_BLOCKS_EXPAND,
     stages: [...STAGES],
     base: user.base
       ? {
@@ -207,7 +305,7 @@ export async function startScout(
   await settlePolice(userId);
   const fresh = await prisma.user.findUnique({ where: { id: userId } });
   if (!fresh) throw new GameError(404, "NOT_FOUND", "Player not found.");
-  if (fresh.policeAttention >= RULES.TERRITORY.CRITICAL_BLOCKS_EXPAND) {
+  if (policePoints(fresh.policeAttention, fresh.policeSettledOn) >= RULES.TERRITORY.CRITICAL_BLOCKS_EXPAND) {
     throw new GameError(400, "POLICE_CRITICAL", "Police attention is critical. Wait for decay before expanding.");
   }
   const pendingSpec = await prisma.territoryHolding.findFirst({
@@ -282,7 +380,7 @@ export async function advanceExpansion(userId: string) {
 }
 
 async function finalizeClaim(userId: string, opId: string) {
-  await prisma.$transaction(async (tx) => {
+  const policeAfter = await prisma.$transaction(async (tx) => {
     const op = await tx.expansionOp.findFirst({ where: { id: opId, userId, closedAt: null } });
     if (!op) throw new GameError(400, "NO_OP", "No active expansion.");
 
@@ -321,10 +419,7 @@ async function finalizeClaim(userId: string, opId: string) {
       where: { id: op.id },
       data: { closedAt: new Date(), stage: "claim", completesAt: null },
     });
-    await tx.user.update({
-      where: { id: userId },
-      data: { policeAttention: { increment: RULES.TERRITORY.POLICE_PER_EXPAND } },
-    });
+    const policeMove = await addPoliceAttention(tx, userId, RULES.TERRITORY.POLICE_PER_EXPAND);
     await tx.transaction.create({
       data: { type: "territory_claim", amount: claimFee || 1, toUserId: userId },
     });
@@ -334,7 +429,9 @@ async function finalizeClaim(userId: string, opId: string) {
       body: `${op.sectorId} (${op.regionName}) is yours${claimFee ? ` · fee $${claimFee.toLocaleString("en-US")}` : ""}. Choose Industrial or Financial — permanent.`,
       severity: "INFO",
     });
+    return policeMove.after;
   });
+  if (policeAfter >= 50) await syncPoliceBounty(userId, policeAfter, false).catch(() => null);
   return getTerritoryBoard(userId);
 }
 

@@ -15,7 +15,8 @@ import {
 } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
-import { noteBountyHeist } from "./bountyService.js";
+import { noteBountyHeist, syncPoliceBounty } from "./bountyService.js";
+import { addPoliceAttention } from "./territoryService.js";
 import { careerBonuses } from "./careerService.js";
 import { resolveCombat } from "./combatMods.js";
 import { rollHeistMaterials } from "../game/workshopEconomy.js";
@@ -565,7 +566,10 @@ export async function attemptHeist(
             });
           }
           await gainHeat(tx, attackerId, heistHeatGain(false, 0));
+          const police = await addPoliceAttention(tx, attackerId, RULES.TERRITORY.POLICE_PER_FAILED_HEIST);
           return {
+            policeHigh: police.before < 50 && police.after >= 50,
+            policeAfter: police.after,
             ...presentHeist(heist, target.username, owned.weapon.name),
             attack,
             defense,
@@ -603,6 +607,7 @@ export async function attemptHeist(
           throw new GameError(409, "VAULT_CHANGED", "The vault shifted before the take landed.");
         }
         await gainHeat(tx, attackerId, heistHeatGain(true, amount));
+        const police = await addPoliceAttention(tx, attackerId, RULES.TERRITORY.POLICE_PER_HEIST);
         await creditEarn(tx, attackerId, amount);
         const materialsGained = rollHeistMaterials(amount);
         for (const drop of materialsGained) {
@@ -648,6 +653,8 @@ export async function attemptHeist(
           const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
           return {
             ...presentHeist(heist, target.username, owned.weapon.name),
+            policeHigh: police.before < 50 && police.after >= 50,
+            policeAfter: police.after,
             attack,
             defense,
             advantage: attack - defense,
@@ -661,6 +668,8 @@ export async function attemptHeist(
         const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
         return {
           ...presentHeist(heist, target.username, owned.weapon.name),
+          policeHigh: police.before < 50 && police.after >= 50,
+          policeAfter: police.after,
           attack,
           defense,
           advantage: attack - defense,
@@ -674,6 +683,7 @@ export async function attemptHeist(
       { timeout: 15_000 },
     ),
   );
+  if (heist.policeHigh) await syncPoliceBounty(attackerId, heist.policeAfter, false).catch(() => null);
   const unlocked: UnlockedAchievement[] = await syncAchievements(attackerId).catch(() => []);
   return { ...heist, unlocked };
 }

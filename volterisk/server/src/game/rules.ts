@@ -369,6 +369,10 @@ export const RULES = {
     STAGE_MINUTES: { scout: 0, claim: 0 } as Record<string, number>,
     STAGES: ["scout", "claim"] as const,
     POLICE_PER_EXPAND: 15,
+    POLICE_PER_HEIST: 3.5,
+    POLICE_PER_FAILED_HEIST: 5,
+    POLICE_PER_ACTIVE_WORK: 2,
+    POLICE_PER_HOUR: 2,
     POLICE_DECAY_PER_UTC_DAY: 5,
     POLICE_BANDS: [
       { under: 20, label: "LOW" },

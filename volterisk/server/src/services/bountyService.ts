@@ -178,8 +178,89 @@ async function endBounty(bountyId: string, reason: "cancelled" | "expired"): Pro
     if (updated.count !== 1) return;
     const paidOut = await settleCuts(tx, row, row.cuts);
     const remaining = Math.max(0, row.amount - paidOut);
-    await refundFunders(tx, row, row.funds, remaining);
+    const poster = await tx.user.findUnique({ where: { id: row.posterId }, select: { isBot: true } });
+    if (!poster?.isBot) await refundFunders(tx, row, row.funds, remaining);
     await tx.bounty.update({ where: { id: bountyId }, data: { amount: 0 } });
+  });
+}
+
+const POLICE_BOUNTY = 25_000;
+const POLICE_BOUNTY_DAILY = 5_000;
+const POLICE_HIGH = 50;
+const POLICE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function policePosterId(): Promise<string> {
+  const existing = await prisma.user.findUnique({ where: { usernameKey: "police" }, select: { id: true } });
+  if (existing) return existing.id;
+  const created = await prisma.user.create({
+    data: {
+      username: "Police",
+      usernameKey: "police",
+      passwordHash: "!",
+      cash: 0,
+      isBot: true,
+      vault: { create: { balance: 0, level: 1, tier: "standard" } },
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** HIGH+ (50). Opens a $25k week bounty. Each later UTC day still HIGH adds $5k, same expiry. */
+export async function syncPoliceBounty(userId: string, attention: number, dailyTick: boolean): Promise<void> {
+  if (attention < POLICE_HIGH) return;
+  const posterId = await policePosterId();
+  const existing = await prisma.bounty.findFirst({
+    where: {
+      posterId,
+      targetId: userId,
+      status: { in: [...ACTIVE] },
+      expiresAt: { gt: new Date() },
+    },
+  });
+  if (!existing) {
+    const expiresAt = new Date(Date.now() + POLICE_WEEK_MS);
+    await prisma.$transaction(async (tx) => {
+      const row = await tx.bounty.create({
+        data: {
+          posterId,
+          targetId: userId,
+          amount: POLICE_BOUNTY,
+          funded: POLICE_BOUNTY,
+          goal: POLICE_BOUNTY,
+          status: "open",
+          expiresAt,
+        },
+      });
+      await tx.bountyFund.create({ data: { bountyId: row.id, userId: posterId, amount: POLICE_BOUNTY } });
+      await writeNotification(tx, {
+        userId,
+        title: "Police bounty",
+        body: "THE POLICE HAVE SET A BOUNTY ON YOUR HEAD OF 25,000",
+        severity: "WARNING",
+      });
+    });
+    return;
+  }
+  if (!dailyTick) return;
+  await prisma.$transaction(async (tx) => {
+    await tx.bounty.update({
+      where: { id: existing.id },
+      data: {
+        amount: { increment: POLICE_BOUNTY_DAILY },
+        funded: { increment: POLICE_BOUNTY_DAILY },
+        goal: { increment: POLICE_BOUNTY_DAILY },
+      },
+    });
+    await tx.bountyFund.create({
+      data: { bountyId: existing.id, userId: posterId, amount: POLICE_BOUNTY_DAILY },
+    });
+    await writeNotification(tx, {
+      userId,
+      title: "Police bounty",
+      body: `Still High. Police added $${POLICE_BOUNTY_DAILY.toLocaleString("en-US")}. Same expiry.`,
+      severity: "WARNING",
+    });
   });
 }
 

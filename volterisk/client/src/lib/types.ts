@@ -33,6 +33,7 @@ export type Profile = {
   } | null
   currentJob: { id: string; name: string; payPerDay: number } | null
   heat?: number
+  policeAttention?: number
   penalty?: { active: boolean; endsAt: string | null }
   unclaimedAchievements?: number
   cooldownEndsAt: string | null

@@ -22,6 +22,8 @@ import { sweepPocketCashToCard } from "./economyService.js";
 import { assetById, assetMoneySpent } from "./propertyService.js";
 import { settlePropertyMaterialYields } from "./propertyMaterialYieldService.js";
 import { settleVaultYield } from "./vaultYieldService.js";
+import { policePoints } from "../game/policeMath.js";
+import { settlePolice } from "./territoryService.js";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -206,6 +208,7 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
     await settleHeatState(userId).catch(() => null);
     await settlePassivePay(userId).catch(() => null);
     await settleVaultYield(userId).catch(() => null);
+    await settlePolice(userId).catch(() => null);
     await settlePropertyMaterialYields(userId).catch(() => null);
   }
   const user = await prisma.user.findUnique({
@@ -291,6 +294,7 @@ export async function getProfile(userId: string, opts?: { settle?: boolean }) {
         }
       : null,
     heat: user.heat,
+    policeAttention: policePoints(user.policeAttention, user.policeSettledOn),
     penalty:
       user.vaultExposedUntil && user.vaultExposedUntil.getTime() > Date.now()
         ? { active: true, endsAt: user.vaultExposedUntil.toISOString() }

@@ -87,7 +87,7 @@ export function LedgerAlerts({
           }
         })
       const heatIncoming = snap.notifications
-        .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check'))
+        .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check' || row.title === 'Police bounty' || row.title === 'Police confiscation'))
         .map((row) => ({ id: row.id, title: row.title, body: row.body }))
       const addUnlocks = unlocked.filter((row) => !shown.current.has(`u:${row.id}`))
       const addHeists = heistIncoming.filter((row) => !shown.current.has(`r:${row.id}`))
@@ -142,9 +142,15 @@ export function LedgerAlerts({
       key: `h:${heatNote.id}`,
       node: (
         <>
-          <p className="font-mono text-[10px] tracking-[0.2em] text-destructive uppercase">Heat check</p>
-          <h2 className="mt-3 font-display text-3xl font-semibold uppercase">{heatNote.title}</h2>
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">{heatNote.body}</p>
+          <p className="font-mono text-[10px] tracking-[0.2em] text-destructive uppercase">
+            {heatNote.title === 'Police bounty' || heatNote.title === 'Police confiscation' ? 'Police' : 'Heat check'}
+          </p>
+          <h2 className="mt-3 font-display text-3xl font-semibold uppercase">
+            {heatNote.title === 'Police bounty' || heatNote.title === 'Police confiscation' ? heatNote.body : heatNote.title}
+          </h2>
+          {heatNote.title === 'Police bounty' || heatNote.title === 'Police confiscation' ? null : (
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">{heatNote.body}</p>
+          )}
         </>
       ),
     })),

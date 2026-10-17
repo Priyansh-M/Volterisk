@@ -1,8 +1,18 @@
+import { policePoints } from "../game/policeMath.js";
 import { RULES } from "../game/rules.js";
 import { prisma } from "../prisma.js";
 import { writeNotification } from "./notificationService.js";
 
 const vaultYieldFreshUntil = new Map<string, number>();
+
+/** Diamond hourly rate after police drag. CRITICAL earns nothing. */
+export function vaultYieldPctPerHour(attention: number): number {
+  const base = RULES.TERRITORY.VAULT_YIELD_PCT_PER_HOUR;
+  if (attention >= 80) return 0;
+  if (attention >= 50) return Math.max(0, base - 0.1);
+  if (attention >= 20) return Math.max(0, base - 0.05);
+  return base;
+}
 
 /** Diamond vault compound yield since last settle. Called from profile load. */
 export async function settleVaultYield(userId: string): Promise<{ credited: number } | null> {
@@ -32,7 +42,12 @@ export async function settleVaultYield(userId: string): Promise<{ credited: numb
     return null;
   }
 
-  const rate = RULES.TERRITORY.VAULT_YIELD_PCT_PER_HOUR / 100;
+  const pct = vaultYieldPctPerHour(policePoints(user.policeAttention, user.policeSettledOn));
+  if (pct <= 0) {
+    await prisma.user.update({ where: { id: userId }, data: { lastVaultYieldAt: now } });
+    return null;
+  }
+  const rate = pct / 100;
   const balance = user.vault.balance;
   if (balance <= 0) {
     await prisma.user.update({ where: { id: userId }, data: { lastVaultYieldAt: now } });
@@ -64,7 +79,7 @@ export async function settleVaultYield(userId: string): Promise<{ credited: numb
     await writeNotification(tx, {
       userId,
       title: "Diamond vault return",
-      body: `$${credited.toLocaleString("en-US")} interest credited to the vault (${hours}h at ~${RULES.TERRITORY.VAULT_YIELD_PCT_PER_HOUR}%/hr).`,
+      body: `$${credited.toLocaleString("en-US")} interest credited to the vault (${hours}h at ~${pct}%/hr).`,
       severity: "INFO",
     });
   });
