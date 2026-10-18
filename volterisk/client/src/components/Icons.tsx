@@ -448,6 +448,29 @@ export function IconBoard(props: IconProps) {
   )
 }
 
+export function IconWheel(props: IconProps) {
+  return (
+    <svg {...shellGlyph(props)}>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="2.2" />
+      <path d="M12 4v5.8M12 14.2V20M4 12h5.8M14.2 12H20" />
+      <path d="M6.3 6.3l4.1 4.1M13.6 13.6l4.1 4.1M17.7 6.3l-4.1 4.1M10.4 13.6l-4.1 4.1" />
+    </svg>
+  )
+}
+
+export function IconSlots(props: IconProps) {
+  return (
+    <svg {...shellGlyph(props)}>
+      <rect x="4" y="7" width="16" height="12" rx="1.5" />
+      <path d="M8 7V4.5h8V7" />
+      <rect x="6.2" y="9.2" width="3.4" height="6.6" rx="0.4" />
+      <rect x="10.3" y="9.2" width="3.4" height="6.6" rx="0.4" />
+      <rect x="14.4" y="9.2" width="3.4" height="6.6" rx="0.4" />
+    </svg>
+  )
+}
+
 export function IconPodium(props: IconProps) {
   return (
     <svg {...shellGlyph(props)}>

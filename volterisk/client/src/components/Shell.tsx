@@ -1,17 +1,18 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { Portrait } from './Portrait.tsx'
 import { Level11Guide } from './Level11Guide.tsx'
 import { ReputationAlert } from './ReputationAlert.tsx'
 import { SoftToast } from './SoftToast.tsx'
-import { api } from '../lib/api.ts'
+import { api, prefetch } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 import { money, remaining } from '../lib/format.ts'
 import {
   IconArsenal,
-  IconBoard,
   IconPad,
+  IconSlots,
+  IconWheel,
   IconPodium,
   IconChevronDown,
   IconCoins,
@@ -37,7 +38,7 @@ import {
   IconVault,
 } from './Icons.tsx'
 
-type NavItem = { to: string; label: string; end?: boolean; Icon: typeof IconHome; casino?: boolean }
+type NavItem = { to: string; label: string; end?: boolean; Icon: typeof IconHome }
 
 type NavGroup = { id: string; label: string; Icon: typeof IconHome; items: NavItem[] }
 
@@ -75,7 +76,8 @@ const navGroups: NavGroup[] = [
     label: 'Minigames',
     Icon: IconPad,
     items: [
-      { to: '/casino/roulette', label: 'Casino', Icon: IconBoard, casino: true },
+      { to: '/casino/roulette', label: 'Roulette', Icon: IconWheel },
+      { to: '/casino/slots', label: 'Slots', Icon: IconSlots },
       { to: '/minigames/rob-the-vault', label: 'Rob the Vault', Icon: IconGrid },
     ],
   },
@@ -124,18 +126,10 @@ const pageMeta: Record<string, [string, string]> = {
   '/profile': ['Identity Dossier', 'Your public record, reputation, and operating history.'],
   '/leaderboard': ['Intelligence Ranking', 'Current standing across the criminal network.'],
   '/casino/roulette': ['Roulette', 'European wheel. Cash only. Five percent of the total.'],
+  '/casino/slots': ['Slots', 'Three cabinets. Cash only. Ten percent of the total.'],
   '/minigames/rob-the-vault': ['Rob the Vault', 'Walk the leaked route. Three chances a day.'],
   '/bounties': ['Bounty Board', 'Post cash contracts. Start a hunt, heist the mark, claim the purse.'],
   '/notifications': ['Incoming Reports', 'Security alerts and operational updates.'],
-}
-
-function CashIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <rect x="3" y="6" width="18" height="12" rx="1.5" />
-      <circle cx="12" cy="12" r="2.5" />
-    </svg>
-  )
 }
 
 export function Shell() {
@@ -153,7 +147,6 @@ export function Shell() {
   const [workshopGate, setWorkshopGate] = useState(false)
   const [heatWarn, setHeatWarn] = useState<string | null>(null)
   const [heatWarnClosed, setHeatWarnClosed] = useState<string | null>(null)
-  const [casinoOpen, setCasinoOpen] = useState(location.pathname.startsWith('/casino'))
   const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {}
     for (const g of navGroups) initial[g.id] = false
@@ -224,7 +217,6 @@ export function Shell() {
   useEffect(() => {
     const match = navGroups.find((g) =>
       g.items.some((item) => {
-        if (item.casino) return location.pathname.startsWith('/casino')
         if (item.end) return location.pathname === item.to
         return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
       }),
@@ -547,54 +539,19 @@ export function Shell() {
                 <div className={`nav-drop ${open ? 'nav-drop-open' : ''}`}>
                   <div className="nav-drop-inner">
                     {group.items.map((link) => {
-                      if (link.casino) {
-                        return (
-                          <Fragment key={link.to}>
-                            <button
-                              type="button"
-                              className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 text-left text-xs ${itemPad} ${
-                                location.pathname.startsWith('/casino')
-                                  ? 'border-primary bg-accent text-foreground'
-                                  : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
-                              }`}
-                              onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
-                              onClick={() => setCasinoOpen((v) => !v)}
-                            >
-                              <CashIcon className="h-4 w-4 shrink-0" />
-                              {collapsed ? null : <span className="flex-1">Casino</span>}
-                              {collapsed ? null : (
-                                <IconChevronDown
-                                  className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out ${casinoOpen ? 'rotate-0' : '-rotate-90'}`}
-                                />
-                              )}
-                            </button>
-                            <div className={`nav-drop ${casinoOpen && !collapsed ? 'nav-drop-open' : ''}`}>
-                              <div className="nav-drop-inner">
-                                <NavLink
-                                  to="/casino/roulette"
-                                  onMouseEnter={() => void import('../pages/RoulettePage.tsx')}
-                                  onClick={() => setMobileOpen(false)}
-                                  className={({ isActive }) =>
-                                    `mb-0.5 flex h-9 items-center gap-3 border-l-2 pl-16 pr-3 text-left text-xs no-underline ${
-                                      isActive
-                                        ? 'border-primary text-foreground'
-                                        : 'border-transparent text-muted-foreground hover:text-foreground'
-                                    }`
-                                  }
-                                >
-                                  Roulette
-                                </NavLink>
-                              </div>
-                            </div>
-                          </Fragment>
-                        )
-                      }
                       return (
                         <NavLink
                           key={link.to}
                           to={link.to}
                           end={link.end}
                           title={collapsed ? link.label : undefined}
+                          onMouseEnter={() => {
+                            if (link.to === '/casino/roulette') void import('../pages/RoulettePage.tsx')
+                            if (link.to === '/casino/slots') {
+                              void import('../pages/SlotsPage.tsx')
+                              prefetch('/api/casino/slots')
+                            }
+                          }}
                           /* Prefetch on click path only — hover warm was opening extra isolates. */
                           onClick={(event) => {
                             if (link.to === '/workshop' && (me?.level ?? 0) < WORKSHOP_MIN_REPUTATION) {

@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { GameError } from "../game/errors.js";
-import { playerNetWorth } from "../game/rules.js";
+import { playerNetWorth, RULES } from "../game/rules.js";
+import { evaluateSlots, spinReels, slotMachine, type SlotSymbol } from "../game/slots.js";
 import { prisma } from "../prisma.js";
 import { chargeSpend, creditEarn } from "./economyService.js";
 import { writeNotification } from "./notificationService.js";
@@ -48,16 +49,59 @@ function liveCap(user: {
   vaultCreditCard: boolean;
   reputationLevel: number;
   vault: { balance: number } | null;
-}) {
-  return Math.floor(playerNetWorth(user) * 0.05);
+}, pct: number) {
+  return Math.floor(playerNetWorth(user) * pct);
+}
+
+function dayKey(raw: string | null | undefined) {
+  return (raw ?? "").slice(0, 10);
+}
+
+/** Rob-the-vault style window: flips at 12:00 GMT. */
+function noonKey(now = new Date()) {
+  return new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+type SlotsPack = { staked: number; cap: number; noon: string; sevens: number; vault: number };
+
+function readSlotsPack(raw: string | null | undefined, moneyDay: string, noon = noonKey()): SlotsPack {
+  const parts = (raw ?? "").split("|");
+  const moneyOk = parts[0] === moneyDay;
+  const noonOk = parts[3] === noon;
+  return {
+    staked: moneyOk ? Math.max(0, Number(parts[1]) || 0) : 0,
+    cap: moneyOk ? Math.max(0, Number(parts[2]) || 0) : 0,
+    noon,
+    sevens: noonOk ? Math.max(0, Number(parts[4]) || 0) : 0,
+    vault: noonOk ? Math.max(0, Number(parts[5]) || 0) : 0,
+  };
+}
+
+function writeCasinoDay(moneyDay: string, raw: string | null | undefined, slots?: SlotsPack) {
+  const pack = slots ?? readSlotsPack(raw, moneyDay);
+  if (pack.staked <= 0 && pack.cap <= 0 && pack.sevens <= 0 && pack.vault <= 0) return moneyDay;
+  return `${moneyDay}|${pack.staked}|${pack.cap}|${pack.noon}|${pack.sevens}|${pack.vault}`;
+}
+
+function tryLimit(machineId: string) {
+  if (machineId === "sevens") return RULES.CASINO.SLOTS_SEVENS_TRIES;
+  if (machineId === "vault") return RULES.CASINO.SLOTS_VAULT_TRIES;
+  return 0;
+}
+
+function triesView(pack: SlotsPack) {
+  return {
+    sevens: { used: pack.sevens, max: RULES.CASINO.SLOTS_SEVENS_TRIES },
+    vault: { used: pack.vault, max: RULES.CASINO.SLOTS_VAULT_TRIES },
+  };
 }
 
 export async function rouletteStatus(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { vault: true } });
   if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
   const day = utcDay();
-  const fresh = user.rouletteDay !== day;
-  const cap = fresh ? liveCap(user) : user.rouletteCap;
+  const fresh = dayKey(user.rouletteDay) !== day || user.rouletteCap <= 0;
+  const cap = fresh ? liveCap(user, RULES.CASINO.ROULETTE_CAP) : user.rouletteCap;
   const staked = fresh ? 0 : user.rouletteStaked;
   return { cap, staked, locked: cap > 0 && staked >= cap, day };
 }
@@ -81,8 +125,8 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
     const user = await tx.user.findUnique({ where: { id: userId }, include: { vault: true } });
     if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
     const day = utcDay();
-    const fresh = user.rouletteDay !== day;
-    const cap = fresh ? liveCap(user) : user.rouletteCap;
+    const fresh = dayKey(user.rouletteDay) !== day || user.rouletteCap <= 0;
+    const cap = fresh ? liveCap(user, RULES.CASINO.ROULETTE_CAP) : user.rouletteCap;
     const already = fresh ? 0 : user.rouletteStaked;
     if (cap <= 0 || already >= cap) {
       throw new GameError(409, "TABLE_CLOSED", "The day's allowance is spent. Come back tomorrow.");
@@ -102,7 +146,11 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
     await chargeSpend(tx, userId, stake);
     await tx.user.update({
       where: { id: userId },
-      data: { rouletteDay: day, rouletteCap: cap, rouletteStaked: already + stake },
+      data: {
+        rouletteDay: writeCasinoDay(day, user.rouletteDay),
+        rouletteCap: cap,
+        rouletteStaked: already + stake,
+      },
     });
     const number = fixedNumber ?? randomInt(0, 37);
     const returned = bets.reduce((sum, bet) => sum + (hits(bet.id, number) ? bet.amount * bet.payout : 0), 0);
@@ -123,6 +171,127 @@ export async function spinRoulette(userId: string, rawBets: { id?: unknown; amou
       locked: staked >= heldCap,
     };
   });
+}
+
+export async function slotsStatus(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      cash: true,
+      vaultCreditCard: true,
+      reputationLevel: true,
+      rouletteDay: true,
+      vault: { select: { balance: true } },
+    },
+  });
+  if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
+  const day = utcDay();
+  const pack = readSlotsPack(user.rouletteDay, day);
+  const cap = pack.cap > 0 ? pack.cap : liveCap(user, RULES.CASINO.SLOTS_CAP);
+  const staked = pack.staked;
+  return {
+    cap,
+    staked,
+    locked: cap > 0 && staked >= cap,
+    minBet: RULES.CASINO.SLOTS_MIN_BET,
+    day,
+    tries: triesView(pack),
+  };
+}
+
+export async function spinSlots(userId: string, machineId: string, rawBet: number, fixed?: SlotSymbol[]) {
+  const machine = slotMachine(machineId);
+  if (!machine) throw new GameError(400, "BAD_MACHINE", "That cabinet is not on the floor.");
+  const bet = Number(rawBet);
+  if (!Number.isInteger(bet) || bet < RULES.CASINO.SLOTS_MIN_BET) {
+    throw new GameError(400, "BAD_BET", `Minimum bet is ${RULES.CASINO.SLOTS_MIN_BET}.`);
+  }
+
+  const rolled = fixed?.length === 3
+    ? { reels: fixed, win: evaluateSlots(machine, fixed) }
+    : spinReels(machine, (max) => randomInt(0, max));
+  const reels = rolled.reels;
+  const win = rolled.win;
+  const returned = win ? Math.round(bet * win.mult) : 0;
+  const delta = returned - bet;
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: {
+        cash: true,
+        vaultCreditCard: true,
+        reputationLevel: true,
+        rouletteDay: true,
+        vault: { select: { balance: true } },
+      },
+    });
+    if (!user?.vault) throw new GameError(404, "NOT_FOUND", "Player not found.");
+    const day = utcDay();
+    const pack = readSlotsPack(user.rouletteDay, day);
+    const cap = pack.cap > 0 ? pack.cap : liveCap(user, RULES.CASINO.SLOTS_CAP);
+    const already = pack.staked;
+    const limit = tryLimit(machineId);
+    const usedTries = machineId === "sevens" ? pack.sevens : machineId === "vault" ? pack.vault : 0;
+    if (limit > 0 && usedTries >= limit) {
+      throw new GameError(409, "TRIES_USED", "That cabinet is done for today. It opens again at 12:00 GMT.");
+    }
+    if (cap <= 0 || already >= cap) {
+      throw new GameError(409, "TABLE_CLOSED", "The day's allowance is spent. Come back tomorrow.");
+    }
+    if (already + bet > cap) {
+      throw new GameError(400, "OVER_CAP", `That spin passes today's cap of ${cap}. ${cap - already} is left.`);
+    }
+    const card = Boolean(user.vaultCreditCard) || user.reputationLevel >= 11;
+    const spendable = card ? user.vault.balance : user.cash;
+    if (bet > spendable) {
+      throw new GameError(
+        400,
+        "INSUFFICIENT_FUNDS",
+        card ? "Not enough card balance in the vault." : "Not enough cash. Check your vault.",
+      );
+    }
+
+    const next: SlotsPack = {
+      ...pack,
+      staked: already + bet,
+      cap,
+      sevens: pack.sevens + (machineId === "sevens" ? 1 : 0),
+      vault: pack.vault + (machineId === "vault" ? 1 : 0),
+    };
+    const packed = writeCasinoDay(day, user.rouletteDay, next);
+    if (card) {
+      const paid = await tx.vault.updateMany({
+        where: { userId, balance: { gte: bet } },
+        data: { balance: { increment: delta } },
+      });
+      if (paid.count !== 1) {
+        throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough card balance in the vault.");
+      }
+      await tx.user.update({ where: { id: userId }, data: { rouletteDay: packed } });
+    } else {
+      const paid = await tx.user.updateMany({
+        where: { id: userId, cash: { gte: bet } },
+        data: { cash: { increment: delta }, rouletteDay: packed },
+      });
+      if (paid.count !== 1) {
+        throw new GameError(400, "INSUFFICIENT_FUNDS", "Not enough cash. Check your vault.");
+      }
+    }
+    const staked = already + bet;
+    return {
+      machine: machine.id,
+      reels,
+      label: win?.label ?? null,
+      stake: bet,
+      returned,
+      cash: card ? user.cash : user.cash + delta,
+      cap,
+      staked,
+      locked: staked >= cap,
+      tries: triesView(next),
+    };
+  }, { maxWait: 4_000, timeout: 8_000 });
 }
 
 const TABLE_MAX = 5;

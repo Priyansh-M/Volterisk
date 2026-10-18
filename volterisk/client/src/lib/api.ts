@@ -81,7 +81,7 @@ function requestUrl(path: string) {
 }
 
 function shouldRetryBusy(status: number, code?: string) {
-  return status === 503 || code === 'DB_BUSY' || code === 'BOOT'
+  return status === 502 || status === 503 || status === 504 || code === 'DB_BUSY' || code === 'BOOT'
 }
 
 /**
@@ -111,8 +111,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
         data = JSON.parse(text) as typeof data
       } catch {
         throw new ApiError(
-          'The API did not answer. This site reached the page instead of /api.',
+          'The cabinet is busy. Try again in a moment.',
           response.status || 502,
+          'DB_BUSY',
         )
       }
     }

@@ -9,7 +9,9 @@ import {
   readLobby,
   rouletteStatus,
   searchPlayers,
+  slotsStatus,
   spinRoulette,
+  spinSlots,
   spinTable,
 } from "../services/casinoService.js";
 
@@ -20,6 +22,14 @@ export async function table(req: Request, res: Response): Promise<void> {
 export async function spin(req: Request, res: Response): Promise<void> {
   const bets = Array.isArray(req.body?.bets) ? req.body.bets : [];
   res.json(await spinRoulette(currentUserId(req), bets));
+}
+
+export async function slotsTable(req: Request, res: Response): Promise<void> {
+  res.json(await slotsStatus(currentUserId(req)));
+}
+
+export async function slotsSpin(req: Request, res: Response): Promise<void> {
+  res.json(await spinSlots(currentUserId(req), String(req.body?.machine ?? ""), Number(req.body?.bet)));
 }
 
 export async function openLobby(req: Request, res: Response): Promise<void> {

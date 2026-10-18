@@ -415,3 +415,47 @@ describe("reputation", () => {
     expect(again.body.code).toBe("NOT_READY");
   });
 });
+
+describe("slots", () => {
+  it("scores fruit lines", async () => {
+    const { evaluateSlots, SLOT_MACHINES } = await import("../src/game/slots.js");
+    const fruit = SLOT_MACHINES[0];
+    expect(evaluateSlots(fruit, ["seven", "seven", "seven"])?.mult).toBe(50);
+    expect(evaluateSlots(fruit, ["cherry", "lemon", "plum"])?.mult).toBe(3);
+    expect(evaluateSlots(fruit, ["cherry", "bell", "lemon"])?.mult).toBe(0.5);
+  });
+
+  it("keeps a 10% daily cap on a real balance", async () => {
+    const user = await registerUser("Slot Crowe");
+    await request(app).post("/api/onboarding/claim").set(auth(user.token)).send({});
+    const status = await request(app).get("/api/casino/slots").set(auth(user.token));
+    expect(status.status).toBe(200);
+    expect(status.body.cap).toBe(Math.floor((RULES.STARTING_CASH + RULES.STARTING_VAULT_BALANCE) * 0.1));
+    expect(status.body.staked).toBe(0);
+    expect(status.body.minBet).toBe(50);
+    expect(status.body.tries).toEqual({ sevens: { used: 0, max: 8 }, vault: { used: 0, max: 4 } });
+
+    const low = await request(app).post("/api/casino/slots").set(auth(user.token)).send({ machine: "fruit", bet: 10 });
+    expect(low.status).toBe(400);
+
+    const spin = await request(app).post("/api/casino/slots").set(auth(user.token)).send({ machine: "fruit", bet: 50 });
+    expect(spin.status).toBe(200);
+    expect(spin.body.reels).toHaveLength(3);
+    expect(spin.body.staked).toBe(50);
+    expect(spin.body.stake).toBe(50);
+    expect(typeof spin.body.returned).toBe("number");
+    expect(await prisma.transaction.count({ where: { type: "slots", fromUserId: user.id } })).toBe(0);
+    expect(spin.body.tries.sevens.used).toBe(0);
+    expect(spin.body.tries.vault.used).toBe(0);
+
+    const seven = await request(app).post("/api/casino/slots").set(auth(user.token)).send({ machine: "sevens", bet: 50 });
+    expect(seven.status).toBe(200);
+    expect(seven.body.tries.sevens.used).toBe(1);
+    expect(seven.body.tries.vault.used).toBe(0);
+
+    const wheel = await request(app).get("/api/casino/roulette").set(auth(user.token));
+    expect(wheel.status).toBe(200);
+    expect(wheel.body.staked).toBe(0);
+    expect(wheel.body.cap).toBeGreaterThan(0);
+  });
+});

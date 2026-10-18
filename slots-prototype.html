@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Volterisk · Slots Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --background: oklch(0.125 0.008 75);
+    --foreground: oklch(0.91 0.018 83);
+    --card: oklch(0.165 0.009 70);
+    --panel-2: oklch(0.205 0.01 70);
+    --primary: oklch(0.69 0.105 82);
+    --primary-fg: oklch(0.14 0.01 70);
+    --muted: oklch(0.63 0.018 78);
+    --border: oklch(0.31 0.014 71);
+    --board: oklch(0.145 0.008 72);
+    --gold: oklch(0.69 0.105 82);
+    --danger: oklch(0.5 0.14 27);
+    --success: oklch(0.58 0.08 145);
+    --font-display: "Barlow Condensed", sans-serif;
+    --font-sans: "IBM Plex Sans", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+
+    /* Reel window inside the SVG cabinet (viewBox 0 0 240 220) */
+    --scr-left: 16.7%;
+    --scr-top: 40%;
+    --scr-w: 61.7%;
+    --scr-h: 29.1%;
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; margin: 0; }
+  body {
+    background-color: var(--background);
+    background-image:
+      linear-gradient(color-mix(in oklab, var(--border) 55%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--border) 55%, transparent) 1px, transparent 1px);
+    background-size: 32px 32px;
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    display: flex; justify-content: center;
+    padding: 24px 16px 60px;
+  }
+  .wrap { width: 100%; max-width: 920px; }
+
+  header.bar {
+    display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--border); background: var(--card);
+    padding: 12px 16px; margin-bottom: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .mark { width: 26px; height: 26px; border: 1px solid var(--gold); color: var(--gold);
+    display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; }
+  .brand h1 { font-family: var(--font-display); font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; font-size: 18px; margin: 0; }
+  .brand .sub { font-family: var(--font-mono); font-size: 9px; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--muted); }
+  .balance { text-align: right; }
+  .balance .lbl { font-family: var(--font-mono); font-size: 8px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--muted); display: block; }
+  .balance b { font-family: var(--font-mono); font-size: 18px; color: var(--gold); }
+
+  .machines { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .machines button {
+    flex: 1 1 0; min-width: 150px; cursor: pointer; padding: 10px 12px; text-align: left;
+    background: transparent; color: var(--foreground); border: 1px solid var(--border);
+    transition: border-color .15s, background .15s;
+  }
+  .machines button .mt { font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; font-size: 15px; }
+  .machines button .md { font-family: var(--font-mono); font-size: 9px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .1em; }
+  .machines button.active { border-color: var(--gold); background: color-mix(in oklab, var(--gold) 10%, transparent); }
+  .machines button.active .mt { color: var(--gold); }
+
+  .stage { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start;
+    border: 1px solid var(--border); background: var(--card); padding: 18px; }
+  .left { display: flex; flex-direction: column; }
+  .right { display: flex; flex-direction: column; gap: 14px; }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+  .kicker { font-family: var(--font-mono); font-size: 9px; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--gold); }
+  .mname { font-family: var(--font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; margin: 2px 0 12px; font-size: 24px; }
+
+  /* Cabinet is a vector copy of the uploaded art — stays sharp at any size */
+  .machine { position: relative; width: 100%; max-width: 100%; }
+  .machine .cab { display: block; width: 100%; height: auto; overflow: visible; }
+  .machine.shake { animation: shake .5s ease; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-2px)} 75%{transform:translateX(2px)} }
+
+  .screen {
+    position: absolute;
+    left: var(--scr-left); top: var(--scr-top);
+    width: var(--scr-w); height: var(--scr-h);
+    display: flex; gap: 2.5%;
+  }
+  .reel {
+    flex: 1 1 0; position: relative; overflow: hidden;
+    background: #f4f1e6;
+    box-shadow: inset 0 8px 10px -8px rgba(0,0,0,.4), inset 0 -8px 10px -8px rgba(0,0,0,.4);
+  }
+  .reel.win { box-shadow: inset 0 0 0 2px var(--gold); }
+  .strip { display: flex; flex-direction: column; will-change: transform; }
+  .strip.blur { filter: blur(0.7px); }
+  .tile { display: grid; place-items: center; }
+  .tile svg { width: 72%; height: 72%; }
+  /* soft gloss over the whole screen */
+  .glass { position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.25), rgba(255,255,255,0) 32%, rgba(0,0,0,.12)); }
+
+  .result { min-height: 26px; margin: 14px 2px 0; text-align: center;
+    font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; font-size: 20px; }
+  .result.win { color: var(--gold); }
+  .result.lose { color: var(--muted); }
+
+  .betbox { border: 1px solid var(--border); background: var(--board); padding: 12px; }
+  .betlbl { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .betrow { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .betrow .cur { font-family: var(--font-mono); color: var(--muted); }
+  .betrow input { flex: 1 1 auto; min-width: 0; background: var(--card); color: var(--gold);
+    border: 1px solid var(--border); padding: 9px 10px; font-family: var(--font-mono); font-size: 16px; }
+  .betrow input:focus { outline: none; border-color: var(--gold); }
+  .chip { cursor: pointer; padding: 8px 9px; border: 1px solid var(--border); background: transparent;
+    color: var(--foreground); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; }
+  .chip:hover { border-color: var(--gold); }
+  .spin { width: 100%; cursor: pointer; padding: 13px 18px;
+    background: var(--primary); color: var(--primary-fg); border: 1px solid var(--primary);
+    font-family: var(--font-display); font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; font-size: 17px; }
+  .spin:disabled { opacity: .5; cursor: not-allowed; }
+
+  .pay { border: 1px solid var(--border); background: var(--card); }
+  .pay h3 { font-family: var(--font-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--muted); margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .pay table { width: 100%; border-collapse: collapse; }
+  .pay td { padding: 8px 14px; border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+    font-family: var(--font-mono); font-size: 12px; }
+  .pay tr:last-child td { border-bottom: none; }
+  .pay .combo { display: flex; align-items: center; gap: 6px; }
+  .pay .combo svg { width: 24px; height: 24px; }
+  .pay .name { color: var(--foreground); }
+  .pay .mult { text-align: right; color: var(--gold); font-weight: 600; }
+  .pay .note { color: var(--muted); font-size: 11px; }
+
+  .foot { margin-top: 14px; font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+    line-height: 1.6; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <div class="brand">
+      <span class="mark">V</span>
+      <div>
+        <h1>Volterisk Slots</h1>
+        <span class="sub">Private Network · Casino</span>
+      </div>
+    </div>
+    <div class="balance">
+      <span class="lbl">Demo credits</span>
+      <b id="balance">50,000</b>
+    </div>
+  </header>
+
+  <div class="machines" id="machines"></div>
+
+  <section class="stage">
+    <div class="left">
+      <p class="kicker">Machine</p>
+      <h2 class="mname" id="m-name">—</h2>
+      <div class="machine" id="cabinet">
+        <svg class="cab" viewBox="0 0 240 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- dome -->
+          <path d="M44 86 C44 28 196 28 196 86" fill="#4b3ac9"/>
+          <path d="M44 86 C44 28 196 28 196 86" fill="none" stroke="#1a1208" stroke-width="5" stroke-linejoin="round"/>
+          <path id="dome-arc" d="M62 74 C84 52 156 52 178 74" fill="none"/>
+          <text fill="#e23d8a" font-family="Barlow Condensed, sans-serif" font-size="15" font-weight="700" letter-spacing="1.6">
+            <textPath href="#dome-arc" startOffset="50%" text-anchor="middle">VOLTERISK</textPath>
+          </text>
+          <!-- body -->
+          <rect x="28" y="78" width="172" height="108" rx="10" fill="#f2b53a"/>
+          <rect x="28" y="78" width="172" height="108" rx="10" fill="none" stroke="#1a1208" stroke-width="5"/>
+          <!-- screen well + reel frames -->
+          <rect x="37" y="85" width="154" height="70" rx="3" fill="#1a1208"/>
+          <rect x="40" y="88" width="46" height="64" fill="#f4f1e6" stroke="#1a1208" stroke-width="2.5"/>
+          <rect x="91" y="88" width="46" height="64" fill="#f4f1e6" stroke="#1a1208" stroke-width="2.5"/>
+          <rect x="142" y="88" width="46" height="64" fill="#f4f1e6" stroke="#1a1208" stroke-width="2.5"/>
+          <!-- base tray -->
+          <path d="M20 176 H208 C214 176 218 184 214 194 H26 C22 184 14 176 20 176Z" fill="#f2b53a" stroke="#1a1208" stroke-width="5" stroke-linejoin="round"/>
+          <!-- lever arm -->
+          <rect x="200" y="108" width="10" height="38" rx="3" fill="#5a4ad4" stroke="#1a1208" stroke-width="3"/>
+          <circle cx="205" cy="98" r="11" fill="#e23d8a" stroke="#1a1208" stroke-width="3.5"/>
+        </svg>
+        <div class="screen" id="screen">
+          <div class="reel"><div class="strip" id="strip0"></div></div>
+          <div class="reel"><div class="strip" id="strip1"></div></div>
+          <div class="reel"><div class="strip" id="strip2"></div></div>
+          <div class="glass"></div>
+        </div>
+      </div>
+      <div class="result" id="result">Pull to play</div>
+    </div>
+
+    <div class="right">
+      <div class="betbox">
+        <label class="betlbl" for="betInput">Bet amount</label>
+        <div class="betrow">
+          <span class="cur">$</span>
+          <input id="betInput" type="number" inputmode="numeric" min="50" step="50" value="100" />
+          <button class="chip" data-chip="min">Min</button>
+          <button class="chip" data-chip="half">½</button>
+          <button class="chip" data-chip="max">Max</button>
+        </div>
+        <button class="spin" id="spin">Spin</button>
+      </div>
+
+      <div class="pay">
+        <h3>Winning combinations</h3>
+        <table><tbody id="payBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    Prototype only — runs entirely in your browser, no server calls, no logging. Credits are fake.
+    Wiring into the real game later is one POST per spin (server rolls and validates, like Roulette).
+  </p>
+</div>
+
+<script>
+// ---------- Symbol artwork (inline SVG, no emoji) ----------
+const G = {
+  cherry: `<svg viewBox="0 0 24 24" fill="none"><path d="M7 5c5 1 9 4 10 8" stroke="#d98b3a" stroke-width="1.4"/><circle cx="7" cy="16" r="4" fill="#c0392b"/><circle cx="15" cy="17" r="4" fill="#e0533c"/><path d="M17 5l-2 1" stroke="#7bbf5a" stroke-width="2" stroke-linecap="round"/></svg>`,
+  lemon: `<svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6" fill="#e7c13a"/><ellipse cx="9" cy="10" rx="2" ry="1.3" fill="#f2db86"/></svg>`,
+  plum: `<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7" fill="#7d5ba6"/><path d="M12 6c2-3 5-3 5-3" stroke="#7bbf5a" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`,
+  grape: `<svg viewBox="0 0 24 24"><g fill="#8e6fc0"><circle cx="9" cy="12" r="3"/><circle cx="15" cy="12" r="3"/><circle cx="12" cy="16" r="3"/><circle cx="12" cy="9" r="3"/></g><path d="M12 6c1-3 4-3 4-3" stroke="#7bbf5a" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24"><path d="M6 17c0-6 2-9 6-9s6 3 6 9z" fill="#e7b73a"/><rect x="5" y="17" width="14" height="2" fill="#caa033"/><circle cx="12" cy="21" r="1.6" fill="#caa033"/></svg>`,
+  seven: `<svg viewBox="0 0 24 24"><path d="M6 6h12l-6 13" stroke="#e0533c" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  bar: `<svg viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="6" rx="1.5" fill="#d9b24a"/><text x="12" y="14" font-family="monospace" font-size="5.5" fill="#1a150a" text-anchor="middle" font-weight="700">BAR</text></svg>`,
+  bar2: `<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="6" rx="1.5" fill="#d9b24a"/><rect x="3" y="13" width="18" height="6" rx="1.5" fill="#d9b24a"/></svg>`,
+  bar3: `<svg viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="5" rx="1.3" fill="#d9b24a"/><rect x="3" y="9.5" width="18" height="5" rx="1.3" fill="#d9b24a"/><rect x="3" y="15.5" width="18" height="5" rx="1.3" fill="#d9b24a"/></svg>`,
+  star: `<svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .6-4.5 4 1.3 6-5.4-3.1L6.6 19l1.3-6-4.5-4 6-.6z" fill="#e7c13a"/></svg>`,
+  diamond: `<svg viewBox="0 0 24 24"><path d="M12 3l7 6-7 12-7-12z" fill="#6fc0d9"/><path d="M5 9h14M12 3L9 9l3 12M12 3l3 6-3 12" stroke="#2a3a40" stroke-width=".7" fill="none"/></svg>`,
+  coin: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="#d9b24a"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#1a150a" stroke-width="1"/><text x="12" y="15" font-family="monospace" font-size="7" fill="#1a150a" text-anchor="middle" font-weight="700">$</text></svg>`,
+  card: `<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="#b89a52"/><rect x="3" y="9" width="18" height="2.4" fill="#1a150a"/></svg>`,
+  vault: `<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5" fill="#8a8f98"/><circle cx="12" cy="12" r="4" fill="none" stroke="#1a150a" stroke-width="1.4"/><circle cx="12" cy="12" r="1.2" fill="#1a150a"/></svg>`,
+  crown: `<svg viewBox="0 0 24 24"><path d="M4 18l-1-9 5 4 4-7 4 7 5-4-1 9z" fill="#e7c13a"/></svg>`,
+};
+function svg(id){ return G[id] || ''; }
+
+// ---------- Machines + full paytables ----------
+const MACHINES = [
+  {
+    id: 'fruit', name: 'Fruit Classic', tag: 'Low risk · frequent wins',
+    reel: [['cherry',9],['lemon',8],['plum',7],['grape',6],['bell',4],['seven',2]],
+    three: { cherry:5, lemon:8, plum:10, grape:15, bell:25, seven:50 },
+    two:   { cherry:2 },
+    one:   { cherry:0.5 },
+    combos: [{ test:(a)=> allIn(a,['cherry','lemon','plum','grape']) && !same(a), mult:3, label:'Fruit Salad', icon:'grape', note:'any 3 different fruits' }],
+  },
+  {
+    id: 'sevens', name: 'Lucky Sevens', tag: 'High risk · big jackpot',
+    reel: [['bar',9],['bar2',7],['bar3',5],['star',5],['diamond',3],['seven',2]],
+    three: { bar:10, bar2:20, bar3:40, star:60, diamond:100, seven:250 },
+    two:   { seven:5, diamond:3 },
+    one:   {},
+    combos: [{ test:(a)=> a.every(x=>x.startsWith('bar')) && !same(a), mult:4, label:'Mixed Bars', icon:'bar', note:'any 3 bar symbols' }],
+  },
+  {
+    id: 'vault', name: 'Diamond Vault', tag: 'Premium · mega jackpot',
+    reel: [['coin',9],['card',7],['vault',6],['crown',4],['diamond',3],['seven',2]],
+    three: { coin:8, card:12, vault:20, crown:40, diamond:120, seven:300 },
+    two:   { diamond:5, vault:2 },
+    one:   {},
+    combos: [{ test:(a)=> allIn(a,['coin','card','vault']) && !same(a), mult:4, label:'Full Portfolio', icon:'vault', note:'coin + card + vault' }],
+  },
+];
+
+function same(a){ return a[0]===a[1] && a[1]===a[2]; }
+function allIn(a, set){ return a.every(x=> set.includes(x)); }
+function countMap(a){ const m={}; a.forEach(x=> m[x]=(m[x]||0)+1); return m; }
+function rollReel(reel){
+  const total = reel.reduce((s,[,w])=> s+w, 0);
+  let r = Math.random()*total;
+  for(const [id,w] of reel){ if((r-=w) < 0) return id; }
+  return reel[reel.length-1][0];
+}
+function evaluate(m, a){
+  let best = null;
+  const consider = (mult, label, icon) => { if(mult>0 && (!best || mult>best.mult)) best = {mult,label,icon}; };
+  if(same(a)){ const s=a[0]; if(m.three[s]) consider(m.three[s], 'Three '+pretty(s), s); }
+  for(const c of (m.combos||[])){ if(c.test(a)) consider(c.mult, c.label, c.icon); }
+  const cm = countMap(a);
+  for(const s in (m.two||{})){ if(cm[s]===2) consider(m.two[s], 'Two '+pretty(s), s); }
+  for(const s in (m.one||{})){ if(cm[s]>=1 && cm[s]<2) consider(m.one[s], 'One '+pretty(s), s); }
+  return best;
+}
+function pretty(s){ return ({bar:'Bar',bar2:'Double Bar',bar3:'Triple Bar'})[s] || s.charAt(0).toUpperCase()+s.slice(1); }
+
+// ---------- State ----------
+let current = 0, balance = 50000, spinning = false;
+const MIN_BET = 50;
+let bet = 100;
+const $ = (id)=> document.getElementById(id);
+const money = (n)=> Math.round(n).toLocaleString();
+
+function maxBet(){ return Math.max(MIN_BET, balance); }
+function clampBet(){
+  let v = Math.floor(Number($('betInput').value) || 0);
+  if(v < MIN_BET) v = MIN_BET;
+  if(v > balance && balance >= MIN_BET) v = balance;
+  $('betInput').value = v;
+  bet = v;
+  return v;
+}
+function updateSpin(){ $('spin').disabled = spinning || balance < MIN_BET; }
+
+function renderMachines(){
+  const box = $('machines'); box.innerHTML='';
+  MACHINES.forEach((m,i)=>{
+    const b = document.createElement('button');
+    b.className = i===current ? 'active' : '';
+    b.innerHTML = `<div class="mt">${m.name}</div><div class="md">${m.tag}</div>`;
+    b.onclick = ()=>{ if(spinning) return; current=i; renderAll(); };
+    box.appendChild(b);
+  });
+}
+function renderPaytable(){
+  const m = MACHINES[current];
+  $('m-name').textContent = m.name;
+  const body = $('payBody'); body.innerHTML='';
+  const row = (icon, name, mult, note)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><div class="combo">${svg(icon)}<span class="name">${name}</span></div></td><td class="note">${note||''}</td><td class="mult">${mult}× bet</td>`;
+    body.appendChild(tr);
+  };
+  Object.entries(m.three).sort((a,b)=>b[1]-a[1]).forEach(([s,mult])=>{
+    const note = (mult>=250)?'JACKPOT':(mult>=100?'Top prize':'three in a row');
+    row(s, 'Three '+pretty(s), mult, note);
+  });
+  (m.combos||[]).forEach(c=> row(c.icon, c.label, c.mult, c.note));
+  Object.entries(m.two||{}).forEach(([s,mult])=> row(s, 'Two '+pretty(s), mult, 'any two'));
+  Object.entries(m.one||{}).forEach(([s,mult])=> row(s, 'One '+pretty(s), mult, 'any single'));
+}
+function setStrip(i, symId){
+  const strip = $('strip'+i);
+  const H = strip.parentElement.clientHeight;
+  strip.style.transition = 'none';
+  strip.style.transform = 'translateY(0)';
+  strip.innerHTML = `<div class="tile" style="height:${H}px">${svg(symId)}</div>`;
+}
+function renderAll(){
+  renderMachines(); renderPaytable();
+  const m = MACHINES[current];
+  [0,1,2].forEach(i=> setStrip(i, m.reel[i][0]));
+  $('balance').textContent = money(balance);
+  updateSpin();
+}
+function setResult(text, cls){ const el=$('result'); el.textContent=text; el.className='result '+(cls||''); }
+
+const SPIN_MS = 3000;   // constant fast-spin phase
+const SPIN_TILES = 60;  // tiles passed during the spin phase (sets the speed)
+const SETTLE_TILES = 6; // tiles crossed while decelerating
+
+function tile(symId, H){ return `<div class="tile" style="height:${H}px">${svg(symId)}</div>`; }
+
+function spinReel(i, finalSym, settleMs){
+  return new Promise((resolve)=>{
+    const strip = $('strip'+i);
+    const H = strip.parentElement.clientHeight;
+    const m = MACHINES[current];
+    // strip: spin tiles + settle tiles, with the result as the last tile
+    let html = '';
+    for(let k=0;k<SPIN_TILES+SETTLE_TILES;k++) html += tile(rollReel(m.reel), H);
+    html += tile(finalSym, H); // final sits at index SPIN_TILES+SETTLE_TILES
+    strip.style.transition = 'none';
+    strip.style.transform = 'translateY(0)';
+    strip.innerHTML = html;
+    strip.classList.add('blur');
+    void strip.offsetHeight;
+
+    // Phase 1 — constant speed (linear) for 5 seconds
+    strip.style.transition = `transform ${SPIN_MS}ms linear`;
+    strip.style.transform = `translateY(${-SPIN_TILES*H}px)`;
+
+    const onSpin = ()=>{
+      strip.removeEventListener('transitionend', onSpin);
+      strip.classList.remove('blur');
+      // Phase 2 — decelerate and land on the result
+      strip.style.transition = `transform ${settleMs}ms cubic-bezier(.12,.7,.25,1)`;
+      strip.style.transform = `translateY(${-(SPIN_TILES+SETTLE_TILES)*H}px)`;
+      const onSettle = ()=>{ strip.removeEventListener('transitionend', onSettle); resolve(); };
+      strip.addEventListener('transitionend', onSettle);
+    };
+    strip.addEventListener('transitionend', onSpin);
+  });
+}
+
+async function spin(){
+  if(spinning) return;
+  bet = clampBet();
+  if(bet < MIN_BET){ setResult('Minimum bet is $'+MIN_BET,'lose'); return; }
+  if(bet > balance){ setResult('Not enough credits','lose'); return; }
+  spinning = true;
+  balance -= bet;
+  $('balance').textContent = money(balance);
+  updateSpin();
+  setResult('Spinning…','');
+  document.querySelectorAll('.reel').forEach(r=> r.classList.remove('win'));
+  const cab = $('cabinet'); cab.classList.remove('shake'); void cab.offsetWidth; cab.classList.add('shake');
+
+  const m = MACHINES[current];
+  const final = [rollReel(m.reel), rollReel(m.reel), rollReel(m.reel)];
+  // all three spin together for 5s, then settle one after another
+  await Promise.all([
+    spinReel(0, final[0], 650),
+    spinReel(1, final[1], 900),
+    spinReel(2, final[2], 1150),
+  ]);
+  finish(m, final);
+}
+function finish(m, final){
+  const win = evaluate(m, final);
+  if(win){
+    const amount = Math.round(bet * win.mult);
+    balance += amount; $('balance').textContent = money(balance);
+    document.querySelectorAll('.reel').forEach(r=> r.classList.add('win'));
+    setResult(`${win.label} — +${money(amount)}`, 'win');
+  } else { setResult('No line — try again','lose'); }
+  spinning = false;
+  updateSpin();
+}
+
+$('spin').onclick = spin;
+$('betInput').addEventListener('change', ()=>{ if(!spinning) clampBet(); });
+document.querySelectorAll('.chip').forEach(c=> c.onclick = ()=>{
+  if(spinning) return;
+  const hi = maxBet();
+  const v = c.dataset.chip==='min' ? MIN_BET
+          : c.dataset.chip==='half' ? Math.max(MIN_BET, Math.round(hi/2/50)*50)
+          : hi;
+  $('betInput').value = Math.max(MIN_BET, v);
+  clampBet();
+});
+
+window.addEventListener('load', ()=> setTimeout(renderAll, 60));
+renderAll();
+</script>
+</body>
+</html>

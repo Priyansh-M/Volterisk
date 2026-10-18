@@ -29,6 +29,7 @@ import { WorkPage } from './pages/WorkPage.tsx'
 import { WorkshopPage } from './pages/WorkshopPage.tsx'
 
 const RoulettePage = lazy(() => import('./pages/RoulettePage.tsx').then((mod) => ({ default: mod.RoulettePage })))
+const SlotsPage = lazy(() => import('./pages/SlotsPage.tsx').then((mod) => ({ default: mod.SlotsPage })))
 
 function Protected() {
   const { me, loading } = useAuth()
@@ -91,6 +92,14 @@ export default function App() {
                 }
               >
                 <RoulettePage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/casino/slots"
+            element={
+              <Suspense fallback={<p className="text-sm text-muted-foreground">Opening the cabinets...</p>}>
+                <SlotsPage />
               </Suspense>
             }
           />
