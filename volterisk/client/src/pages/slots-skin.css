@@ -1,6 +1,6 @@
 .volterisk-slots {
   --scr-left: 16.7%;
-  --scr-top: 40%;
+  --scr-top: 36.5%;
   --scr-w: 61.7%;
   --scr-h: 29.1%;
 }
@@ -20,7 +20,11 @@
 @media (max-width: 760px) {
   .volterisk-slots .stage { grid-template-columns: 1fr; }
 }
-.volterisk-slots .machine { position: relative; width: 100%; }
+.volterisk-slots .machine {
+  position: relative;
+  width: min(100%, calc((100vh - 470px) * 1.09));
+  min-width: 220px;
+}
 .volterisk-slots .cab { display: block; width: 100%; height: auto; overflow: visible; }
 .volterisk-slots .machine.shake { animation: slots-shake .5s ease; }
 @keyframes slots-shake {

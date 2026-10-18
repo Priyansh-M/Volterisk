@@ -101,7 +101,7 @@ export function SlotsPage() {
   const [current, setCurrent] = useState(0)
   const [bet, setBet] = useState(100)
   const [spinning, setSpinning] = useState(false)
-  const [result, setResult] = useState('Pull to play')
+  const [result, setResult] = useState('Spin to play')
   const [tone, setTone] = useState<'win' | 'lose' | ''>('')
   const [error, setError] = useState<string | null>(null)
   const strips = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)]
@@ -281,9 +281,9 @@ export function SlotsPage() {
       </div>
 
       <section className="stage border border-border bg-card p-4">
-        <div>
-          <p className="font-mono text-[9px] tracking-[0.22em] text-primary uppercase">Machine</p>
-          <h2 className="mb-3 font-display text-2xl font-bold uppercase tracking-[0.04em]">{machine.name}</h2>
+        <div className="flex flex-col items-center">
+          <p className="self-start font-mono text-[9px] tracking-[0.22em] text-primary uppercase">Machine</p>
+          <h2 className="mb-1 self-start font-display text-2xl font-bold uppercase tracking-[0.04em]">{machine.name}</h2>
           <div className="machine" id="cabinet" ref={cabinet}>
             <svg className="cab" viewBox="0 0 240 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M44 86 C44 28 196 28 196 86" fill="#4b3ac9" />
@@ -309,7 +309,7 @@ export function SlotsPage() {
               <div className="glass" />
             </div>
           </div>
-          <p className={`mt-3 min-h-[26px] text-center font-display text-xl font-semibold uppercase tracking-[0.08em] ${
+          <p className={`relative -top-[38px] mt-0 min-h-[22px] text-center font-display text-lg font-semibold uppercase tracking-[0.08em] ${
             tone === 'win' ? 'text-primary' : tone === 'lose' ? 'text-muted-foreground' : ''
           }`}>{result}</p>
         </div>
