@@ -57,7 +57,7 @@ export const SLOT_MACHINES: SlotMachine[] = [
     combos: [
       {
         id: "salad",
-        mult: 3,
+        mult: 2,
         label: "Fruit Salad",
         test: (a) => allIn(a, ["cherry", "lemon", "plum", "grape"]) && !same(a),
       },
@@ -70,18 +70,18 @@ export const SLOT_MACHINES: SlotMachine[] = [
     reel: [
       ["bar", 9],
       ["bar2", 7],
-      ["bar3", 5],
-      ["star", 5],
+      ["bar3", 3],
+      ["star", 3],
       ["diamond", 3],
-      ["seven", 2],
+      ["seven", 3],
     ],
-    three: { bar: 10, bar2: 20, bar3: 40, star: 60, diamond: 100, seven: 250 },
+    three: { bar: 5, bar2: 10, bar3: 20, star: 30, diamond: 60, seven: 150 },
     two: { seven: 5, diamond: 3 },
     one: {},
     combos: [
       {
         id: "bars",
-        mult: 4,
+        mult: 1,
         label: "Mixed Bars",
         test: (a) => a.every((x) => x.startsWith("bar")) && !same(a),
       },
@@ -99,13 +99,13 @@ export const SLOT_MACHINES: SlotMachine[] = [
       ["diamond", 3],
       ["seven", 2],
     ],
-    three: { coin: 8, card: 12, vault: 20, crown: 40, diamond: 120, seven: 300 },
-    two: { diamond: 5, vault: 2 },
+    three: { coin: 4, card: 6, vault: 10, crown: 40, diamond: 120, seven: 300 },
+    two: { diamond: 4, vault: 2 },
     one: {},
     combos: [
       {
         id: "portfolio",
-        mult: 4,
+        mult: 3.5,
         label: "Full Portfolio",
         test: (a) => allIn(a, ["coin", "card", "vault"]) && !same(a),
       },
@@ -122,8 +122,15 @@ export function prettySlot(s: string) {
     ?? s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Pay lines above 20% hit rate. 15% of those hits become no-pay. */
-const SOFT_PAY = new Set(["Fruit Salad", "Mixed Bars", "Full Portfolio"]);
+/** Per-mille of these hits that become no-pay. Tuned for ~95% / 115% / 120% return. */
+const SOFT_PAY: Record<string, number> = { "Fruit Salad": 550, "One Cherry": 400, "Full Portfolio": 523 };
+
+/** Shown when a dropped hit can't reroll into a natural loss. */
+const DEAD_SPIN: Record<string, SlotSymbol[]> = {
+  fruit: ["lemon", "bell", "seven"],
+  sevens: ["bar", "star", "seven"],
+  vault: ["coin", "crown", "seven"],
+};
 
 export function evaluateSlots(m: SlotMachine, a: SlotSymbol[]) {
   let best: { mult: number; label: string } | null = null;
@@ -165,12 +172,15 @@ function drawReels(m: SlotMachine, rand: (max: number) => number): SlotSymbol[] 
 export function spinReels(m: SlotMachine, rand: (max: number) => number) {
   let reels = drawReels(m, rand);
   let win = evaluateSlots(m, reels);
-  if (win && SOFT_PAY.has(win.label) && rand(100) < 15) {
+  if (win && rand(1000) < (SOFT_PAY[win.label] ?? 0)) {
     for (let i = 0; i < 24 && win; i++) {
       reels = drawReels(m, rand);
       win = evaluateSlots(m, reels);
     }
-    if (win) win = null;
+    if (win) {
+      reels = DEAD_SPIN[m.id] ?? reels;
+      win = null;
+    }
   }
   return { reels, win };
 }

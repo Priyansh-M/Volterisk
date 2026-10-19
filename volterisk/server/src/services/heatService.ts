@@ -9,6 +9,11 @@ const GAP_MS = RULES.HEAT_CHECK_GAP_HOURS * 60 * 60 * 1000;
 const SLACK_MS = DAY_MS - RULES.HEAT_CHECKS_PER_DAY * GAP_MS;
 const NOON_RESET_TYPE = "heat_noon_reset";
 
+/** L11+ runs on police attention; heat notices stay quiet there. */
+function pastHeat(user: { reputationLevel: number; vaultCreditCard: boolean }): boolean {
+  return user.vaultCreditCard || user.reputationLevel >= RULES.TERRITORY.UNLOCK_LEVEL;
+}
+
 function dayKey(dayStartMs: number): string {
   return new Date(dayStartMs).toISOString().slice(0, 10);
 }
@@ -116,6 +121,7 @@ async function wipeHeatAtNoon(
   heat: number,
   settledAt: Date,
   noon: Date,
+  quiet = false,
 ): Promise<{ heat: number; settledAt: Date }> {
   const cooled = decayed(heat, settledAt, noon);
   await tx.transaction.create({
@@ -126,7 +132,7 @@ async function wipeHeatAtNoon(
       createdAt: noon,
     },
   });
-  if (cooled.heat > 0) {
+  if (cooled.heat > 0 && !quiet) {
     await writeNotification(tx, {
       userId,
       title: "Heat cleared",
@@ -141,11 +147,12 @@ async function wipeHeatAtNoon(
 async function adjustHeat(tx: Tx, userId: string, delta: number, now = new Date()): Promise<number> {
   const user = await tx.user.findUnique({ where: { id: userId } });
   if (!user || user.isBot) return 0;
+  const quiet = pastHeat(user);
   let heat = user.heat;
   let settledAt = user.heatSettledAt;
   const noon = latestHeatNoon(now);
   if (!(await noonResetExists(tx, userId, noon))) {
-    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon);
+    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon, quiet);
     heat = wiped.heat;
     settledAt = wiped.settledAt;
   }
@@ -155,7 +162,7 @@ async function adjustHeat(tx: Tx, userId: string, delta: number, now = new Date(
     where: { id: userId },
     data: { heat, heatSettledAt: cooled.settledAt },
   });
-  if (cooled.heat <= RULES.HEAT_POLICE_AT && heat > RULES.HEAT_POLICE_AT) {
+  if (!quiet && cooled.heat <= RULES.HEAT_POLICE_AT && heat > RULES.HEAT_POLICE_AT) {
     await writeNotification(tx, {
       userId,
       title: "Heat is high",
@@ -170,6 +177,7 @@ async function adjustHeat(tx: Tx, userId: string, delta: number, now = new Date(
 async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise<number> {
   const user = await tx.user.findUnique({ where: { id: userId } });
   if (!user || user.isBot) return 0;
+  const quiet = pastHeat(user);
   let heat = user.heat;
   let settledAt = user.heatSettledAt;
   let cash = user.cash;
@@ -181,7 +189,7 @@ async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise
 
   const ensureNoon = async (atMs: number) => {
     if (noonDone || atMs <= noon.getTime()) return;
-    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon);
+    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon, quiet);
     heat = wiped.heat;
     settledAt = wiped.settledAt;
     noonDone = true;
@@ -213,12 +221,12 @@ async function seizeDueChecks(tx: Tx, userId: string, now = new Date()): Promise
   }
 
   if (!noonDone) {
-    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon);
+    const wiped = await wipeHeatAtNoon(tx, userId, heat, settledAt, noon, quiet);
     heat = wiped.heat;
     settledAt = wiped.settledAt;
   }
 
-  if (checksRun > 0) {
+  if (checksRun > 0 && !quiet) {
     if (seized > 0) {
       await writeNotification(tx, {
         userId,
@@ -296,7 +304,7 @@ export async function settleHeatNoonIfDue(userId: string): Promise<void> {
       noonSettledKey.set(userId, noonMs);
       return;
     }
-    const wiped = await wipeHeatAtNoon(tx, userId, user.heat, user.heatSettledAt, noon);
+    const wiped = await wipeHeatAtNoon(tx, userId, user.heat, user.heatSettledAt, noon, pastHeat(user));
     await tx.user.update({
       where: { id: userId },
       data: { heat: wiped.heat, heatSettledAt: wiped.settledAt },

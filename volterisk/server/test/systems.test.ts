@@ -421,7 +421,7 @@ describe("slots", () => {
     const { evaluateSlots, SLOT_MACHINES } = await import("../src/game/slots.js");
     const fruit = SLOT_MACHINES[0];
     expect(evaluateSlots(fruit, ["seven", "seven", "seven"])?.mult).toBe(50);
-    expect(evaluateSlots(fruit, ["cherry", "lemon", "plum"])?.mult).toBe(3);
+    expect(evaluateSlots(fruit, ["cherry", "lemon", "plum"])?.mult).toBe(2);
     expect(evaluateSlots(fruit, ["cherry", "bell", "lemon"])?.mult).toBe(0.5);
   });
 

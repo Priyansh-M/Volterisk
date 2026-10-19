@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.ts'
+import { useAuth } from '../lib/auth.tsx'
 import { bumpDesk, subscribeDesk } from '../lib/deskPoll.ts'
 import { money } from '../lib/format.ts'
 import { NEXT_STAGE_READY_KEY } from './Level11Guide.tsx'
@@ -27,6 +28,9 @@ export function LedgerAlerts({
   onChangeRef.current = onChange
   const onUnclaimedRef = useRef(onUnclaimed)
   onUnclaimedRef.current = onUnclaimed
+  const { me } = useAuth()
+  const lateRef = useRef(false)
+  lateRef.current = (me?.level ?? 0) >= 11 || Boolean(me?.vaultCreditCard)
   const [unlocks, setUnlocks] = useState<Unlock[]>([])
   const [heists, setHeists] = useState<HeistNotice[]>([])
   const [heats, setHeats] = useState<HeatNotice[]>([])
@@ -87,7 +91,11 @@ export function LedgerAlerts({
           }
         })
       const heatIncoming = snap.notifications
-        .filter((row) => row.read !== true && (row.title === 'Cash seized' || row.title === 'Heat check' || row.title === 'Police bounty' || row.title === 'Police confiscation'))
+        .filter((row) => row.read !== true && (
+          row.title === 'Police bounty' ||
+          row.title === 'Police confiscation' ||
+          (!lateRef.current && (row.title === 'Cash seized' || row.title === 'Heat check'))
+        ))
         .map((row) => ({ id: row.id, title: row.title, body: row.body }))
       const addUnlocks = unlocked.filter((row) => !shown.current.has(`u:${row.id}`))
       const addHeists = heistIncoming.filter((row) => !shown.current.has(`r:${row.id}`))
