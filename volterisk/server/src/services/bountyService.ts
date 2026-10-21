@@ -1,6 +1,7 @@
 import { GameError } from "../game/errors.js";
+import { sharedCache } from "../lib/sharedCache.js";
 import { prisma } from "../prisma.js";
-import { chargeSpend, creditEarn, type Tx } from "./economyService.js";
+import { chargeSpend, creditEarn, sweepPocketCashToCard, type Tx } from "./economyService.js";
 import { writeNotification } from "./notificationService.js";
 
 const MIN_BOUNTY = 5_000;
@@ -159,6 +160,7 @@ async function expireDueBounties(): Promise<void> {
       /* already settled by another request */
     }
   }
+  if (due.length > 0) clearBountyCache();
 }
 
 async function endBounty(bountyId: string, reason: "cancelled" | "expired"): Promise<void> {
@@ -264,14 +266,23 @@ export async function syncPoliceBounty(userId: string, attention: number, dailyT
   });
 }
 
-export async function listBounties(viewerId: string) {
-  await expireDueBounties();
-  const rows = await prisma.bounty.findMany({
+const activeBounties = sharedCache(20_000, () =>
+  prisma.bounty.findMany({
     where: { status: { in: [...ACTIVE] }, amount: { gt: 0 } },
     include,
     orderBy: [{ amount: "desc" }, { createdAt: "desc" }],
     take: 60,
-  });
+  }),
+);
+
+/** Call after any bounty is posted, funded, started, claimed, cancelled, or expired. */
+export function clearBountyCache() {
+  activeBounties.clear();
+}
+
+export async function listBounties(viewerId: string) {
+  await expireDueBounties();
+  const rows = (await activeBounties.get()).filter((row) => !row.expiresAt || row.expiresAt.getTime() > Date.now());
   return {
     bounties: rows.map((row) => present(row, viewerId)),
     rules: {
@@ -317,6 +328,24 @@ export async function createBounty(
       );
     }
 
+    await sweepPocketCashToCard(tx, posterId);
+    const payer = await tx.user.findUnique({
+      where: { id: posterId },
+      select: { cash: true, vaultCreditCard: true, reputationLevel: true, vault: { select: { balance: true } } },
+    });
+    const card = Boolean(payer?.vaultCreditCard) || (payer?.reputationLevel ?? 0) >= 11;
+    const have = card ? (payer?.vault?.balance ?? 0) : (payer?.cash ?? 0);
+    if (have < amount) {
+      throw new GameError(
+        400,
+        "INSUFFICIENT_FUNDS",
+        card
+          ? "Not enough card balance in the vault."
+          : payer && payer.vault && payer.vault.balance >= amount
+            ? "That money is in the vault. Withdraw it to cash before posting."
+            : "Not enough cash.",
+      );
+    }
     await chargeSpend(tx, posterId, amount);
 
     const existing = await tx.bounty.findFirst({
@@ -388,6 +417,7 @@ export async function fundBounty(userId: string, bountyId: string, amountRaw: nu
     if (row.targetId === userId) {
       throw new GameError(400, "SELF_BOUNTY", "You cannot fund a bounty on yourself.");
     }
+    await sweepPocketCashToCard(tx, userId);
     await chargeSpend(tx, userId, amount);
     await tx.bountyFund.create({ data: { bountyId, userId, amount } });
     const next = await tx.bounty.update({

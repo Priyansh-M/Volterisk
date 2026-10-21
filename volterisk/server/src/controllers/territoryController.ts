@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { currentUserId } from "../middleware/auth.js";
 import { syncAchievements } from "../services/achievementService.js";
+import { clearMapCache } from "../services/baseService.js";
 import {
   abandonExpansion,
   advanceExpansion,
@@ -28,29 +29,32 @@ export async function scout(req: Request, res: Response): Promise<void> {
 export async function advance(req: Request, res: Response): Promise<void> {
   const userId = currentUserId(req);
   const board = await advanceExpansion(userId);
+  clearMapCache();
   const unlocked = await syncAchievements(userId).catch(() => []);
   res.json({ ...board, unlocked });
 }
 
 export async function abandon(req: Request, res: Response): Promise<void> {
-  res.json(await abandonExpansion(currentUserId(req)));
+  const out = await abandonExpansion(currentUserId(req));
+  clearMapCache();
+  res.json(out);
 }
 
 export async function specialize(req: Request, res: Response): Promise<void> {
   const body = req.body as { holdingId?: string; specialization?: string | null };
-  res.json(
-    await setSpecialization(currentUserId(req), String(body.holdingId ?? ""), body.specialization ?? null),
-  );
+  const out = await setSpecialization(currentUserId(req), String(body.holdingId ?? ""), body.specialization ?? null);
+  clearMapCache();
+  res.json(out);
 }
 
 export async function recolor(req: Request, res: Response): Promise<void> {
   const body = req.body as { holdingId?: string; colorId?: string; instanceId?: string };
-  res.json(
-    await applyTerritoryColor(
-      currentUserId(req),
-      String(body.holdingId ?? ""),
-      String(body.colorId ?? ""),
-      body.instanceId ? String(body.instanceId) : undefined,
-    ),
+  const out = await applyTerritoryColor(
+    currentUserId(req),
+    String(body.holdingId ?? ""),
+    String(body.colorId ?? ""),
+    body.instanceId ? String(body.instanceId) : undefined,
   );
+  clearMapCache();
+  res.json(out);
 }

@@ -132,8 +132,8 @@ const DEAD_SPIN: Record<string, SlotSymbol[]> = {
   vault: ["coin", "crown", "seven"],
 };
 
-export function evaluateSlots(m: SlotMachine, a: SlotSymbol[]) {
-  let best: { mult: number; label: string } | null = null;
+export function evaluateSlots(m: SlotMachine, a: SlotSymbol[]): { mult: number; label: string } | null {
+  let best = null as { mult: number; label: string } | null;
   const consider = (mult: number, label: string) => {
     if (mult > 0 && (!best || mult > best.mult)) best = { mult, label };
   };

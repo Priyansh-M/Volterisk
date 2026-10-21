@@ -2,6 +2,7 @@ import { BLACK_MARKET, MATERIALS, materialById } from "../game/workshopEconomy.j
 import { vaultModById, weaponModById } from "../game/careersAndMods.js";
 import { GameError } from "../game/errors.js";
 import { weaponById } from "../game/rules.js";
+import { sharedCache } from "../lib/sharedCache.js";
 import { prisma } from "../prisma.js";
 import { chargeSpend, creditEarn } from "./economyService.js";
 import { creditItem, debitItem } from "./inventoryService.js";
@@ -46,7 +47,7 @@ function feeAmount(price: number) {
   return price - sellerProceeds(price);
 }
 
-export async function listBlackMarket(userId: string) {
+const openListings = sharedCache(30_000, async () => {
   await expireOpen();
   const open = await prisma.marketListing.findMany({
     where: { status: "open", expiresAt: { gt: new Date() } },
@@ -54,11 +55,22 @@ export async function listBlackMarket(userId: string) {
     take: 100,
     include: { seller: { select: { username: true } } },
   });
-  const mine = await prisma.marketListing.findMany({
-    where: { sellerId: userId, status: "open" },
-    orderBy: { createdAt: "desc" },
-  });
-  const listings = await Promise.all(open.map((row) => presentListing(row)));
+  return Promise.all(open.map((row) => presentListing(row)));
+});
+
+/** Call after a listing opens, closes, or sells. */
+export function clearBlackMarketCache() {
+  openListings.clear();
+}
+
+export async function listBlackMarket(userId: string) {
+  const [listings, mine] = await Promise.all([
+    openListings.get(),
+    prisma.marketListing.findMany({
+      where: { sellerId: userId, status: "open" },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
   const mineRows = await Promise.all(mine.map((row) => presentListing(row)));
   return {
     feeRate: BLACK_MARKET.FEE_RATE,

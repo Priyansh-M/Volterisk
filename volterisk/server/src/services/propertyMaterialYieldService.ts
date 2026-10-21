@@ -53,13 +53,20 @@ export async function settlePropertyMaterialYields(userId: string): Promise<numb
     if (drops.length === 0) continue;
     if (paidTypes.has(def.txType)) continue;
 
-    const total = drops.reduce((sum, d) => sum + d.quantity, 0);
-    await prisma.$transaction(async (tx) => {
+    const credited = await prisma.$transaction(async (tx) => {
       const dup = await tx.transaction.findFirst({
         where: { type: def.txType, fromUserId: userId, createdAt: { gte: noon } },
         select: { id: true },
       });
-      if (dup) return;
+      if (dup) return false;
+      const held = await tx.property.findFirst({
+        where: { userId, catalogId: def.catalogId },
+        select: { level: true },
+      });
+      if (!held) return false;
+      const drops = def.drops(held.level).filter((d) => d.quantity > 0);
+      if (drops.length === 0) return false;
+      const total = drops.reduce((sum, d) => sum + d.quantity, 0);
       for (const drop of drops) {
         await creditItem(tx, userId, drop.materialId, drop.quantity);
       }
@@ -75,11 +82,12 @@ export async function settlePropertyMaterialYields(userId: string): Promise<numb
       await writeNotification(tx, {
         userId,
         title: def.title,
-        body: `${parts} delivered from your ${labelProperty(def.catalogId)} (L${owned.level}) at 12:00 GMT. Added to Materials.`,
+        body: `${parts} delivered from your ${labelProperty(def.catalogId)} (L${held.level}) at 12:00 GMT. Added to Materials.`,
         severity: "INFO",
       });
+      return true;
     });
-    paid += 1;
+    if (credited) paid += 1;
   }
   materialYieldSettledNoon.set(userId, noon.getTime());
   return paid;

@@ -160,6 +160,7 @@ export function HeistsPage() {
       if (hold > 0) await new Promise((resolve) => window.setTimeout(resolve, hold))
       setResult(heist)
       setConfirming(false)
+      await new Promise((resolve) => window.setTimeout(resolve, 900))
       if (typeof heist.cash === 'number') applyCash(heist.cash)
       await refresh().catch(() => undefined)
       const [nextBoard, weaponData] = await Promise.all([

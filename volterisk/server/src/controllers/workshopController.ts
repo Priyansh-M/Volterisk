@@ -12,6 +12,7 @@ import {
 import {
   buyListing,
   cancelListing,
+  clearBlackMarketCache,
   createListing,
   listBlackMarket,
 } from "../services/blackMarketService.js";
@@ -59,24 +60,30 @@ export async function blackMarketList(req: Request, res: Response): Promise<void
     userWeaponId?: string;
     modOwnedId?: string;
   };
-  res.status(201).json(
-    await createListing(currentUserId(req), {
-      kind: body.kind ?? "material",
-      itemId: body.itemId,
-      quantity: body.quantity,
-      price: Number(body.price ?? 0),
-      userWeaponId: body.userWeaponId,
-      modOwnedId: body.modOwnedId,
-    }),
-  );
+  const out = await createListing(currentUserId(req), {
+    kind: body.kind ?? "material",
+    itemId: body.itemId,
+    quantity: body.quantity,
+    price: Number(body.price ?? 0),
+    userWeaponId: body.userWeaponId,
+    modOwnedId: body.modOwnedId,
+  });
+  clearBlackMarketCache();
+  res.status(201).json(out);
 }
 
 export async function blackMarketCancel(req: Request, res: Response): Promise<void> {
   const listingId = String((req.body as { listingId?: string })?.listingId ?? "");
-  res.json(await cancelListing(currentUserId(req), listingId));
+  const out = await cancelListing(currentUserId(req), listingId);
+  clearBlackMarketCache();
+  res.json(out);
 }
 
 export async function blackMarketBuy(req: Request, res: Response): Promise<void> {
   const listingId = String((req.body as { listingId?: string })?.listingId ?? "");
-  res.json(await buyListing(currentUserId(req), listingId));
+  try {
+    res.json(await buyListing(currentUserId(req), listingId));
+  } finally {
+    clearBlackMarketCache();
+  }
 }

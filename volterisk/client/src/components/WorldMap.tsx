@@ -343,6 +343,7 @@ export function WorldMap({
                                     ? '#9a3f16'
                                     : '#1d4e8c'
                             }
+                            className={pin.isYou && !territory ? 'base-pulse' : undefined}
                             stroke={pin.isYou && !territory ? '#141414' : '#f7f4ee'}
                             strokeWidth={0.7}
                           />
@@ -371,6 +372,7 @@ export function WorldMap({
                           ? '#c45c26'
                           : '#2f5f9e'
                   }
+                  className={pin.isYou && pin.kind !== 'territory' ? 'base-pulse' : undefined}
                   stroke="#f4f1ea"
                   strokeWidth={0.8}
                   vectorEffect="non-scaling-stroke"

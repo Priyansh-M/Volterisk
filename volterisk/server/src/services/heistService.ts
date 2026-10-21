@@ -153,14 +153,40 @@ export async function listTargets(attackerId: string) {
   return board;
 }
 
+const POOL_MS = 5 * 60_000;
+let targetPool: { at: number; rows: Promise<TargetPoolRow[]> } | null = null;
+type TargetPoolRow = Awaited<ReturnType<typeof readTargetPool>>[number];
+
+/** Bots plus players above the heist floor. Shared by every attacker; refreshed every 5 minutes. */
+function readTargetPool() {
+  return prisma.user.findMany({
+    where: { OR: [{ isBot: true }, { vault: { balance: { gte: RULES.MIN_VAULT_BALANCE } } }] },
+    select: {
+      id: true,
+      username: true,
+      isBot: true,
+      vault: { select: { level: true, tier: true, balance: true } },
+      base: { select: { sectorId: true, regionName: true, name: true } },
+    },
+    orderBy: { username: "asc" },
+  });
+}
+
+function targetPoolRows(): Promise<TargetPoolRow[]> {
+  if (process.env.VITEST) return readTargetPool();
+  if (targetPool && Date.now() - targetPool.at < POOL_MS) return targetPool.rows;
+  const rows = readTargetPool();
+  targetPool = { at: Date.now(), rows };
+  rows.catch(() => {
+    if (targetPool?.rows === rows) targetPool = null;
+  });
+  return rows;
+}
+
 async function readTargets(attackerId: string) {
   const attacker = await prisma.user.findUnique({ where: { id: attackerId }, select: { reputationLevel: true } });
   const attackerLevel = attacker?.reputationLevel ?? 1;
-  const users = await prisma.user.findMany({
-    where: { id: { not: attackerId } },
-    include: { vault: true, base: true },
-    orderBy: { username: "asc" },
-  });
+  const users = (await targetPoolRows()).filter((user) => user.id !== attackerId);
   const recentHits = await prisma.heist.findMany({
     where: {
       success: true,

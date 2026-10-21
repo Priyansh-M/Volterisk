@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8"><title>Rough anims</title>
+<style>
+body{margin:0;background:#0d0b08;color:#eee3c8;font:13px ui-monospace,monospace}
+header{height:56px;display:flex;align-items:center;justify-content:flex-end;padding:0 20px;border-bottom:1px solid #2c261c}
+#amt{font-size:16px}#amt.go{color:#d9a83a}
+main{display:flex;gap:28px;flex-wrap:wrap;padding:28px}
+button{background:#d9a83a;color:#1a1208;border:0;padding:8px 12px;font:700 11px ui-monospace,monospace;letter-spacing:.12em;cursor:pointer}
+.card{width:160px;height:110px;border:1px solid #2c261c;background:#16130e;position:relative;overflow:hidden;display:grid;place-items:center}
+.burst{position:absolute;inset:0;background:radial-gradient(circle,#d9a83aaa,transparent 60%);opacity:0}
+.burst.on{animation:burst .7s ease}
+@keyframes burst{40%{opacity:1}100%{opacity:0}}
+.map{width:180px;height:140px;background:#16130e;border:1px solid #2c261c;position:relative}
+.pin{position:absolute;left:70px;top:50px;width:22px;height:22px;border-radius:50%;background:#d9a83a;animation:pulse 2s ease infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 10px #d9a83a33}}
+.vault{width:120px;height:90px;border:4px solid #888;background:#2e3036;position:relative;overflow:hidden}
+.door{position:absolute;inset:0;background:#3a3c44;transform-origin:left;transition:transform .5s}
+.vault.open .door{transform:perspective(400px) rotateY(-70deg)}
+.bill{position:absolute;width:28px;height:14px;background:#7dcea0;top:38px;left:-40px}
+.bill.in{animation:slide .6s forwards}
+.bill.out{animation:slide .6s reverse forwards}
+@keyframes slide{to{left:46px}}
+</style>
+<header><b id="amt">$12,000</b></header>
+<main>
+<div><div class="card" id="card">Warehouse<div class="burst" id="burst"></div></div><button onclick="b()">Upgrade</button></div>
+<div><div class="map"><div class="pin"></div></div><p>Base pulse</p></div>
+<div><button onclick="count(18400,900)">Payout lands</button> <button onclick="count(24800,1850)">Slower payout</button></div>
+<div>
+<div class="vault" id="v"><div class="bill" id="bill"></div><div class="door"></div></div>
+<button onclick="dep(1)">Deposit</button> <button onclick="dep(0)">Withdraw</button>
+</div>
+</main>
+<script>
+function b(){const e=burst;e.classList.remove('on');void e.offsetWidth;e.classList.add('on')}
+let bal=12000
+function count(to,ms){const a=document.getElementById('amt'),t0=performance.now(),from=bal
+a.classList.add('go')
+const tick=t=>{const k=Math.min(1,(t-t0)/ms);a.textContent='$'+(from+(to-from)*k|0).toLocaleString();if(k<1)requestAnimationFrame(tick);else bal=to}
+requestAnimationFrame(tick)}
+function dep(into){const v=document.getElementById('v'),bill=document.getElementById('bill')
+v.classList.add('open');bill.className='bill '+(into?'in':'out')
+setTimeout(()=>v.classList.remove('open'),700)}
+</script>

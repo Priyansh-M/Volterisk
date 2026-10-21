@@ -59,9 +59,24 @@ export async function markNotificationRead(userId: string, notificationId: strin
   return { id: row.id, read: true };
 }
 
+const HEAT_TITLES = ["Heat check", "Cash seized", "Heat cleared", "Heat is high"];
+
 export async function listNotifications(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { reputationLevel: true, vaultCreditCard: true },
+  });
+  if (user && (user.vaultCreditCard || user.reputationLevel >= 11)) {
+    await prisma.notification.updateMany({
+      where: { userId, title: { in: HEAT_TITLES }, read: false },
+      data: { read: true },
+    });
+  }
   const rows = await prisma.notification.findMany({
-    where: { userId },
+    where: {
+      userId,
+      ...(user && (user.vaultCreditCard || user.reputationLevel >= 11) ? { title: { notIn: HEAT_TITLES } } : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: 10,
   });

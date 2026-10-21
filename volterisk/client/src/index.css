@@ -139,6 +139,8 @@ select {
   transition-delay: 40ms;
 }
 
+.base-pulse { animation: base-pulse 2s ease-in-out infinite; }
+@keyframes base-pulse { 50% { opacity: .4; } }
 .animate-heist {
   animation: heist-pop 480ms ease-out both;
 }

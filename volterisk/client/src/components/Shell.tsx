@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LedgerAlerts } from './LedgerAlerts.tsx'
 import { Portrait } from './Portrait.tsx'
+import { GuidedTour } from './GuidedTour.tsx'
 import { Level11Guide } from './Level11Guide.tsx'
 import { ReputationAlert } from './ReputationAlert.tsx'
 import { SoftToast } from './SoftToast.tsx'
@@ -72,16 +73,6 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    id: 'minigames',
-    label: 'Minigames',
-    Icon: IconPad,
-    items: [
-      { to: '/casino/roulette', label: 'Roulette', Icon: IconWheel },
-      { to: '/casino/slots', label: 'Slots', Icon: IconSlots },
-      { to: '/minigames/rob-the-vault', label: 'Rob the Vault', Icon: IconGrid },
-    ],
-  },
-  {
     id: 'progression',
     label: 'Progression',
     Icon: IconSteps,
@@ -90,6 +81,16 @@ const navGroups: NavGroup[] = [
       { to: '/reputation', label: 'Reputation', Icon: IconRank },
       { to: '/territory', label: 'Territory', Icon: IconPin },
       { to: '/achievements', label: 'Achievements', Icon: IconSeal },
+    ],
+  },
+  {
+    id: 'minigames',
+    label: 'Minigames',
+    Icon: IconPad,
+    items: [
+      { to: '/casino/roulette', label: 'Roulette', Icon: IconWheel },
+      { to: '/casino/slots', label: 'Slots', Icon: IconSlots },
+      { to: '/minigames/rob-the-vault', label: 'Rob the Vault', Icon: IconGrid },
     ],
   },
   {
@@ -147,6 +148,10 @@ export function Shell() {
   const [workshopGate, setWorkshopGate] = useState(false)
   const [heatWarn, setHeatWarn] = useState<string | null>(null)
   const [heatWarnClosed, setHeatWarnClosed] = useState<string | null>(null)
+  const [tour, setTour] = useState(false)
+  const shownMoney = useRef<number | null>(null)
+  const [moneyNow, setMoneyNow] = useState<number | null>(null)
+  const [tourNext, setTourNext] = useState(false)
   const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {}
     for (const g of navGroups) initial[g.id] = false
@@ -243,6 +248,7 @@ export function Shell() {
     const showBrief = sessionStorage.getItem('volterisk-brief') === '1'
     if (showWelcome) setWelcome(true)
     if (showBrief) setBrief(true)
+    if (showWelcome && me?.id && localStorage.getItem(`volterisk-tour:${me.id}`) !== '1') setTourNext(true)
     if ((showWelcome || showBrief) && me?.id && localStorage.getItem(`volterisk-discord:${me.id}`) !== '1') {
       setDiscordInvite(true)
     }
@@ -284,6 +290,18 @@ export function Shell() {
     }
   }, [me?.id, me?.level, me?.vaultCreditCard])
 
+  function startTour() {
+    setCollapsed(false)
+    setMobileOpen(false)
+    closeAllGroups()
+    setTour(true)
+  }
+
+  function endTour() {
+    setTour(false)
+    if (me?.id) localStorage.setItem(`volterisk-tour:${me.id}`, '1')
+  }
+
   function dismissIntro() {
     sessionStorage.removeItem('volterisk-welcome')
     sessionStorage.removeItem('volterisk-brief')
@@ -298,6 +316,26 @@ export function Shell() {
     if (typeof count === 'number') setNotices(count)
   }
 
+  useEffect(() => {
+    if (!me) return
+    const next = me.vaultCreditCard ? me.vault.balance : me.cash + me.vault.balance
+    const from = shownMoney.current
+    shownMoney.current = next
+    if (from == null || next <= from) {
+      setMoneyNow(next)
+      return
+    }
+    const t0 = performance.now()
+    let raf = 0
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - t0) / 1850)
+      setMoneyNow(Math.round(from + (next - from) * k))
+      if (k < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [me])
+
   if (!me) return null
   const late = (me.level ?? 0) >= 11 || Boolean(me.vaultCreditCard)
   const heat = me.heat ?? 0
@@ -306,9 +344,9 @@ export function Shell() {
   const policeLabel = police >= 80 ? 'Critical' : police >= 50 ? 'High' : police >= 20 ? 'Elevated' : 'Low'
   const meta = pageMeta[location.pathname] ?? ['Volterisk', 'Private network.']
   const introSlides: Array<'welcome' | 'brief' | 'discord'> = []
-  if (welcome && location.pathname === '/') introSlides.push('welcome')
-  if (brief && location.pathname === '/') introSlides.push('brief')
-  if (discordInvite) introSlides.push('discord')
+  if (welcome) introSlides.push('welcome')
+  if (brief && !tourNext) introSlides.push('brief')
+  if (discordInvite && !tourNext) introSlides.push('discord')
   const introIndex = Math.min(introAt, Math.max(0, introSlides.length - 1))
 
   const stamp = new Date().toLocaleString('en-GB', {
@@ -321,10 +359,19 @@ export function Shell() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <LedgerAlerts paused={welcome || brief || discordInvite} onChange={recount} onUnclaimed={setUnclaimed} />
-      {introSlides.length > 0 ? (
+      <LedgerAlerts paused={welcome || brief || discordInvite || tour} onChange={recount} onUnclaimed={setUnclaimed} />
+      <GuidedTour open={tour} late={late} onClose={endTour} onGroup={openGroupNow} />
+      {introSlides.length > 0 && !tour ? (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-background/80 p-4">
           <section className="animate-dossier relative w-full max-w-lg border border-line bg-ink/90 px-12 py-8 shadow-2xl">
+            <button
+              type="button"
+              aria-label="Close"
+              className="absolute top-3 right-4 cursor-pointer font-mono text-lg leading-none text-muted-foreground hover:text-foreground"
+              onClick={dismissIntro}
+            >
+              ×
+            </button>
             {introSlides.length > 1 ? (
               <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 {introIndex + 1} of {introSlides.length}
@@ -334,19 +381,27 @@ export function Shell() {
               <>
                 <p className="text-[12px] tracking-[0.28em] text-primary uppercase">Private network</p>
                 <h2 className="mt-3 font-display text-3xl font-semibold uppercase">Welcome to Volterisk</h2>
-                <p className="mt-4 text-sm leading-6 text-muted-foreground">Dominate the leaderboard with three options.</p>
+                <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                  Volterisk is a live criminal network shared with every other player. Build a fortune, protect it, and climb
+                  to the top of the community leaderboard. Every level you earn unlocks more of the game: the Workshop,
+                  territory, a credit card, and tougher targets.
+                </p>
                 <dl className="mt-6 space-y-4 text-sm">
                   <div className="border-b border-border pb-3">
-                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Heist</dt>
-                    <dd className="mt-1 leading-6">Pick a stationed crew or another player. Your weapon faces their vault. The chance is decided on the server, then the take, the heat, and a worn-down weapon are written down.</dd>
+                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Heists</dt>
+                    <dd className="mt-1 leading-6">Rob stationed crews or real players. Your weapon faces their vault. Big payouts, but heat rises and weapons wear down.</dd>
                   </div>
                   <div className="border-b border-border pb-3">
                     <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Work</dt>
-                    <dd className="mt-1 leading-6">Contracts on the board pay cash and cool heat. A passive job, once you qualify, pays at noon GMT.</dd>
+                    <dd className="mt-1 leading-6">Steady cash that cools your heat. Qualify for a passive job and it pays every day at noon GMT.</dd>
+                  </div>
+                  <div className="border-b border-border pb-3">
+                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Minigames</dt>
+                    <dd className="mt-1 leading-6">Roulette, Slots and Rob the Vault for a shot at extra cash, each with a daily limit.</dd>
                   </div>
                   <div>
-                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">Casino</dt>
-                    <dd className="mt-1 leading-6">Try your luck at the casino, use your cash for the chance to win big sums against the house.</dd>
+                    <dt className="font-mono text-[12px] tracking-[0.16em] text-primary uppercase">The goal</dt>
+                    <dd className="mt-1 leading-6">Level up, outplay the community, and own the leaderboard.</dd>
                   </div>
                 </dl>
               </>
@@ -404,13 +459,42 @@ export function Shell() {
                 </button>
               </>
             ) : null}
-            <button
-              type="button"
-              className="gloss-gold mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
-              onClick={dismissIntro}
-            >
-              Dismiss
-            </button>
+            {tourNext ? (
+              <div className="mt-6 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="nav-pill cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+                  onClick={() => {
+                    sessionStorage.removeItem('volterisk-welcome')
+                    setWelcome(false)
+                    setTourNext(false)
+                    if (me?.id) localStorage.setItem(`volterisk-tour:${me.id}`, '1')
+                  }}
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  className="gloss-gold cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+                  onClick={() => {
+                    sessionStorage.removeItem('volterisk-welcome')
+                    setWelcome(false)
+                    setTourNext(false)
+                    startTour()
+                  }}
+                >
+                  Show me around
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="gloss-gold mt-6 w-full cursor-pointer px-4 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase"
+                onClick={introIndex < introSlides.length - 1 ? () => setIntroAt((i) => i + 1) : dismissIntro}
+              >
+                {introIndex < introSlides.length - 1 ? 'Next' : 'Dismiss'}
+              </button>
+            )}
           </section>
         </div>
       ) : null}
@@ -522,6 +606,7 @@ export function Shell() {
                 {collapsed ? null : (
                   <button
                     type="button"
+                    data-tour={group.id}
                     className={`mb-0.5 flex h-9 w-full items-center gap-3 border-l-2 px-3 text-left text-xs ${
                       groupActive
                         ? 'border-primary bg-accent text-foreground'
@@ -544,6 +629,7 @@ export function Shell() {
                           key={link.to}
                           to={link.to}
                           end={link.end}
+                          data-tour={`nav:${link.to}`}
                           title={collapsed ? link.label : undefined}
                           onMouseEnter={() => {
                             if (link.to === '/casino/roulette') void import('../pages/RoulettePage.tsx')
@@ -601,9 +687,22 @@ export function Shell() {
               <path d="M19.27 5.33A17.4 17.4 0 0 0 15 4a.1.1 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.1 16.1 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09A.1.1 0 0 0 9 4a17.4 17.4 0 0 0-4.27 1.33c-.01 0-.02.01-.03.02C1.98 9.42 1.23 13.38 1.6 17.3c0 .02.01.04.03.05A17.9 17.9 0 0 0 6.87 20c.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.01.06.02.09.01a17.9 17.9 0 0 0 5.25-2.65c.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02M8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12m6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12" />
             </svg>
           </a>
-          <button type="button" className="block px-3 font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground" onClick={() => void logout()}>
-            {collapsed ? 'Out' : 'Log out'}
-          </button>
+          <div className={`flex gap-2 ${collapsed ? 'flex-col' : 'px-3'}`}>
+            <button
+              type="button"
+              className="cursor-pointer px-2 py-1.5 text-left font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground"
+              onClick={() => void logout()}
+            >
+              {collapsed ? 'Out' : 'Log out'}
+            </button>
+            <button
+              type="button"
+              className="cursor-pointer px-2 py-1.5 text-left font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground"
+              onClick={startTour}
+            >
+              Help
+            </button>
+          </div>
         </div>
         <button
           type="button"
@@ -621,13 +720,13 @@ export function Shell() {
               Menu
             </button>
             {late ? (
-              <NavLink id="heat-readout" to="/territory" className="flex items-center gap-2 text-xs text-foreground no-underline">
+              <NavLink id="heat-readout" data-tour="heat" to="/territory" className="flex items-center gap-2 text-xs text-foreground no-underline">
                 <span className="text-muted-foreground">Police</span>
                 <b>{police}</b>
                 <span className={police >= 50 ? 'text-destructive' : 'text-muted-foreground'}>{policeLabel}</span>
               </NavLink>
             ) : (
-              <NavLink id="heat-readout" to="/heat" className="flex items-center gap-2 text-xs text-foreground no-underline">
+              <NavLink id="heat-readout" data-tour="heat" to="/heat" className="flex items-center gap-2 text-xs text-foreground no-underline">
                 <span className="text-muted-foreground">Heat</span>
                 <b>{heat}</b>
                 <span className={heatLabel === 'High' ? 'text-destructive' : 'text-muted-foreground'}>{heatLabel}</span>
@@ -638,15 +737,15 @@ export function Shell() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-5">
-            <div className="border-l border-border pl-3 sm:pl-5">
+            <div data-tour="balance" className="border-l border-border pl-3 sm:pl-5">
               <span className="block font-mono text-[8px] uppercase text-muted-foreground">
                 {me.vaultCreditCard ? 'Card' : 'Total balance'}
               </span>
               <b className="font-mono text-xs">
-                {money(me.vaultCreditCard ? me.vault.balance : me.cash + me.vault.balance)}
+                {money(moneyNow ?? (me.vaultCreditCard ? me.vault.balance : me.cash + me.vault.balance))}
               </b>
             </div>
-            <NavLink to="/notifications" aria-label="Notifications" className="relative text-foreground no-underline" onClick={() => setNotices(0)}>
+            <NavLink to="/notifications" data-tour="notices" aria-label="Notifications" className="relative text-foreground no-underline" onClick={() => setNotices(0)}>
               <IconSignal className="h-4 w-4" />
               {notices > 0 ? (
                 <span className="absolute -top-2 -right-2 min-w-[14px] bg-destructive px-0.5 text-center font-mono text-[8px] leading-[14px] text-white">

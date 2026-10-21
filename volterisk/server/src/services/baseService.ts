@@ -1,5 +1,6 @@
 import { GameError } from "../game/errors.js";
 import { RULES } from "../game/rules.js";
+import { sharedCache } from "../lib/sharedCache.js";
 import { prisma } from "../prisma.js";
 import { toPublicCard, loadPublicProfiles } from "./publicProfileService.js";
 import { uniqueConflictText, withSqliteRetry } from "./sqlite.js";
@@ -83,6 +84,7 @@ export async function claimBase(userId: string, input: BaseClaim): Promise<{ bas
       }
     }),
   );
+  clearMapCache();
   return {
     base: {
       sectorId: base.sectorId,
@@ -98,6 +100,7 @@ export async function renameBase(userId: string, name: string | null) {
   const base = await prisma.base.findUnique({ where: { userId } });
   if (!base) throw new GameError(404, "NO_BASE", "You do not have a block yet.");
   const updated = await prisma.base.update({ where: { userId }, data: { name: cleaned } });
+  clearMapCache();
   return {
     sectorId: updated.sectorId,
     landmassId: updated.landmassId,
@@ -106,8 +109,8 @@ export async function renameBase(userId: string, name: string | null) {
   };
 }
 
-export async function listBases(viewerId: string) {
-  const [bases, holdings, profiles] = await Promise.all([
+const mapPins = sharedCache(60_000, () =>
+  Promise.all([
     prisma.base.findMany({
       orderBy: { createdAt: "asc" },
       select: {
@@ -131,8 +134,16 @@ export async function listBases(viewerId: string) {
         user: { select: { username: true, isBot: true } },
       },
     }),
-    loadPublicProfiles(),
-  ]);
+  ]),
+);
+
+/** Call after any base or territory holding changes. */
+export function clearMapCache() {
+  mapPins.clear();
+}
+
+export async function listBases(viewerId: string) {
+  const [[bases, holdings], profiles] = await Promise.all([mapPins.get(), loadPublicProfiles()]);
   const pins = [
     ...bases.flatMap((base) => {
       if (!base.user) return [];
