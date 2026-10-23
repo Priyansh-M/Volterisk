@@ -43,6 +43,25 @@ function roundPolice(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+const POLICE_QUIET = 1;
+const POLICE_MARKED = 2;
+
+function trackPolice(
+  packed: { peakTenths: number; flags: number },
+  clock: { reset: boolean; attention: number },
+  after: number,
+): { peakTenths: number; flags: number } {
+  const highAt = RULES.TERRITORY.POLICE_BANDS[1]?.under ?? 55;
+  const criticalAt = RULES.TERRITORY.POLICE_BANDS[2]?.under ?? 85;
+  let flags = packed.flags;
+  if (after >= criticalAt || clock.attention >= criticalAt) flags |= POLICE_MARKED;
+  if (clock.reset && packed.peakTenths > 0 && packed.peakTenths < highAt * 10) flags |= POLICE_QUIET;
+  const peakTenths = clock.reset
+    ? Math.round(after * 10)
+    : Math.max(packed.peakTenths, Math.round(Math.max(after, clock.attention) * 10));
+  return { peakTenths, flags };
+}
+
 /** Hourly −2, and a full clear at 12:00 GMT every 48 hours. Values are display points. */
 export function policeClock(attention: number, lastTick: Date | null, now = new Date()) {
   const windowStart = POLICE_EPOCH + Math.floor((now.getTime() - POLICE_EPOCH) / POLICE_WINDOW_MS) * POLICE_WINDOW_MS;
@@ -111,11 +130,12 @@ export async function addPoliceAttention(
   const after = roundPolice(Math.max(0, clock.attention + delta));
   const fined = clock.reset ? 0 : packed.finedWindow;
   const finedWindow = await confiscateIfCritical(tx, userId, clock.attention, after, fined, clock.windowStart);
+  const tracked = trackPolice(packed, clock, after);
   await tx.user.update({
     where: { id: userId },
     data: {
       policeAttention: Math.round(after * 10),
-      policeSettledOn: packPolice(packed.day ?? utcDayKey(), clock.tick.getTime(), finedWindow),
+      policeSettledOn: packPolice(packed.day ?? utcDayKey(), clock.tick.getTime(), finedWindow, tracked.peakTenths, tracked.flags),
     },
   });
   return { before: clock.attention, after };
@@ -144,12 +164,20 @@ export async function settlePolice(
   const daily = packed.day !== today;
   const tenths = Math.round(clock.attention * 10);
   const finedWindow = clock.reset ? 0 : packed.finedWindow;
-  if (tenths !== user.policeAttention || daily || !packed.versioned || finedWindow !== packed.finedWindow) {
+  const tracked = trackPolice(packed, clock, clock.attention);
+  if (
+    tenths !== user.policeAttention ||
+    daily ||
+    !packed.versioned ||
+    finedWindow !== packed.finedWindow ||
+    tracked.peakTenths !== packed.peakTenths ||
+    tracked.flags !== packed.flags
+  ) {
     await prisma.user.update({
       where: { id: userId },
       data: {
         policeAttention: tenths,
-        policeSettledOn: packPolice(today, clock.tick.getTime(), finedWindow),
+        policeSettledOn: packPolice(today, clock.tick.getTime(), finedWindow, tracked.peakTenths, tracked.flags),
       },
     });
   }

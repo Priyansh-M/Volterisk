@@ -1,4 +1,5 @@
 import { GameError } from "../game/errors.js";
+import { unpackPolice, policePoints } from "../game/policeMath.js";
 import { RULES, achievementById } from "../game/rules.js";
 import { CRAFT_RECIPES } from "../game/workshopEconomy.js";
 import { prisma } from "../prisma.js";
@@ -10,6 +11,33 @@ export type UnlockedAchievement = {
   description: string;
   reward: number;
 };
+
+function wrongDoor(rows: { success: boolean }[]): boolean {
+  let fails = 0;
+  for (const row of [...rows].reverse()) {
+    if (!row.success) fails += 1;
+    else {
+      if (fails >= 5) return true;
+      fails = 0;
+    }
+  }
+  return false;
+}
+
+/** Fruit, Sevens, and Vault each paid during the current UTC money day. */
+function houseEdgeToday(raw: string | null): boolean {
+  const day = new Date().toISOString().slice(0, 10);
+  const parts = (raw ?? "").split("|");
+  if (parts[0] !== day) return false;
+  return (Number(parts[6]) || 0) === 7;
+}
+
+function hotHandToday(raw: string | null): boolean {
+  const noon = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const parts = (raw ?? "").split("|");
+  if (parts[3] !== noon) return false;
+  return (Number(parts[7]) || 0) >= 3;
+}
 
 function present(id: string): UnlockedAchievement {
   const entry = achievementById(id);
@@ -121,7 +149,8 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   });
   if (!user || user.isBot) return [];
 
-  const [contracts, heists, weaponRows, spend, ledger, longShot, inside, crafts, installedMods, eliteCount, craftedRecipes] =
+  const owned = new Set(user.achievements.map((row) => row.achievementId));
+  const [contracts, heists, weaponRows, spend, ledger, longShot, inside, crafts, installedMods, eliteCount, craftedRecipes, recentHeists, soldListings, boughtListings, insurancePaid, sectors, maxedWeapons, bountyPaid, vaultRoutes] =
     await Promise.all([
       prisma.contractRun.count({ where: { userId, collectedAt: { not: null } } }),
       prisma.heist.count({ where: { attackerId: userId, success: true } }),
@@ -154,13 +183,33 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
         select: { recipeId: true },
         distinct: ["recipeId"],
       }),
+      owned.has("wrong-door")
+        ? Promise.resolve([] as { success: boolean }[])
+        : prisma.heist.findMany({
+            where: { attackerId: userId },
+            orderBy: { createdAt: "desc" },
+            take: 12,
+            select: { success: true },
+          }),
+      owned.has("fenced") ? Promise.resolve(0) : prisma.marketListing.count({ where: { sellerId: userId, status: "sold" } }),
+      owned.has("fenced") ? Promise.resolve(0) : prisma.marketListing.count({ where: { buyerId: userId, status: "sold" } }),
+      owned.has("insured")
+        ? Promise.resolve(0)
+        : prisma.transaction.count({
+            where: { fromUserId: userId, type: { in: ["insurance_premium", "insurance_premium_card"] } },
+          }),
+      owned.has("block") ? Promise.resolve(0) : prisma.territoryHolding.count({ where: { userId } }),
+      owned.has("full-floor")
+        ? Promise.resolve(0)
+        : prisma.userWeapon.count({ where: { userId, upgradeLevel: { gte: RULES.WEAPON_MAX_UPGRADE } } }),
+      owned.has("collected") ? Promise.resolve(0) : prisma.bountyCut.count({ where: { userId, paid: { gt: 0 } } }),
+      owned.has("six-routes") ? Promise.resolve(0) : prisma.transaction.count({ where: { toUserId: userId, type: "vault_rob" } }),
     ]);
 
   const weaponTypes = weaponRows.length;
   const recipeIds = new Set(CRAFT_RECIPES.map((r) => r.id));
   const craftedAll =
     craftedRecipes.length >= recipeIds.size && craftedRecipes.every((row) => recipeIds.has(row.recipeId));
-  const owned = new Set(user.achievements.map((row) => row.achievementId));
   const due: string[] = [];
   if (contracts >= 1 && !owned.has("first-steps")) due.push("first-steps");
   if (heists >= 1 && !owned.has("first-blood")) due.push("first-blood");
@@ -185,6 +234,23 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   if (user.reputationLevel >= 40 && !owned.has("standing-40")) due.push("standing-40");
   if (user.reputationLevel >= 50 && !owned.has("standing-50")) due.push("standing-50");
   if (craftedAll && !owned.has("elite-crafter")) due.push("elite-crafter");
+  if (wrongDoor(recentHeists) && !owned.has("wrong-door")) due.push("wrong-door");
+  const policeMark = unpackPolice(user.policeSettledOn);
+  const policeNow = policePoints(user.policeAttention, user.policeSettledOn);
+  const criticalAt = RULES.TERRITORY.POLICE_BANDS[2]?.under ?? 85;
+  if ((policeNow >= criticalAt || (policeMark.flags & 2) !== 0) && !owned.has("marked")) due.push("marked");
+  if (soldListings >= 1 && boughtListings >= 1 && !owned.has("fenced")) due.push("fenced");
+  if ((policeMark.flags & 1) !== 0 && !owned.has("quiet-week")) due.push("quiet-week");
+  if (insurancePaid >= 1 && !owned.has("insured")) due.push("insured");
+  if ((user.vault?.tier ?? "").toLowerCase() === "platinum" && !owned.has("white-vault")) due.push("white-vault");
+  if (houseEdgeToday(user.rouletteDay) && !owned.has("house-edge")) due.push("house-edge");
+  if (sectors >= 3 && !owned.has("block")) due.push("block");
+  if (bountyPaid >= 1 && !owned.has("collected")) due.push("collected");
+  if (maxedWeapons >= 1 && !owned.has("full-floor")) due.push("full-floor");
+  if (hotHandToday(user.rouletteDay) && !owned.has("hot-hand")) due.push("hot-hand");
+  if (user.cameraLevel >= 1 && !owned.has("camera-up")) due.push("camera-up");
+  if (user.avatarUrl && !owned.has("portrait")) due.push("portrait");
+  if (vaultRoutes >= 6 && !owned.has("six-routes")) due.push("six-routes");
 
   const fresh: UnlockedAchievement[] = [];
   for (const achievementId of due) {
@@ -197,6 +263,65 @@ export async function syncAchievements(userId: string): Promise<UnlockedAchievem
   }
   return fresh;
 }
+
+const ACHIEVEMENT_SECTION: Record<string, string> = {
+  "first-steps": "Work",
+  "clean-hands": "Work",
+  "first-blood": "Heists",
+  "inside-job": "Heists",
+  "against-the-odds": "Heists",
+  redacted: "Heists",
+  "wrong-door": "Heists",
+  "armed-and-ready": "Arsenal",
+  "growing-arsenal": "Arsenal",
+  "full-arsenal": "Arsenal",
+  "full-floor": "Arsenal",
+  "big-spender": "Ledger",
+  "paper-trail": "Ledger",
+  "first-entry": "Base",
+  "first-craft": "Workshop",
+  "first-mod": "Workshop",
+  "elite-crafter": "Workshop",
+  "false-bottom": "Vault",
+  insured: "Vault",
+  "white-vault": "Vault",
+  "elite-i": "Elite",
+  elitist: "Elite",
+  "next-stage": "Standing",
+  "standing-20": "Standing",
+  "standing-30": "Standing",
+  "standing-40": "Standing",
+  "standing-50": "Standing",
+  marked: "Police",
+  "quiet-week": "Police",
+  fenced: "Market",
+  "house-edge": "Minigames",
+  "hot-hand": "Minigames",
+  "six-routes": "Minigames",
+  block: "Territory",
+  collected: "Bounties",
+  "camera-up": "Profile",
+  portrait: "Profile",
+};
+
+const SECTION_ORDER = [
+  "Work",
+  "Heists",
+  "Arsenal",
+  "Vault",
+  "Workshop",
+  "Territory",
+  "Police",
+  "Bounties",
+  "Market",
+  "Minigames",
+  "Standing",
+  "Elite",
+  "Base",
+  "Ledger",
+  "Profile",
+  "Other",
+];
 
 export async function listAchievements(userId: string) {
   await syncAchievements(userId);
@@ -212,10 +337,14 @@ export async function listAchievements(userId: string) {
         reward: entry.reward,
         unlocked: Boolean(row),
         sealed: Boolean(entry.sealed) && !row,
+        section: ACHIEVEMENT_SECTION[entry.id] ?? "Other",
         claimed: Boolean(row?.claimedAt),
         announced: Boolean(row?.announcedAt),
         unlockedAt: row?.unlockedAt.toISOString() ?? null,
       };
+    }).sort((a, b) => {
+      const section = SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section);
+      return section;
     }),
   };
 }

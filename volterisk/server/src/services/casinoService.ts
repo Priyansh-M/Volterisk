@@ -62,7 +62,9 @@ function noonKey(now = new Date()) {
   return new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-type SlotsPack = { staked: number; cap: number; noon: string; sevens: number; vault: number };
+type SlotsPack = { staked: number; cap: number; noon: string; sevens: number; vault: number; wins: number; sevensWins: number };
+
+const SLOT_WIN_BIT: Record<string, number> = { fruit: 1, sevens: 2, vault: 4 };
 
 function readSlotsPack(raw: string | null | undefined, moneyDay: string, noon = noonKey()): SlotsPack {
   const parts = (raw ?? "").split("|");
@@ -74,13 +76,15 @@ function readSlotsPack(raw: string | null | undefined, moneyDay: string, noon = 
     noon,
     sevens: noonOk ? Math.max(0, Number(parts[4]) || 0) : 0,
     vault: noonOk ? Math.max(0, Number(parts[5]) || 0) : 0,
+    wins: moneyOk ? Math.max(0, Number(parts[6]) || 0) : 0,
+    sevensWins: noonOk ? Math.max(0, Number(parts[7]) || 0) : 0,
   };
 }
 
 function writeCasinoDay(moneyDay: string, raw: string | null | undefined, slots?: SlotsPack) {
   const pack = slots ?? readSlotsPack(raw, moneyDay);
-  if (pack.staked <= 0 && pack.cap <= 0 && pack.sevens <= 0 && pack.vault <= 0) return moneyDay;
-  return `${moneyDay}|${pack.staked}|${pack.cap}|${pack.noon}|${pack.sevens}|${pack.vault}`;
+  if (pack.staked <= 0 && pack.cap <= 0 && pack.sevens <= 0 && pack.vault <= 0 && pack.wins <= 0 && pack.sevensWins <= 0) return moneyDay;
+  return `${moneyDay}|${pack.staked}|${pack.cap}|${pack.noon}|${pack.sevens}|${pack.vault}|${pack.wins}|${pack.sevensWins}`;
 }
 
 function tryLimit(machineId: string) {
@@ -252,12 +256,15 @@ export async function spinSlots(userId: string, machineId: string, rawBet: numbe
       );
     }
 
+    const winBit = returned > 0 ? SLOT_WIN_BIT[machineId] ?? 0 : 0;
     const next: SlotsPack = {
       ...pack,
       staked: already + bet,
       cap,
       sevens: pack.sevens + (machineId === "sevens" ? 1 : 0),
       vault: pack.vault + (machineId === "vault" ? 1 : 0),
+      wins: pack.wins | winBit,
+      sevensWins: pack.sevensWins + (machineId === "sevens" && returned > 0 ? 1 : 0),
     };
     const packed = writeCasinoDay(day, user.rouletteDay, next);
     if (card) {
@@ -290,6 +297,8 @@ export async function spinSlots(userId: string, machineId: string, rawBet: numbe
       staked,
       locked: staked >= cap,
       tries: triesView(next),
+      houseEdge: next.wins === 7 && pack.wins !== 7,
+      hotHand: next.sevensWins >= 3 && pack.sevensWins < 3,
     };
   }, { maxWait: 4_000, timeout: 8_000 });
 }

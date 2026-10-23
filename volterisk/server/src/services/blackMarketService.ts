@@ -295,7 +295,7 @@ export async function buyListing(userId: string, listingId: string) {
       data: { type: "black_market_fee", amount: feeAmount(row.price), fromUserId: row.sellerId },
     });
     const buyer = await tx.user.findUnique({ where: { id: userId }, select: { cash: true } });
-    return { ok: true, cash: buyer?.cash ?? 0, paid: row.price, fee: feeAmount(row.price) };
+    return { ok: true, cash: buyer?.cash ?? 0, paid: row.price, fee: feeAmount(row.price), sellerId: row.sellerId };
   });
 }
 
