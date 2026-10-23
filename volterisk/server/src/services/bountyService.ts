@@ -188,7 +188,7 @@ async function endBounty(bountyId: string, reason: "cancelled" | "expired"): Pro
 
 const POLICE_BOUNTY = 25_000;
 const POLICE_BOUNTY_DAILY = 5_000;
-const POLICE_HIGH = 50;
+const POLICE_HIGH = 55;
 const POLICE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function policePosterId(): Promise<string> {
@@ -569,6 +569,31 @@ export async function cancelBounty(posterId: string, bountyId: string) {
   const cash = await prisma.user.findUnique({ where: { id: posterId }, select: { cash: true } });
   const next = await prisma.bounty.findUniqueOrThrow({ where: { id: bountyId }, include });
   return { bounty: present(next, posterId), cash: cash?.cash ?? 0 };
+}
+
+/** Leave a hunt you started. Stolen progress and the payout pool stay. */
+export async function backOffBounty(hunterId: string, targetUserId: string) {
+  const rows = await prisma.bounty.findMany({
+    where: {
+      targetId: targetUserId,
+      status: { in: [...ACTIVE] },
+      cuts: { some: { userId: hunterId } },
+    },
+    select: { id: true, hunterId: true, cuts: { select: { userId: true } } },
+  });
+  let released = 0;
+  for (const row of rows) {
+    if (row.hunterId && row.hunterId !== hunterId) continue;
+    const others = row.cuts.some((cut) => cut.userId !== hunterId);
+    await prisma.bounty.update({
+      where: { id: row.id },
+      data: others
+        ? { hunterId: null }
+        : { status: "open", hunterId: null, huntStartedAt: null },
+    });
+    released += 1;
+  }
+  return { released };
 }
 
 export async function searchBountyTargets(viewerId: string, raw: string) {

@@ -237,7 +237,10 @@ export async function installVaultMod(userId: string, instanceId: string) {
       const vault = await tx.vault.findUnique({ where: { userId } });
       const tier = vault?.tier || "standard";
       const need = def.defenseWhenSecuredPercentAtLeast.minTier;
-      const ok = need === "diamond" ? tier === "diamond" : tier === "gold" || tier === "diamond";
+      const ok =
+        need === "diamond"
+          ? tier === "diamond" || tier === "platinum"
+          : tier === "gold" || tier === "diamond" || tier === "platinum";
       if (!ok) throw new GameError(400, "VAULT_TIER", "That modification needs a Gold or Diamond vault.");
     }
 

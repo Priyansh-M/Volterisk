@@ -341,7 +341,7 @@ export function Shell() {
   const heat = me.heat ?? 0
   const heatLabel = heat > 50 ? 'High' : heat > 20 ? 'Medium' : 'Low'
   const police = me.policeAttention ?? 0
-  const policeLabel = police >= 80 ? 'Critical' : police >= 50 ? 'High' : police >= 20 ? 'Elevated' : 'Low'
+  const policeLabel = police >= 85 ? 'Critical' : police >= 55 ? 'High' : police >= 25 ? 'Elevated' : 'Low'
   const meta = pageMeta[location.pathname] ?? ['Volterisk', 'Private network.']
   const introSlides: Array<'welcome' | 'brief' | 'discord'> = []
   if (welcome) introSlides.push('welcome')
@@ -723,7 +723,7 @@ export function Shell() {
               <NavLink id="heat-readout" data-tour="heat" to="/territory" className="flex items-center gap-2 text-xs text-foreground no-underline">
                 <span className="text-muted-foreground">Police</span>
                 <b>{police}</b>
-                <span className={police >= 50 ? 'text-destructive' : 'text-muted-foreground'}>{policeLabel}</span>
+                <span className={police >= 55 ? 'text-destructive' : 'text-muted-foreground'}>{policeLabel}</span>
               </NavLink>
             ) : (
               <NavLink id="heat-readout" data-tour="heat" to="/heat" className="flex items-center gap-2 text-xs text-foreground no-underline">

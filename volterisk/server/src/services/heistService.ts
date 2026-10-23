@@ -10,9 +10,11 @@ import {
   minutesFromNow,
   vaultCapacity,
   vaultDefense,
+  policeDefenseCut,
   wealthBandLabel,
   wealthBucket,
 } from "../game/rules.js";
+import { policePoints } from "../game/policeMath.js";
 import { prisma } from "../prisma.js";
 import { syncAchievements, type UnlockedAchievement } from "./achievementService.js";
 import { noteBountyHeist, syncPoliceBounty } from "./bountyService.js";
@@ -139,6 +141,11 @@ function assertTargetKind(target: { isBot: boolean; username: string }, kind: He
   if (kind === "player" && target.isBot) {
     throw new GameError(400, "WRONG_TARGET_KIND", "Night crews are not player targets.");
   }
+}
+
+function holderDefenseCut(user: { isBot: boolean; policeAttention: number; policeSettledOn: string | null }): number {
+  if (user.isBot) return 0;
+  return policeDefenseCut(policePoints(user.policeAttention, user.policeSettledOn));
 }
 
 const targetCache = new Map<string, { at: number; npc: TargetCard[]; players: TargetCard[] }>();
@@ -321,9 +328,12 @@ async function previewChance(
   });
   const baseAttack = attackPower(owned.weapon.number, owned.upgradeLevel);
   const facing = await npcFacing(attackerId, { ...target, vault: target.vault }, kind);
-  const defense =
+  const defense = Math.max(
+    0,
     vaultDefense(facing.tier, facing.vaultLevel) +
-    (kind === "npc" ? npcDefenseBonus(attacker?.reputationLevel ?? 1) : 0);
+      (kind === "npc" ? npcDefenseBonus(attacker?.reputationLevel ?? 1) : 0) -
+      holderDefenseCut(target),
+  );
   const [atkBuff, defBuff, career, wMods, playerVMods, lockdownRow] = await Promise.all([
     territoryPassives(attackerId),
     territoryPassives(targetUserId),
@@ -532,9 +542,12 @@ export async function attemptHeist(
         }
 
         const vaultLevel = facing.vaultLevel;
-        const defense =
+        const defense = Math.max(
+          0,
           vaultDefense(facing.tier, vaultLevel) +
-          (kind === "npc" ? npcDefenseBonus(attacker.reputationLevel) : 0);
+            (kind === "npc" ? npcDefenseBonus(attacker.reputationLevel) : 0) -
+            holderDefenseCut(target),
+        );
         const resolved = resolveCombat({
           baseAttack,
           baseDefense: defense,
@@ -597,7 +610,7 @@ export async function attemptHeist(
               ? await addPoliceAttention(tx, attackerId, RULES.TERRITORY.POLICE_PER_FAILED_HEIST)
               : { before: 0, after: 0 };
           return {
-            policeHigh: police.before < 50 && police.after >= 50,
+            policeHigh: police.before < 55 && police.after >= 55,
             policeAfter: police.after,
             ...presentHeist(heist, target.username, owned.weapon.name),
             attack,
@@ -685,7 +698,7 @@ export async function attemptHeist(
           const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
           return {
             ...presentHeist(heist, target.username, owned.weapon.name),
-            policeHigh: police.before < 50 && police.after >= 50,
+            policeHigh: police.before < 55 && police.after >= 55,
             policeAfter: police.after,
             attack,
             defense,
@@ -700,7 +713,7 @@ export async function attemptHeist(
         const paid = await tx.user.findUnique({ where: { id: attackerId }, select: { cash: true } });
         return {
           ...presentHeist(heist, target.username, owned.weapon.name),
-          policeHigh: police.before < 50 && police.after >= 50,
+          policeHigh: police.before < 55 && police.after >= 55,
           policeAfter: police.after,
           attack,
           defense,

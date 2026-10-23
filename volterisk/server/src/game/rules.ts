@@ -238,12 +238,13 @@ export const RULES = {
    * Cash to raise a vault FROM this level to the next.
    * Level 1 keeps the original price. Level 2 and above are doubled.
    */
-  VAULT_TIERS: ["standard", "silver", "gold", "diamond"] as const,
+  VAULT_TIERS: ["standard", "silver", "gold", "diamond", "platinum"] as const,
   VAULT_TIER_LABEL: {
     standard: "Standard Vault",
     silver: "Silver Vault",
     gold: "Gold Vault",
     diamond: "Diamond Vault",
+    platinum: "Platinum Vault",
   } as Record<string, string>,
   /** Defense by tier, index 0 is level 1. */
   VAULT_DEFENSE: {
@@ -251,6 +252,7 @@ export const RULES = {
     silver: [32, 37, 42, 47, 52],
     gold: [60, 68, 76, 84, 85],
     diamond: [105, 109, 110, 111, 165],
+    platinum: [180, 195, 210, 230, 255],
   } as Record<string, number[]>,
   /** Storage only. Defense tables are separate and are not derived from these caps. */
   VAULT_CAPACITY_BASE: {
@@ -258,12 +260,14 @@ export const RULES = {
     silver: 75_000,
     gold: 165_000,
     diamond: 2_000_000,
+    platinum: 2_000_000,
   } as Record<string, number>,
   VAULT_CAPACITY_STEP: {
     standard: 5_000,
     silver: 10_000,
     gold: 25_000,
     diamond: 250_000,
+    platinum: 0,
   } as Record<string, number>,
   HEAT_SUCCESS: 8,
   HEAT_FAIL: 15,
@@ -287,6 +291,7 @@ export const RULES = {
     silver: [50, 55, 60, 65, 70],
     gold: [72, 76, 80, 84, 88],
     diamond: [90, 92, 94, 96, 98],
+    platinum: [98, 98, 98, 98, 98],
   } as Record<string, number[]>,
   /** Cash to raise a vault one level inside the current tier. Diamond L1→L5 steps are flat $300k. */
   VAULT_LEVEL_COSTS: {
@@ -294,11 +299,13 @@ export const RULES = {
     silver: { 1: 120_000, 2: 400_000, 3: 640_000, 4: 960_000 },
     gold: { 1: 700_000, 2: 2_200_000, 3: 1_000_000, 4: 1_000_000 },
     diamond: { 1: 300_000, 2: 300_000, 3: 300_000, 4: 300_000 },
+    platinum: { 1: 100_000, 2: 100_000, 3: 100_000, 4: 100_000 },
   } as Record<string, Record<number, number>>,
   VAULT_CONVERSION_COSTS: {
     standard: 500_000,
     silver: 3_000_000,
     gold: 5_000_000,
+    diamond: 1_000_000,
   } as Record<string, number>,
   /**
    * Modification slot unlocks by player level (independent of vault tier).
@@ -338,6 +345,7 @@ export const RULES = {
     silver: 2_750,
     gold: 3_500,
     diamond: 4_250,
+    platinum: 5_000,
   } as Record<string, number>,
   INSURANCE_HOURS: 24,
   /** Reputation titles. The highest entry a player's level reaches wins. */
@@ -382,12 +390,14 @@ export const RULES = {
     POLICE_PER_HOUR: 2,
     POLICE_DECAY_PER_UTC_DAY: 5,
     POLICE_BANDS: [
-      { under: 20, label: "LOW" },
-      { under: 50, label: "ELEVATED" },
-      { under: 80, label: "HIGH" },
+      { under: 25, label: "LOW" },
+      { under: 55, label: "ELEVATED" },
+      { under: 85, label: "HIGH" },
       { under: 1_000_000, label: "CRITICAL" },
     ] as { under: number; label: string }[],
-    CRITICAL_BLOCKS_EXPAND: 80,
+    CRITICAL_BLOCKS_EXPAND: 85,
+    /** Low cuts vault defense by 1. Each band after that cuts 3 more. */
+    POLICE_DEFENSE_PER_BAND: 3,
     VAULT_YIELD_PCT_PER_HOUR: 0.25,
     VAULT_YIELD_REQUIRES_TIER: "diamond",
     VAULT_YIELD_NOON_MINUTE: 15,
@@ -1160,9 +1170,11 @@ export function vaultCapacity(tier: string, level: number): number {
   return capacity;
 }
 
-/** L11+ card holders on Diamond L5+: no storage cap. Pre-L11 unchanged. */
+/** L11+ card on Diamond L5, or any Platinum level: no storage cap. */
 export function vaultCapacityUnlimited(tier: string, level: number, creditCard: boolean): boolean {
-  return Boolean(creditCard && tier === "diamond" && level >= RULES.VAULT_MAX_LEVEL);
+  if (!creditCard) return false;
+  if (tier === "platinum") return true;
+  return tier === "diamond" && level >= RULES.VAULT_MAX_LEVEL;
 }
 
 export function vaultSecuredPercent(tier: string, level: number): number {
@@ -1177,6 +1189,13 @@ export function exposedBalance(balance: number, tier: string, level: number): nu
 
 export function insurancePremium(tier: string): number {
   return RULES.INSURANCE_DAILY[tier] ?? RULES.INSURANCE_DAILY.standard;
+}
+
+export function policeDefenseCut(attention: number): number {
+  const bands = RULES.TERRITORY.POLICE_BANDS;
+  const index = bands.findIndex((band) => attention < band.under);
+  const band = index < 0 ? bands.length - 1 : index;
+  return 1 + band * RULES.TERRITORY.POLICE_DEFENSE_PER_BAND;
 }
 
 export function nextVaultTier(tier: string): VaultTierName | null {

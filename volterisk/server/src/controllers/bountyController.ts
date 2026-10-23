@@ -3,6 +3,7 @@ import { currentUserId } from "../middleware/auth.js";
 import {
   cancelBounty,
   claimBounty,
+  backOffBounty,
   clearBountyCache,
   createBounty,
   fundBounty,
@@ -48,4 +49,8 @@ export async function claim(req: Request, res: Response): Promise<void> {
 
 export async function cancel(req: Request, res: Response): Promise<void> {
   res.json(await changed(cancelBounty(currentUserId(req), String(req.params.id))));
+}
+
+export async function backOff(req: Request, res: Response): Promise<void> {
+  res.json(await changed(backOffBounty(currentUserId(req), String(req.body?.targetUserId ?? ""))));
 }

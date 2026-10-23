@@ -8,9 +8,9 @@ const vaultYieldFreshUntil = new Map<string, number>();
 /** Diamond hourly rate after police drag. CRITICAL earns nothing. */
 export function vaultYieldPctPerHour(attention: number): number {
   const base = RULES.TERRITORY.VAULT_YIELD_PCT_PER_HOUR;
-  if (attention >= 80) return 0;
-  if (attention >= 50) return Math.max(0, base - 0.1);
-  if (attention >= 20) return Math.max(0, base - 0.05);
+  if (attention >= 85) return 0;
+  if (attention >= 55) return Math.max(0, base - 0.1);
+  if (attention >= 25) return Math.max(0, base - 0.05);
   return base;
 }
 
@@ -24,7 +24,7 @@ export async function settleVaultYield(userId: string): Promise<{ credited: numb
     include: { vault: true },
   });
   if (!user?.vault) return null;
-  if (user.vault.tier !== RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER) {
+  if (user.vault.tier !== RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER && user.vault.tier !== "platinum") {
     vaultYieldFreshUntil.set(userId, nowMs + 3_600_000);
     return null;
   }
@@ -99,7 +99,7 @@ export async function settleVaultYieldNoonGmt(): Promise<number> {
   const players = await prisma.user.findMany({
     where: {
       reputationLevel: { gte: RULES.TERRITORY.UNLOCK_LEVEL },
-      vault: { tier: RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER },
+      vault: { tier: { in: [RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER, "platinum"] } },
       OR: [{ lastVaultYieldAt: null }, { lastVaultYieldAt: { lt: noon } }],
     },
     select: { id: true },

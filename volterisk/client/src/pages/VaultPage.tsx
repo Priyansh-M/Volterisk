@@ -143,7 +143,7 @@ export function VaultPage() {
             />
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono uppercase">
-            {['standard', 'silver', 'gold', 'diamond'].map((tier) => (
+            {['standard', 'silver', 'gold', 'diamond', 'platinum'].map((tier) => (
               <span key={tier} className={`border px-2 py-1 ${shown.tier === tier ? 'border-primary text-primary' : 'border-border text-muted-foreground'}`}>{tier}</span>
             ))}
           </div>

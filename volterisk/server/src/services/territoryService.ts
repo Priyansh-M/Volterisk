@@ -68,7 +68,7 @@ async function confiscateIfCritical(tx: {
   vault: { findUnique: (args: unknown) => Promise<{ balance: number } | null> };
   transaction: { create: (args: unknown) => Promise<unknown> };
 }, userId: string, before: number, after: number, alreadyFinedWindow: number, windowStart: number): Promise<number> {
-  if (!(before < 80 && after >= 80)) return alreadyFinedWindow;
+  if (!(before < 85 && after >= 85)) return alreadyFinedWindow;
   if (alreadyFinedWindow === windowStart) return alreadyFinedWindow;
   const vault = await tx.vault.findUnique({ where: { userId }, select: { balance: true } });
   const take = Math.min(FINE, vault?.balance ?? 0);
@@ -259,7 +259,7 @@ export async function getTerritoryBoard(userId: string) {
     policeAttention: policeNow,
     policeBand: policeBand(policeNow),
     vaultYieldPerDay:
-      user.vault?.tier === RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER && unlocked
+      (user.vault?.tier === RULES.TERRITORY.VAULT_YIELD_REQUIRES_TIER || user.vault?.tier === "platinum") && unlocked
         ? Math.round((Math.pow(1 + vaultYieldPctPerHour(policeNow) / 100, 24) - 1) * 1000) / 10
         : 0,
     maxSectors: cap,
@@ -448,7 +448,7 @@ async function finalizeClaim(userId: string, opId: string) {
     });
     return policeMove.after;
   });
-  if (policeAfter >= 50) await syncPoliceBounty(userId, policeAfter, false).catch(() => null);
+  if (policeAfter >= 55) await syncPoliceBounty(userId, policeAfter, false).catch(() => null);
   return getTerritoryBoard(userId);
 }
 

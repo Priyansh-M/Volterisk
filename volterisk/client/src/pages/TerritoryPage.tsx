@@ -220,18 +220,19 @@ export function TerritoryPage() {
                 </div>
 
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-foreground">Bands &amp; yield</p>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-foreground">Bands, yield &amp; vault defense</p>
                   <dl className="mt-2 divide-y divide-border/60 border border-border/60">
                     {[
-                      ['0 – 19', 'Low', '0.25%/hr'],
-                      ['20 – 49', 'Elevated', '0.20%/hr'],
-                      ['50 – 79', 'High', '0.15%/hr'],
-                      ['80 +', 'Critical', 'No yield'],
-                    ].map(([range, band, yieldText]) => (
-                      <div key={band} className="grid grid-cols-3 gap-2 px-3 py-1.5">
+                      ['0 – 24', 'Low', '0.25%/hr', '−1'],
+                      ['25 – 54', 'Elevated', '0.20%/hr', '−4'],
+                      ['55 – 84', 'High', '0.15%/hr', '−7'],
+                      ['85 +', 'Critical', 'No yield', '−10'],
+                    ].map(([range, band, yieldText, defense]) => (
+                      <div key={band} className="grid grid-cols-[1.1fr_1fr_0.9fr_0.6fr] gap-2 px-3 py-1.5">
                         <dt className="font-mono text-xs text-muted-foreground">{range}</dt>
                         <dd className="font-semibold uppercase text-foreground">{band}</dd>
                         <dd className="text-right font-mono text-xs">{yieldText}</dd>
+                        <dd className="text-right font-mono text-xs text-destructive">{defense}</dd>
                       </div>
                     ))}
                   </dl>
@@ -247,19 +248,23 @@ export function TerritoryPage() {
                     <li className="flex justify-between gap-3"><span>Every hour</span><span className="font-mono text-success">−2</span></li>
                   </ul>
                   <p className="mt-2 text-xs">Fully clears to 0 at 12:00 GMT, then again every 48 hours.</p>
+                  <p className="mt-2 text-xs">
+                    Low lowers your vault defense by 1. Each band after that lowers it by 3 more: Elevated −4, High −7, Critical −10.
+                    That cut applies when someone heists you.
+                  </p>
                 </div>
 
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-foreground">Consequences</p>
                   <ul className="mt-2 space-y-1.5">
                     <li>
-                      <span className="font-semibold uppercase text-foreground">High (50+)</span> — Police put a{' '}
+                      <span className="font-semibold uppercase text-foreground">High (55+)</span> — Police put a{' '}
                       <span className="text-foreground">$25,000</span> bounty on you for 7 days. Every UTC day you stay at
                       High adds <span className="text-foreground">$5,000</span> to it, but the expiry never moves. Hunters
                       collect it like any other bounty.
                     </li>
                     <li>
-                      <span className="font-semibold uppercase text-foreground">Critical (80+)</span> — Police seize{' '}
+                      <span className="font-semibold uppercase text-foreground">Critical (85+)</span> — Police seize{' '}
                       <span className="text-foreground">$50,000</span> straight from your vault, once. It can only hit
                       again after the next 48-hour reset.
                     </li>

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { login, logout, nameStatus, register } from "../controllers/authController.js";
-import { board as bountyBoard, cancel as cancelBounty, claim as claimBounty, create as createBounty, fund as fundBounty, search as bountySearch, start as startBounty } from "../controllers/bountyController.js";
+import { board as bountyBoard, cancel as cancelBounty, claim as claimBounty, create as createBounty, fund as fundBounty, search as bountySearch, start as startBounty, backOff as backOffBounty } from "../controllers/bountyController.js";
 import { createHeist, estimate, history, quote, targets } from "../controllers/heistController.js";
 import { bases, claim as claimBase, rename as renameBase } from "../controllers/mapController.js";
 import { me, myVault, myWeapons, removeAccount, updateAvatar, updateName } from "../controllers/meController.js";
@@ -90,6 +90,7 @@ api.post("/casino/slots", requireAuth, asyncHandler(slotsSpin));
 api.get("/bounties", requireAuth, asyncHandler(bountyBoard));
 api.get("/bounties/search", requireAuth, asyncHandler(bountySearch));
 api.post("/bounties", requireAuth, asyncHandler(createBounty));
+api.post("/bounties/back-off", requireAuth, asyncHandler(backOffBounty));
 api.post("/bounties/:id/fund", requireAuth, asyncHandler(fundBounty));
 api.post("/bounties/:id/start", requireAuth, asyncHandler(startBounty));
 api.post("/bounties/:id/claim", requireAuth, asyncHandler(claimBounty));

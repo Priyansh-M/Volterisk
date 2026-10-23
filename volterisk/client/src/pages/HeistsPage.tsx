@@ -91,8 +91,9 @@ export function HeistsPage() {
     setPickedId(found.userId)
     setQuery(found.username)
     setTargetId(found.userId)
-    setConfirming(true)
-  }, [params, board])
+    const cooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
+    setConfirming(!cooling)
+  }, [params, board, me])
   const selected = weapons.find((row) => (row.instanceId ?? row.id) === weaponId) ?? null
   const cooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
 
@@ -269,7 +270,15 @@ export function HeistsPage() {
             }}
             onPredict={() => void usePredictor()}
             onCommit={() => void commit()}
-            onCancel={() => setConfirming(false)}
+            onCancel={() => {
+              setConfirming(false)
+              if (kind === 'player') {
+                void api('/api/bounties/back-off', {
+                  method: 'POST',
+                  body: JSON.stringify({ targetUserId: row.userId }),
+                }).catch(() => null)
+              }
+            }}
             onLocate={() => {
               if (row.sectorId) navigate(`/map?sector=${encodeURIComponent(row.sectorId)}`)
             }}

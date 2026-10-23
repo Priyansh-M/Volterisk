@@ -4,7 +4,7 @@ import { Portrait } from '../components/Portrait.tsx'
 import { Btn, Notice, inputClass } from '../components/ui.tsx'
 import { ApiError, api, load } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
-import { money } from '../lib/format.ts'
+import { money, remaining } from '../lib/format.ts'
 import { spendable } from '../lib/wallet.ts'
 
 type BountyCard = {
@@ -56,6 +56,7 @@ export function BountyPage() {
   const { me, applySpend, refresh } = useAuth()
   const wallet = spendable(me)
   const navigate = useNavigate()
+  const heistCooling = me ? remaining(me.cooldownEndsAt) !== 'Ready' : false
   const [board, setBoard] = useState<Board | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -131,6 +132,10 @@ export function BountyPage() {
         body: '{}',
       })
       await reload()
+      if (me && remaining(me.cooldownEndsAt) !== 'Ready') {
+        setError(`Contract started. Heists are on cooldown (${remaining(me.cooldownEndsAt)}).`)
+        return
+      }
       navigate(data.heistPath)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not start that contract.')
@@ -210,7 +215,13 @@ export function BountyPage() {
             cash={wallet}
             onFundAmount={setFundAmount}
             onStart={() => void start(row.id)}
-            onHeist={() => navigate(row.heistPath)}
+            onHeist={() => {
+              if (heistCooling) {
+                setError(`Heists are on cooldown (${me ? remaining(me.cooldownEndsAt) : ''}).`)
+                return
+              }
+              navigate(row.heistPath)
+            }}
             onFundOpen={() => {
               setFundingId(row.id)
               setFundAmount('5000')

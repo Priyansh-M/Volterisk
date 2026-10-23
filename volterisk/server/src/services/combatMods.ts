@@ -58,7 +58,7 @@ function vaultDefs(ids: string[]): VaultModDef[] {
 export function resolveCombat(input: CombatResolveInput): CombatResolveResult {
   const wMods = weaponDefs(input.weaponModIds);
   const vMods = vaultDefs(input.vaultModIds);
-  const reinforced = input.vaultTier === "gold" || input.vaultTier === "diamond";
+  const reinforced = input.vaultTier === "gold" || input.vaultTier === "diamond" || input.vaultTier === "platinum";
   const specialCut = vMods.some((m) => m.cutSpecialAttackBonusHalf);
 
   let attack = input.baseAttack + (input.careerAttackFlat ?? 0);
@@ -105,8 +105,8 @@ export function resolveCombat(input: CombatResolveInput): CombatResolveResult {
       const need = m.defenseWhenSecuredPercentAtLeast;
       const tierOk =
         need.minTier === "diamond"
-          ? input.vaultTier === "diamond"
-          : input.vaultTier === "gold" || input.vaultTier === "diamond";
+          ? input.vaultTier === "diamond" || input.vaultTier === "platinum"
+          : input.vaultTier === "gold" || input.vaultTier === "diamond" || input.vaultTier === "platinum";
       const secured = vaultSecuredPercent(input.vaultTier, input.vaultLevel);
       if (tierOk && secured >= need.percent) defense += need.defenseFlat;
     }
